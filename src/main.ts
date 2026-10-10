@@ -103,11 +103,11 @@ app.insertAdjacentHTML(
       <div class="group" id="widths"></div>
     </div>
     <div class="group" id="tools">
-      <button data-tool="select"><span>↖</span>Επιλογή (σύρε γύρω από πολλά για ομαδική επιλογή)</button>
+      <button data-tool="select"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="9.5" rx="8.5" ry="5.8" stroke-dasharray="3.2 2.6"/><circle cx="7" cy="16" r="1.9"/><path d="M7 17.9c0 2 1 3.1 3.2 3.6"/></svg></span>Επιλογή (σύρε γύρω από πολλά για ομαδική επιλογή)</button>
       <button id="penBtn"><span>✏️</span>Γραφή</button>
       <button data-tool="shape"><span>▭</span>Σχήματα</button>
       <button data-tool="text"><span>T</span>Κείμενο</button>
-      <button data-tool="eraser"><span>🧽</span>Γόμα</button>
+      <button data-tool="eraser"><span><svg viewBox="0 0 24 24"><g transform="rotate(-40 12 12)"><rect x="3" y="7.5" width="9" height="9" rx="1.5" fill="#fb7185"/><rect x="12" y="7.5" width="9" height="9" rx="1.5" fill="#60a5fa"/><rect x="11" y="7.5" width="2" height="9" fill="#f9fafb"/></g></svg></span>Γόμα</button>
       <button data-tool="hand"><span>✋</span>Μετακίνηση πίνακα</button>
     </div>
     <div class="group" id="colors"></div>

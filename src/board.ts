@@ -1325,7 +1325,8 @@ export class Board {
     let changed = false;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      if (it.kind === 'image' || it.kind === 'axes' || it.kind === 'trig') continue;
+      // εικόνες, άξονες, τριγωνομετρικός κύκλος και σχήματα φυσικής σβήνονται μόνο με τον κάδο
+      if (it.kind === 'image' || it.kind === 'axes' || it.kind === 'trig' || it.kind === 'stamp') continue;
       if (this.eraserMode === 'partial') {
         const rest = erasePartial(it, x, y, r);
         if (!rest) continue;

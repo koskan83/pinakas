@@ -43,6 +43,7 @@ body.inking #toolbar { pointer-events: none; }
 #toolbar button { width: 42px; height: 42px; border-radius: 10px; padding: 0; font-size: 0;
   display: flex; align-items: center; justify-content: center; }
 #toolbar button span { font-size: 21px; line-height: 1; }
+#toolbar button span svg { display: block; width: 26px; height: 26px; }
 #toolbar button:hover:not(:disabled) { background: var(--bar-2); }
 #toolbar button.on { background: var(--accent); }
 #toolbar button.accent { background: #059669; }

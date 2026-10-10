@@ -515,8 +515,8 @@ function shapePolylines(s: Shape): Pt[][] {
  * Επιστρέφει τα κομμάτια που απομένουν, ή null αν το στοιχείο δεν αγγίχτηκε.
  */
 export function erasePartial(it: Item, x: number, y: number, r: number): Item[] | null {
-  if (it.kind === 'image' || it.kind === 'axes' || it.kind === 'trig') return null;
-  if (it.kind === 'text' || it.kind === 'angle' || it.kind === 'stamp') return hitItem(it, x, y, r) ? [] : null;
+  if (it.kind === 'image' || it.kind === 'axes' || it.kind === 'trig' || it.kind === 'stamp') return null;
+  if (it.kind === 'text' || it.kind === 'angle') return hitItem(it, x, y, r) ? [] : null;
   const b = itemBounds(it);
   if (x < b.x0 - r || x > b.x1 + r || y < b.y0 - r || y > b.y1 + r) return null;
   const lines = it.kind === 'stroke' ? [it.pts] : shapePolylines(it);
