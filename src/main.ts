@@ -1,6 +1,6 @@
 import './style.css';
 import { Board } from './board';
-import { Background, Doc, ShapeKind, TextItem, Tool, newDoc } from './model';
+import { AxesMode, Background, Doc, ShapeKind, TextItem, Tool, newDoc } from './model';
 import { blobToPic, captureScreen, clipboardImage, pdfToPages } from './importers';
 import { loadDoc, saveDoc } from './storage';
 import { Timer } from './timer';
@@ -32,7 +32,14 @@ app.insertAdjacentHTML(
     <button data-act="diag">🔬 Διάγνωση αφής/γραφίδας</button>
   </div>
 
+  <div id="toolbarWrap">
   <div id="toolbar">
+    <div class="group" id="barCtl">
+      <button id="barDrag"><span>⠿</span>Μετακίνηση γραμμής εργαλείων</button>
+      <button id="barSmaller" class="mini"><span>−</span>Μικρότερη</button>
+      <button id="barBigger" class="mini"><span>＋</span>Μεγαλύτερη</button>
+      <button id="barFold" class="mini"><span>▾</span>Σύμπτυξη</button>
+    </div>
     <div class="group" id="tools">
       <button data-tool="select"><span>↖</span>Επιλογή</button>
       <button data-tool="pen"><span>✏️</span>Στυλό</button>
@@ -47,6 +54,8 @@ app.insertAdjacentHTML(
       <button data-shape="arrow"><span>➚</span>Βέλος</button>
       <button data-shape="rect"><span>▭</span>Ορθογώνιο</button>
       <button data-shape="ellipse"><span>◯</span>Έλλειψη</button>
+      <button data-shape="triangle"><span>△</span>Τρίγωνο</button>
+      <button data-shape="angle"><span>∠</span>Γωνία με μοίρες</button>
     </div>
     <div class="group" id="colors"></div>
     <div class="group" id="widths"></div>
@@ -67,6 +76,7 @@ app.insertAdjacentHTML(
       <button id="addPage"><span>＋</span>Σελίδα</button>
     </div>
   </div>
+  </div>
 
   <div id="importMenu" class="popup hidden">
     <button data-imp="file">📁 Εικόνα ή PDF από αρχείο…</button>
@@ -80,6 +90,10 @@ app.insertAdjacentHTML(
     <button data-gadget="protractor">◗ Μοιρογνωμόνιο</button>
     <button data-gadget="compass">⭕ Διαβήτης</button>
     <button data-gadget="timer">⏱ Χρονόμετρο</button>
+    <hr />
+    <button data-axes="full">╋ Άξονες: 4 τεταρτημόρια</button>
+    <button data-axes="q1">┗ Άξονες: 1ο τεταρτημόριο</button>
+    <button data-axes="q14">┣ Άξονες: 1ο και 4ο (x ≥ 0)</button>
     <div class="hint">Χάρακας: γράψε δίπλα στην ακμή του για ευθεία γραμμή. Διαβήτης: σύρε το χρωματιστό μολύβι για τόξο, το ↔ για ακτίνα.</div>
   </div>
   <div id="textEd" class="hidden">
@@ -234,7 +248,7 @@ for (const w of WIDTHS) {
 $('shapes').addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-shape]');
   if (!b) return;
-  board.shapeKind = b.dataset.shape as ShapeKind;
+  board.shapeKind = b.dataset.shape as ShapeKind | 'angle';
   refreshUi();
 });
 $('tools').addEventListener('click', (e) => {
@@ -282,6 +296,119 @@ function refreshUi(): void {
 }
 board.onUi = refreshUi;
 
+// ---------- θέση, μέγεθος και σύμπτυξη της γραμμής εργαλείων ----------
+
+interface BarState {
+  scale: number;
+  folded: boolean;
+  /** Θέση πάνω-αριστερά όταν ο χρήστης την έχει μετακινήσει· αλλιώς κάτω στο κέντρο. */
+  pos: { x: number; y: number } | null;
+  /** Κάθετη διάταξη, όταν έχει αφεθεί στην αριστερή ή δεξιά άκρη. */
+  vertical: boolean;
+}
+
+function initToolbar(): void {
+  const wrap = $('toolbarWrap');
+  const bar = $('toolbar');
+  const KEY = 'grafida.toolbar';
+  const st: BarState = { scale: 1, folded: false, pos: null, vertical: false };
+  try {
+    Object.assign(st, JSON.parse(localStorage.getItem(KEY) ?? '{}'));
+  } catch {
+    /* χωρίς αποθηκευμένες ρυθμίσεις */
+  }
+
+  // τα κείμενα των κουμπιών γίνονται tooltips· στη γραμμή φαίνονται μόνο τα εικονίδια
+  bar.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
+    const label = [...b.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent).join('').trim();
+    if (label) {
+      b.title = label;
+      b.setAttribute('aria-label', label);
+    }
+  });
+
+  const apply = (): void => {
+    bar.style.setProperty('--ts', String(st.scale));
+    bar.classList.toggle('folded', st.folded);
+    $('barFold').querySelector('span')!.textContent = st.folded ? '▸' : '▾';
+    wrap.classList.toggle('moved', !!st.pos);
+    bar.classList.toggle('vertical', !!st.pos && st.vertical);
+    if (st.pos) {
+      // κρατάμε τη γραμμή μέσα στην οθόνη
+      const r = bar.getBoundingClientRect();
+      st.pos.x = Math.max(0, Math.min(st.pos.x, window.innerWidth - r.width));
+      // πάνω αριστερά βρίσκεται το κουμπί του μενού: δεν το σκεπάζουμε
+      const minY = st.pos.x < 80 && r.height < window.innerHeight - 90 ? 78 : 0;
+      st.pos.y = Math.max(minY, Math.min(st.pos.y, window.innerHeight - r.height));
+      wrap.style.left = st.pos.x + 'px';
+      wrap.style.top = st.pos.y + 'px';
+    } else {
+      wrap.style.left = '';
+      wrap.style.top = '';
+    }
+    board.bottomInset = st.pos ? 0 : bar.getBoundingClientRect().height + 24;
+  };
+  const save = (): void => {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(st));
+    } catch {
+      /* δεν πειράζει */
+    }
+  };
+
+  $('barSmaller').onclick = () => { st.scale = Math.max(0.6, +(st.scale - 0.15).toFixed(2)); apply(); save(); };
+  $('barBigger').onclick = () => { st.scale = Math.min(2, +(st.scale + 0.15).toFixed(2)); apply(); save(); };
+  $('barFold').onclick = () => { st.folded = !st.folded; apply(); save(); };
+
+  const grip = $('barDrag');
+  let off: { x: number; y: number } | null = null;
+  let lastX = 0;
+  let dragged = false;
+  grip.addEventListener('pointerdown', (e) => {
+    const r = bar.getBoundingClientRect();
+    off = { x: e.clientX - r.left, y: e.clientY - r.top };
+    dragged = false;
+    grip.setPointerCapture(e.pointerId);
+  });
+  grip.addEventListener('pointermove', (e) => {
+    if (!off) return;
+    lastX = e.clientX;
+    dragged = true;
+    st.pos = { x: e.clientX - off.x, y: e.clientY - off.y };
+    apply();
+  });
+  const end = (): void => {
+    if (!off) return;
+    off = null;
+    if (!dragged) return;
+    // κοντά στο κάτω-κεντρικό σημείο επιστρέφει στην αρχική της θέση
+    const r = bar.getBoundingClientRect();
+    const centered = Math.abs(r.left + r.width / 2 - window.innerWidth / 2) < 60;
+    st.vertical = lastX < 50 || lastX > window.innerWidth - 50;
+    if (!st.vertical && centered && r.bottom > window.innerHeight - 40) st.pos = null;
+    if (st.vertical && st.pos && lastX > window.innerWidth - 50) st.pos.x = window.innerWidth;
+    apply();
+    save();
+  };
+  grip.addEventListener('pointerup', end);
+  grip.addEventListener('pointercancel', end);
+  grip.addEventListener('dblclick', () => { st.pos = null; st.vertical = false; apply(); save(); });
+  window.addEventListener('resize', apply);
+
+  // όσο γράφεις, η γραμμή ξεθωριάζει και δεν εμποδίζει τη γραφίδα
+  const inking = new Set<number>();
+  const live = $('live');
+  live.addEventListener('pointerdown', (e) => { inking.add(e.pointerId); document.body.classList.add('inking'); });
+  const lift = (e: PointerEvent): void => {
+    inking.delete(e.pointerId);
+    if (inking.size === 0) document.body.classList.remove('inking');
+  };
+  live.addEventListener('pointerup', lift);
+  live.addEventListener('pointercancel', lift);
+
+  apply();
+}
+
 // ---------- αναδυόμενα μενού ----------
 
 const menu = $('menu');
@@ -292,13 +419,31 @@ function closePopups(): void {
   impMenu.classList.add('hidden');
   gadgetMenu.classList.add('hidden');
 }
+/** Τοποθετεί ένα αναδυόμενο μενού δίπλα στο κουμπί του, μέσα στα όρια της οθόνης. */
+function placeNear(popup: HTMLElement, anchor: HTMLElement): void {
+  const a = anchor.getBoundingClientRect();
+  const w = popup.offsetWidth;
+  const h = popup.offsetHeight;
+  const left = Math.max(8, Math.min(a.left + a.width / 2 - w / 2, window.innerWidth - w - 8));
+  let top = a.top - h - 10;
+  if (top < 8) top = Math.min(a.bottom + 10, window.innerHeight - h - 8);
+  popup.style.left = left + 'px';
+  popup.style.top = Math.max(8, top) + 'px';
+}
 $('gadgetBtn').onclick = (e) => {
   e.stopPropagation();
   const open = gadgetMenu.classList.contains('hidden');
   closePopups();
   gadgetMenu.classList.toggle('hidden', !open);
+  if (open) placeNear(gadgetMenu, $('gadgetBtn'));
 };
 gadgetMenu.addEventListener('click', (e) => {
+  const ax = (e.target as HTMLElement).closest<HTMLElement>('[data-axes]');
+  if (ax) {
+    closePopups();
+    board.addAxes(ax.dataset.axes as AxesMode);
+    return;
+  }
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-gadget]');
   if (!b) return;
   const g = b.dataset.gadget!;
@@ -317,6 +462,7 @@ $('importBtn').onclick = (e) => {
   const open = impMenu.classList.contains('hidden');
   closePopups();
   impMenu.classList.toggle('hidden', !open);
+  if (open) placeNear(impMenu, $('importBtn'));
 };
 document.addEventListener('pointerdown', (e) => {
   if (!(e.target as HTMLElement).closest('.popup, #menuBtn, #importBtn, #gadgetBtn')) closePopups();
@@ -496,10 +642,7 @@ void (async () => {
     }
   }
   refreshUi();
-  const bar = $('toolbar');
-  const setInset = () => (board.bottomInset = bar.offsetHeight + 24);
-  setInset();
-  window.addEventListener('resize', setInset);
+  initToolbar();
 })();
 
 if (import.meta.env.PROD && !isNative && 'serviceWorker' in navigator) {

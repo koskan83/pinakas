@@ -19,7 +19,7 @@ export interface Pic {
   src: string;
 }
 
-export type ShapeKind = 'line' | 'arrow' | 'rect' | 'ellipse';
+export type ShapeKind = 'line' | 'arrow' | 'rect' | 'ellipse' | 'triangle';
 
 export interface Shape {
   kind: 'shape';
@@ -32,6 +32,8 @@ export interface Shape {
   color: string;
   width: number;
   hl?: boolean;
+  /** Κορυφές (μόνο για τρίγωνο). Τα x0..y1 είναι τότε το περιβάλλον ορθογώνιο. */
+  pts?: Pt[];
 }
 
 export interface TextItem {
@@ -44,7 +46,36 @@ export interface TextItem {
   color: string;
 }
 
-export type Item = Stroke | Pic | Shape | TextItem;
+/** Γωνία: κορυφή (x, y) και δύο πλευρές με γωνίες a1, a2 (rad, άξονας y προς τα κάτω). */
+export interface AngleItem {
+  kind: 'angle';
+  id: string;
+  x: number;
+  y: number;
+  a1: number;
+  a2: number;
+  len1: number;
+  len2: number;
+  color: string;
+  width: number;
+}
+
+export type AxesMode = 'full' | 'q1' | 'q14';
+
+/** Καρτεσιανοί άξονες με αρχή στο (x, y)· `unit` μονάδες πίνακα ανά 1. */
+export interface AxesItem {
+  kind: 'axes';
+  id: string;
+  x: number;
+  y: number;
+  unit: number;
+  mode: AxesMode;
+  nx: number;
+  ny: number;
+  color: string;
+}
+
+export type Item = Stroke | Pic | Shape | TextItem | AngleItem | AxesItem;
 
 export interface View {
   x: number;
@@ -128,6 +159,22 @@ export function itemBounds(it: Item): { x0: number; y0: number; x1: number; y1: 
     const { w, h } = textSize(it);
     return { x0: it.x, y0: it.y, x1: it.x + w, y1: it.y + h };
   }
+  if (it.kind === 'axes') {
+    const r = axesRange(it);
+    const u = it.unit;
+    return {
+      x0: it.x + (r.xmin - 0.7) * u, y0: it.y - (r.ymax + 0.9) * u,
+      x1: it.x + (r.xmax + 0.9) * u, y1: it.y - (r.ymin - 0.7) * u,
+    };
+  }
+  if (it.kind === 'angle') {
+    const [p1, p2] = angleEnds(it);
+    const pad = 30;
+    return {
+      x0: Math.min(it.x, p1[0], p2[0]) - pad, y0: Math.min(it.y, p1[1], p2[1]) - pad,
+      x1: Math.max(it.x, p1[0], p2[0]) + pad, y1: Math.max(it.y, p1[1], p2[1]) + pad,
+    };
+  }
   if (it.kind === 'shape') {
     const h = it.width / 2;
     return {
@@ -152,13 +199,24 @@ export function hitItem(it: Item, x: number, y: number, r: number): boolean {
     case 'stroke':
       return strokeHit(it, x, y, r);
     case 'image':
+    case 'axes':
     case 'text': {
       const b = itemBounds(it);
       return x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
     }
+    case 'angle': {
+      const rr = r + it.width / 2;
+      const [p1, p2] = angleEnds(it);
+      return distToSeg(x, y, [it.x, it.y], p1) <= rr || distToSeg(x, y, [it.x, it.y], p2) <= rr;
+    }
     case 'shape': {
       const rr = r + it.width / 2;
       const { x0, y0, x1, y1 } = it;
+      if (it.shape === 'triangle') {
+        const c = trianglePts(it);
+        for (let i = 0; i < 3; i++) if (distToSeg(x, y, c[i], c[(i + 1) % 3]) <= rr) return true;
+        return false;
+      }
       if (it.shape === 'line' || it.shape === 'arrow') return distToSeg(x, y, [x0, y0], [x1, y1]) <= rr;
       if (it.shape === 'rect') {
         const c: Pt[] = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
@@ -177,16 +235,79 @@ export function translateItem(it: Item, dx: number, dy: number): Item {
   switch (it.kind) {
     case 'image':
     case 'text':
+    case 'angle':
+    case 'axes':
       return { ...it, x: it.x + dx, y: it.y + dy };
     case 'shape':
-      return { ...it, x0: it.x0 + dx, y0: it.y0 + dy, x1: it.x1 + dx, y1: it.y1 + dy };
+      return {
+        ...it, x0: it.x0 + dx, y0: it.y0 + dy, x1: it.x1 + dx, y1: it.y1 + dy,
+        pts: it.pts?.map(([x, y]) => [x + dx, y + dy] as Pt),
+      };
     case 'stroke':
       return { ...it, pts: it.pts.map(([x, y]) => [x + dx, y + dy] as Pt) };
   }
 }
 
+export function angleEnds(a: AngleItem): [Pt, Pt] {
+  return [
+    [a.x + a.len1 * Math.cos(a.a1), a.y + a.len1 * Math.sin(a.a1)],
+    [a.x + a.len2 * Math.cos(a.a2), a.y + a.len2 * Math.sin(a.a2)],
+  ];
+}
+
+/** Άνοιγμα γωνίας σε μοίρες (0–180). */
+export function angleDegrees(a: AngleItem): number {
+  let d = Math.abs(a.a1 - a.a2) % (2 * Math.PI);
+  if (d > Math.PI) d = 2 * Math.PI - d;
+  return Math.round((d * 180) / Math.PI);
+}
+
+/** Στρογγυλοποίηση γωνίας σε ακέραιες μοίρες. */
+export function roundAngle(a: number): number {
+  const step = Math.PI / 180;
+  return Math.round(a / step) * step;
+}
+
+export function axesRange(a: AxesItem): { xmin: number; xmax: number; ymin: number; ymax: number } {
+  return {
+    xmin: a.mode === 'full' ? -a.nx : 0,
+    xmax: a.nx,
+    ymin: a.mode === 'q1' ? 0 : -a.ny,
+    ymax: a.ny,
+  };
+}
+
+/** Κορυφές τριγώνου· αν δεν έχουν οριστεί, ισοσκελές μέσα στο ορθογώνιο. */
+export function trianglePts(s: Shape): Pt[] {
+  return s.pts ?? [[(s.x0 + s.x1) / 2, s.y0], [s.x0, s.y1], [s.x1, s.y1]];
+}
+
+/** Αλλάζει το περιβάλλον ορθογώνιο ενός σχήματος, μεταφέροντας αναλογικά και τις κορυφές του. */
+export function reboxShape(s: Shape, x0: number, y0: number, x1: number, y1: number): Shape {
+  const out: Shape = { ...s, x0, y0, x1, y1 };
+  if (s.pts) {
+    const w = s.x1 - s.x0;
+    const h = s.y1 - s.y0;
+    out.pts = s.pts.map(([x, y]) => [
+      x0 + (w === 0 ? 0.5 : (x - s.x0) / w) * (x1 - x0),
+      y0 + (h === 0 ? 0.5 : (y - s.y0) / h) * (y1 - y0),
+    ] as Pt);
+  }
+  return out;
+}
+
+export type Recognized =
+  | { t: 'shape'; shape: ShapeKind; x0: number; y0: number; x1: number; y1: number; pts?: Pt[] }
+  | { t: 'angle'; x: number; y: number; a1: number; a2: number; len1: number; len2: number };
+
+function maxDev(pts: Pt[], from: number, to: number): number {
+  let m = 0;
+  for (let i = from; i <= to; i++) m = Math.max(m, distToSeg(pts[i][0], pts[i][1], pts[from], pts[to]));
+  return m;
+}
+
 /** Αναγνώριση σχήματος από ελεύθερο χειρόγραφο. Επιστρέφει null αν δεν μοιάζει με τίποτα. */
-export function recognizeShape(pts: Pt[]): { shape: ShapeKind; x0: number; y0: number; x1: number; y1: number } | null {
+export function recognizeShape(pts: Pt[]): Recognized | null {
   if (pts.length < 6) return null;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   let len = 0;
@@ -198,30 +319,63 @@ export function recognizeShape(pts: Pt[]): { shape: ShapeKind; x0: number; y0: n
   const w = x1 - x0, h = y1 - y0;
   const diag = Math.hypot(w, h);
   if (diag < 1) return null;
-  const a = pts[0], b = pts[pts.length - 1];
+  const n = pts.length;
+  const a = pts[0], b = pts[n - 1];
   const chord = Math.hypot(b[0] - a[0], b[1] - a[1]);
 
-  // ευθεία: όλα τα σημεία κοντά στη χορδή
-  if (chord > 0.8 * len || chord > diag * 0.9) {
-    let maxD = 0;
-    for (const p of pts) maxD = Math.max(maxD, distToSeg(p[0], p[1], a, b));
-    if (maxD <= Math.max(chord * 0.06, 2)) return { shape: 'line', x0: a[0], y0: a[1], x1: b[0], y1: b[1] };
+  // ανοιχτή γραμμή: ευθεία ή γωνία
+  if (chord > 0.25 * len) {
+    if (maxDev(pts, 0, n - 1) <= Math.max(chord * 0.06, 2)) {
+      return { t: 'shape', shape: 'line', x0: a[0], y0: a[1], x1: b[0], y1: b[1] };
+    }
+    // γωνία: μία κορυφή και δύο ευθύγραμμα σκέλη
+    let ci = 0, cd = 0;
+    for (let i = 1; i < n - 1; i++) {
+      const d = distToSeg(pts[i][0], pts[i][1], a, b);
+      if (d > cd) { cd = d; ci = i; }
+    }
+    const c = pts[ci];
+    const l1 = Math.hypot(a[0] - c[0], a[1] - c[1]);
+    const l2 = Math.hypot(b[0] - c[0], b[1] - c[1]);
+    if (Math.min(l1, l2) > 0.25 * Math.max(l1, l2)
+      && maxDev(pts, 0, ci) <= Math.max(l1 * 0.08, 2)
+      && maxDev(pts, ci, n - 1) <= Math.max(l2 * 0.08, 2)) {
+      return {
+        t: 'angle', x: c[0], y: c[1],
+        a1: roundAngle(Math.atan2(a[1] - c[1], a[0] - c[0])),
+        a2: roundAngle(Math.atan2(b[1] - c[1], b[0] - c[0])),
+        len1: l1, len2: l2,
+      };
+    }
     return null;
   }
-  // κλειστό σχήμα
-  if (chord > 0.25 * len) return null;
+
+  // κλειστό σχήμα: ορθογώνιο, έλλειψη ή τρίγωνο — κερδίζει όποιο ταιριάζει καλύτερα
   if (w < 4 || h < 4) return null;
+  const m = Math.min(w, h);
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-  let edgeDev = 0, ellDev = 0;
+
+  // κορυφές τριγώνου: πιο μακρινό από το κέντρο βάρους, πιο μακρινό από αυτό, πιο μακρινό από την ευθεία τους
+  let gx = 0, gy = 0;
+  for (const [x, y] of pts) { gx += x; gy += y; }
+  gx /= n; gy /= n;
+  const far = (f: (p: Pt) => number): Pt => pts.reduce((best, p) => (f(p) > f(best) ? p : best), pts[0]);
+  const A = far((p) => Math.hypot(p[0] - gx, p[1] - gy));
+  const B = far((p) => Math.hypot(p[0] - A[0], p[1] - A[1]));
+  const abLen = Math.max(Math.hypot(B[0] - A[0], B[1] - A[1]), 1e-6);
+  const C = far((p) => Math.abs((B[0] - A[0]) * (A[1] - p[1]) - (A[0] - p[0]) * (B[1] - A[1])) / abLen);
+
+  let rectD = 0, ellD = 0, triD = 0;
   for (const [x, y] of pts) {
-    const dEdge = Math.min(Math.abs(x - x0), Math.abs(x - x1), Math.abs(y - y0), Math.abs(y - y1));
-    edgeDev += dEdge / Math.min(w, h);
-    const n = Math.hypot((x - cx) / (w / 2), (y - cy) / (h / 2));
-    ellDev += Math.abs(n - 1);
+    rectD += Math.min(Math.abs(x - x0), Math.abs(x - x1), Math.abs(y - y0), Math.abs(y - y1));
+    ellD += Math.abs(Math.hypot((x - cx) / (w / 2), (y - cy) / (h / 2)) - 1) * (m / 2);
+    triD += Math.min(distToSeg(x, y, A, B), distToSeg(x, y, B, C), distToSeg(x, y, C, A));
   }
-  edgeDev /= pts.length;
-  ellDev /= pts.length;
-  if (edgeDev < 0.07 && edgeDev <= ellDev) return { shape: 'rect', x0, y0, x1, y1 };
-  if (ellDev < 0.12) return { shape: 'ellipse', x0, y0, x1, y1 };
-  return null;
+  const cand: [number, Recognized][] = [
+    [rectD / n / m / 0.07, { t: 'shape', shape: 'rect', x0, y0, x1, y1 }],
+    [ellD / n / m / 0.06, { t: 'shape', shape: 'ellipse', x0, y0, x1, y1 }],
+    [triD / n / m / 0.05, { t: 'shape', shape: 'triangle', x0, y0, x1, y1, pts: [A, B, C] }],
+  ];
+  cand.sort((p, q) => p[0] - q[0]);
+  return cand[0][0] < 1 ? cand[0][1] : null;
 }

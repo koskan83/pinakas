@@ -1,8 +1,9 @@
 import {
-  Background, Doc, Item, Op, Page, Pic, Pt, Shape, ShapeKind, Stroke, TextItem, Tool, View,
-  hitItem, itemBounds, newDoc, newPage, recognizeShape, textFont, textLines, translateItem, uid,
+  AngleItem, AxesItem, AxesMode, Background, Doc, Item, Op, Page, Pic, Pt, Shape, ShapeKind, Stroke, TextItem, Tool, View,
+  angleDegrees, angleEnds, axesRange, hitItem, itemBounds, newDoc, newPage, reboxShape, recognizeShape, roundAngle,
+  textFont, textLines, translateItem, trianglePts, uid,
 } from './model';
-import { GadgetDrag, GadgetKind, Gadgets } from './gadgets';
+import { CM, GadgetDrag, GadgetKind, Gadgets } from './gadgets';
 
 type Mode = 'draw' | 'shape' | 'gadget' | 'erase' | 'move' | 'resize' | 'pan' | 'none';
 
@@ -15,7 +16,9 @@ interface PState {
   mode: Mode;
   stroke?: Stroke;
   /** Σχήμα που σχεδιάζεται ή «κλειδώθηκε» από αναγνώριση. */
-  live?: Shape;
+  live?: Shape | AngleItem;
+  /** Ποια λαβή σύρεται (για γωνία: 1 ή 2). */
+  handle?: number;
   timer?: number;
   gadget?: GadgetDrag;
   erased?: { item: Item; i: number }[];
@@ -45,7 +48,7 @@ export class Board {
   tool: Tool = 'pen';
   color = '#111111';
   width = 4;
-  shapeKind: ShapeKind = 'line';
+  shapeKind: ShapeKind | 'angle' = 'line';
   readonly gadgets = new Gadgets();
   selected: string | null = null;
   palmThreshold = 40;
@@ -248,6 +251,22 @@ export class Board {
     return pic;
   }
 
+  /** Εισαγωγή καρτεσιανών αξόνων στο κέντρο της οθόνης. */
+  addAxes(mode: AxesMode): void {
+    const size = { full: [8, 6], q1: [10, 8], q14: [10, 5] }[mode];
+    const axes: AxesItem = { kind: 'axes', id: uid(), x: 0, y: 0, unit: CM, mode, nx: size[0], ny: size[1], color: this.color };
+    const b = itemBounds(axes);
+    const c = this.toWorld(this.W / 2, (this.H - this.bottomInset) / 2);
+    axes.x = c[0] - (b.x0 + b.x1) / 2;
+    axes.y = c[1] - (b.y0 + b.y1) / 2;
+    this.page.items.push(axes);
+    this.push({ t: 'add', p: this.cur, item: axes });
+    this.tool = 'select';
+    this.selected = axes.id;
+    this.redraw();
+    this.onUi();
+  }
+
   deleteSelected(): void {
     if (!this.selected) return;
     const items = this.page.items;
@@ -388,7 +407,13 @@ export class Board {
     c.lineWidth = s.hl ? s.width * 4 : s.width;
     c.globalAlpha = s.hl ? 0.35 : 1;
     c.beginPath();
-    if (s.shape === 'rect') {
+    if (s.shape === 'triangle') {
+      const t = trianglePts(s);
+      c.moveTo(t[0][0], t[0][1]);
+      c.lineTo(t[1][0], t[1][1]);
+      c.lineTo(t[2][0], t[2][1]);
+      c.closePath();
+    } else if (s.shape === 'rect') {
       c.rect(Math.min(s.x0, s.x1), Math.min(s.y0, s.y1), Math.abs(s.x1 - s.x0), Math.abs(s.y1 - s.y0));
     } else if (s.shape === 'ellipse') {
       c.ellipse((s.x0 + s.x1) / 2, (s.y0 + s.y1) / 2, Math.max(Math.abs(s.x1 - s.x0) / 2, 0.5), Math.max(Math.abs(s.y1 - s.y0) / 2, 0.5), 0, 0, Math.PI * 2);
@@ -417,8 +442,118 @@ export class Board {
     c.restore();
   }
 
+  private drawAngle(c: CanvasRenderingContext2D, a: AngleItem): void {
+    const [p1, p2] = angleEnds(a);
+    const deg = angleDegrees(a);
+    c.save();
+    c.strokeStyle = a.color;
+    c.fillStyle = a.color;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    c.lineWidth = a.width;
+    c.beginPath();
+    c.moveTo(p1[0], p1[1]);
+    c.lineTo(a.x, a.y);
+    c.lineTo(p2[0], p2[1]);
+    c.stroke();
+
+    // τόξο (ή τετραγωνάκι για ορθή γωνία) και ένδειξη μοιρών
+    const r = Math.max(18, Math.min(46, Math.min(a.len1, a.len2) * 0.4));
+    const diff = Math.atan2(Math.sin(a.a2 - a.a1), Math.cos(a.a2 - a.a1));
+    c.lineWidth = Math.max(1.5, a.width * 0.5);
+    c.beginPath();
+    if (deg === 90) {
+      const q = r * 0.6;
+      const u1: Pt = [Math.cos(a.a1) * q, Math.sin(a.a1) * q];
+      const u2: Pt = [Math.cos(a.a2) * q, Math.sin(a.a2) * q];
+      c.moveTo(a.x + u1[0], a.y + u1[1]);
+      c.lineTo(a.x + u1[0] + u2[0], a.y + u1[1] + u2[1]);
+      c.lineTo(a.x + u2[0], a.y + u2[1]);
+    } else {
+      c.arc(a.x, a.y, r, a.a1, a.a1 + diff, diff < 0);
+    }
+    c.stroke();
+    const mid = a.a1 + diff / 2;
+    const lr = r + 26;
+    c.font = '600 22px system-ui, "Segoe UI", Roboto, sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText(`${deg}°`, a.x + lr * Math.cos(mid), a.y + lr * Math.sin(mid));
+    c.restore();
+  }
+
+  private drawAxes(c: CanvasRenderingContext2D, a: AxesItem): void {
+    const { xmin, xmax, ymin, ymax } = axesRange(a);
+    const u = a.unit;
+    const X = (v: number) => a.x + v * u;
+    const Y = (v: number) => a.y - v * u;
+    c.save();
+    c.strokeStyle = a.color;
+    c.fillStyle = a.color;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+
+    // βοηθητικό πλέγμα
+    c.globalAlpha = 0.16;
+    c.lineWidth = 1;
+    c.beginPath();
+    for (let i = xmin; i <= xmax; i++) { c.moveTo(X(i), Y(ymin)); c.lineTo(X(i), Y(ymax)); }
+    for (let j = ymin; j <= ymax; j++) { c.moveTo(X(xmin), Y(j)); c.lineTo(X(xmax), Y(j)); }
+    c.stroke();
+    c.globalAlpha = 1;
+
+    // άξονες με βέλη
+    const ext = 0.6;
+    const xa = xmin < 0 ? xmin - ext : 0;
+    const ya = ymin < 0 ? ymin - ext : 0;
+    const ah = Math.max(8, u * 0.22);
+    c.lineWidth = 2.5;
+    c.beginPath();
+    c.moveTo(X(xa), a.y);
+    c.lineTo(X(xmax + ext), a.y);
+    c.moveTo(X(xmax + ext) - ah, a.y - ah * 0.55);
+    c.lineTo(X(xmax + ext), a.y);
+    c.lineTo(X(xmax + ext) - ah, a.y + ah * 0.55);
+    c.moveTo(a.x, Y(ya));
+    c.lineTo(a.x, Y(ymax + ext));
+    c.moveTo(a.x - ah * 0.55, Y(ymax + ext) + ah);
+    c.lineTo(a.x, Y(ymax + ext));
+    c.lineTo(a.x + ah * 0.55, Y(ymax + ext) + ah);
+    // υποδιαιρέσεις
+    const t = Math.max(3, u * 0.1);
+    for (let i = xmin; i <= xmax; i++) if (i !== 0) { c.moveTo(X(i), a.y - t); c.lineTo(X(i), a.y + t); }
+    for (let j = ymin; j <= ymax; j++) if (j !== 0) { c.moveTo(a.x - t, Y(j)); c.lineTo(a.x + t, Y(j)); }
+    c.stroke();
+
+    // αριθμοί και ονόματα αξόνων
+    const fs = Math.max(9, Math.min(17, u * 0.38));
+    c.font = `${fs}px system-ui, "Segoe UI", Roboto, sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'top';
+    for (let i = xmin; i <= xmax; i++) if (i !== 0) c.fillText(String(i), X(i), a.y + t + 3);
+    c.textAlign = 'right';
+    c.textBaseline = 'middle';
+    for (let j = ymin; j <= ymax; j++) if (j !== 0) c.fillText(String(j), a.x - t - 4, Y(j));
+    c.textBaseline = 'top';
+    c.fillText('O', a.x - t - 3, a.y + t + 3);
+    c.font = `italic 600 ${fs * 1.25}px system-ui, "Segoe UI", Roboto, sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'top';
+    c.fillText('x', X(xmax + ext), a.y + t + 4);
+    c.textAlign = 'right';
+    c.textBaseline = 'middle';
+    c.fillText('y', a.x - t - 6, Y(ymax + ext) + 4);
+    c.restore();
+  }
+
   private drawItem(c: CanvasRenderingContext2D, it: Item): void {
     switch (it.kind) {
+      case 'angle':
+        this.drawAngle(c, it);
+        break;
+      case 'axes':
+        this.drawAxes(c, it);
+        break;
       case 'stroke':
         this.drawStroke(c, it);
         break;
@@ -471,7 +606,7 @@ export class Board {
     const k = this.page.view.k;
     let selItem: Item | undefined;
     for (const p of this.ptrs.values()) {
-      if (p.live) this.drawShape(c, p.live);
+      if (p.live) this.drawItem(c, p.live);
       else if (p.stroke) this.drawStroke(c, p.stroke);
       if (p.preview) {
         this.drawItem(c, p.preview);
@@ -487,11 +622,17 @@ export class Board {
       c.setLineDash([8 / k, 6 / k]);
       c.strokeRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
       c.setLineDash([]);
-      if (selItem.kind === 'image' || selItem.kind === 'shape') {
-        c.fillStyle = '#2563eb';
+      c.fillStyle = '#2563eb';
+      if (selItem.kind === 'image' || selItem.kind === 'shape' || selItem.kind === 'axes') {
         c.beginPath();
         c.arc(b.x1, b.y1, 12 / k, 0, Math.PI * 2);
         c.fill();
+      } else if (selItem.kind === 'angle') {
+        for (const p of angleEnds(selItem)) {
+          c.beginPath();
+          c.arc(p[0], p[1], 12 / k, 0, Math.PI * 2);
+          c.fill();
+        }
       }
       c.restore();
     }
@@ -562,7 +703,7 @@ export class Board {
     let changed = false;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      if (it.kind !== 'image' && hitItem(it, x, y, r)) {
+      if (it.kind !== 'image' && it.kind !== 'axes' && hitItem(it, x, y, r)) {
         items.splice(i, 1);
         ps.erased!.push({ item: it, i });
         changed = true;
@@ -666,10 +807,12 @@ export class Board {
         break;
       case 'shape':
         ps.mode = 'shape';
-        ps.live = {
-          kind: 'shape', id: uid(), shape: this.shapeKind,
-          x0: wx, y0: wy, x1: wx, y1: wy, color: this.color, width: this.width,
-        };
+        ps.live = this.shapeKind === 'angle'
+          ? { kind: 'angle', id: uid(), x: wx, y: wy, a1: 0, a2: 0, len1: 0, len2: 0, color: this.color, width: this.width }
+          : {
+            kind: 'shape', id: uid(), shape: this.shapeKind,
+            x0: wx, y0: wy, x1: wx, y1: wy, color: this.color, width: this.width,
+          };
         this.renderLive();
         break;
       case 'text': {
@@ -691,7 +834,20 @@ export class Board {
         break;
       case 'select': {
         const sel = this.selected ? this.page.items.find((x) => x.id === this.selected) : undefined;
-        if (sel && (sel.kind === 'image' || sel.kind === 'shape')) {
+        if (sel && sel.kind === 'angle') {
+          const ends = angleEnds(sel);
+          const hi = ends.findIndex((p) => Math.hypot(wx - p[0], wy - p[1]) < 24 / v.k);
+          if (hi >= 0) {
+            ps.mode = 'resize';
+            ps.handle = hi + 1;
+            ps.orig = sel;
+            ps.preview = sel;
+            ps.start = [wx, wy];
+            this.redraw();
+            return;
+          }
+        }
+        if (sel && (sel.kind === 'image' || sel.kind === 'shape' || sel.kind === 'axes')) {
           const b = itemBounds(sel);
           if (Math.hypot(wx - b.x1, wy - b.y1) < 24 / v.k) {
             ps.mode = 'resize';
@@ -756,7 +912,12 @@ export class Board {
       const r = recognizeShape(ps.stroke.pts);
       if (!r) return;
       const s = ps.stroke;
-      ps.live = { kind: 'shape', id: uid(), ...r, color: s.color, width: s.width, hl: s.hl };
+      ps.live = r.t === 'angle'
+        ? { kind: 'angle', id: uid(), x: r.x, y: r.y, a1: r.a1, a2: r.a2, len1: r.len1, len2: r.len2, color: s.color, width: s.width }
+        : {
+          kind: 'shape', id: uid(), shape: r.shape, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, pts: r.pts,
+          color: s.color, width: s.width, hl: s.hl,
+        };
       this.renderLive();
     }, 600);
   }
@@ -849,10 +1010,20 @@ export class Board {
       case 'gadget':
         ps.gadget!.move(wx, wy);
         break;
-      case 'shape':
-        ps.live!.x1 = wx;
-        ps.live!.y1 = wy;
+      case 'shape': {
+        const l = ps.live!;
+        if (l.kind === 'angle') {
+          // η πρώτη πλευρά μένει οριζόντια, η δεύτερη ακολουθεί τη γραφίδα
+          const d = Math.hypot(wx - l.x, wy - l.y);
+          l.a2 = roundAngle(Math.atan2(wy - l.y, wx - l.x));
+          l.len1 = d;
+          l.len2 = d;
+        } else {
+          l.x1 = wx;
+          l.y1 = wy;
+        }
         break;
+      }
       case 'erase':
         this.eraserAt = { x: wx, y: wy };
         this.eraseAt(ps, wx, wy);
@@ -881,11 +1052,21 @@ export class Board {
         } else if (o.kind === 'shape') {
           const fx = o.x1 >= o.x0;
           const fy = o.y1 >= o.y0;
-          ps.preview = {
-            ...o,
-            x1: fx ? o.x1 + dx : o.x1, x0: fx ? o.x0 : o.x0 + dx,
-            y1: fy ? o.y1 + dy : o.y1, y0: fy ? o.y0 : o.y0 + dy,
-          };
+          ps.preview = reboxShape(
+            o,
+            fx ? o.x0 : o.x0 + dx, fy ? o.y0 : o.y0 + dy,
+            fx ? o.x1 + dx : o.x1, fy ? o.y1 + dy : o.y1,
+          );
+        } else if (o.kind === 'axes') {
+          const b = itemBounds(o);
+          const f = Math.max(0.3, (b.x1 - b.x0 + dx) / (b.x1 - b.x0));
+          const scaled: AxesItem = { ...o, unit: Math.max(12, o.unit * f) };
+          const nb = itemBounds(scaled);
+          ps.preview = { ...scaled, x: scaled.x + b.x0 - nb.x0, y: scaled.y + b.y0 - nb.y0 };
+        } else if (o.kind === 'angle') {
+          const ang = roundAngle(Math.atan2(wy - o.y, wx - o.x));
+          const len = Math.max(20, Math.hypot(wx - o.x, wy - o.y));
+          ps.preview = ps.handle === 1 ? { ...o, a1: ang, len1: len } : { ...o, a2: ang, len2: len };
         }
         break;
       }
@@ -912,8 +1093,9 @@ export class Board {
         clearTimeout(ps.timer);
         const s: Item = ps.live ?? ps.stroke!;
         if (ps.mode === 'shape' && ps.live) {
-          const len = Math.hypot(ps.live.x1 - ps.live.x0, ps.live.y1 - ps.live.y0);
-          if (len < 4 / this.page.view.k) break;
+          const l = ps.live;
+          const len = l.kind === 'angle' ? l.len2 : Math.hypot(l.x1 - l.x0, l.y1 - l.y0);
+          if (len < (l.kind === 'angle' ? 20 : 4) / this.page.view.k) break;
         }
         this.page.items.push(s);
         this.push({ t: 'add', p: this.cur, item: s });
