@@ -34,6 +34,8 @@ export interface Shape {
   hl?: boolean;
   /** Κορυφές (μόνο για τρίγωνο). Τα x0..y1 είναι τότε το περιβάλλον ορθογώνιο. */
   pts?: Pt[];
+  /** Ευθεία/βέλος με κοινή αρχή: id του άλλου σχήματος, για να δείχνεται η μεταξύ τους γωνία. */
+  angleWith?: string;
 }
 
 export interface TextItem {

@@ -475,6 +475,26 @@ export class Board {
       }
     }
     c.stroke();
+    // γωνία με το πιο κοντινό (σε άνοιγμα) προηγούμενο βέλος/ευθεία που ξεκινά από το ίδιο σημείο
+    const l2 = Math.hypot(s.x1 - s.x0, s.y1 - s.y0);
+    if (s.angleWith && l2 > 20) {
+      const a2 = Math.atan2(s.y1 - s.y0, s.x1 - s.x0);
+      let best: { a1: number; d: number; len: number } | null = null;
+      for (const o of this.page.items) {
+        if (o.id === s.id) break;
+        if (o.kind !== 'shape' || (o.shape !== 'arrow' && o.shape !== 'line') || Math.hypot(o.x0 - s.x0, o.y0 - s.y0) >= 1) continue;
+        const l1 = Math.hypot(o.x1 - o.x0, o.y1 - o.y0);
+        if (l1 <= 20) continue;
+        const a1 = Math.atan2(o.y1 - o.y0, o.x1 - o.x0);
+        let d = Math.abs(a1 - a2) % (2 * Math.PI);
+        if (d > Math.PI) d = 2 * Math.PI - d;
+        if (!best || d < best.d) best = { a1, d, len: Math.min(l1, l2) };
+      }
+      if (best) {
+        c.globalAlpha = 1;
+        this.drawAngleMark(c, s.x0, s.y0, best.a1, a2, best.len, s.width, Math.round((best.d * 180) / Math.PI));
+      }
+    }
     c.restore();
   }
 
@@ -501,29 +521,33 @@ export class Board {
     c.lineTo(p2[0], p2[1]);
     c.stroke();
 
-    // τόξο (ή τετραγωνάκι για ορθή γωνία) και ένδειξη μοιρών
-    const r = Math.max(18, Math.min(46, Math.min(a.len1, a.len2) * 0.4));
-    const diff = Math.atan2(Math.sin(a.a2 - a.a1), Math.cos(a.a2 - a.a1));
-    c.lineWidth = Math.max(1.5, a.width * 0.5);
+    this.drawAngleMark(c, a.x, a.y, a.a1, a.a2, Math.min(a.len1, a.len2), a.width, deg);
+    c.restore();
+  }
+
+  /** Τόξο (ή τετραγωνάκι για ορθή γωνία) και ένδειξη μοιρών, με το τρέχον χρώμα του c. */
+  private drawAngleMark(c: CanvasRenderingContext2D, x: number, y: number, a1: number, a2: number, len: number, width: number, deg: number): void {
+    const r = Math.max(18, Math.min(46, len * 0.4));
+    const diff = Math.atan2(Math.sin(a2 - a1), Math.cos(a2 - a1));
+    c.lineWidth = Math.max(1.5, width * 0.5);
     c.beginPath();
     if (deg === 90) {
       const q = r * 0.6;
-      const u1: Pt = [Math.cos(a.a1) * q, Math.sin(a.a1) * q];
-      const u2: Pt = [Math.cos(a.a2) * q, Math.sin(a.a2) * q];
-      c.moveTo(a.x + u1[0], a.y + u1[1]);
-      c.lineTo(a.x + u1[0] + u2[0], a.y + u1[1] + u2[1]);
-      c.lineTo(a.x + u2[0], a.y + u2[1]);
+      const u1: Pt = [Math.cos(a1) * q, Math.sin(a1) * q];
+      const u2: Pt = [Math.cos(a2) * q, Math.sin(a2) * q];
+      c.moveTo(x + u1[0], y + u1[1]);
+      c.lineTo(x + u1[0] + u2[0], y + u1[1] + u2[1]);
+      c.lineTo(x + u2[0], y + u2[1]);
     } else {
-      c.arc(a.x, a.y, r, a.a1, a.a1 + diff, diff < 0);
+      c.arc(x, y, r, a1, a1 + diff, diff < 0);
     }
     c.stroke();
-    const mid = a.a1 + diff / 2;
+    const mid = a1 + diff / 2;
     const lr = r + 26;
     c.font = '600 22px system-ui, "Segoe UI", Roboto, sans-serif';
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    c.fillText(`${deg}°`, a.x + lr * Math.cos(mid), a.y + lr * Math.sin(mid));
-    c.restore();
+    c.fillText(`${deg}°`, x + lr * Math.cos(mid), y + lr * Math.sin(mid));
   }
 
   private drawAxes(c: CanvasRenderingContext2D, a: AxesItem): void {
@@ -860,11 +884,23 @@ export class Board {
         break;
       case 'shape':
         ps.mode = 'shape';
+        // βέλος/ευθεία που ξεκινά πολύ κοντά στην αρχή άλλου: κουμπώνει εκεί και δείχνει τη γωνία τους
+        let sx = wx, sy = wy, angleWith: string | undefined;
+        if (this.shapeKind === 'arrow' || this.shapeKind === 'line') {
+          const items = this.page.items;
+          for (let i = items.length - 1; i >= 0; i--) {
+            const it = items[i];
+            if (it.kind === 'shape' && (it.shape === 'arrow' || it.shape === 'line') && Math.hypot(it.x0 - wx, it.y0 - wy) < 28 / v.k) {
+              sx = it.x0; sy = it.y0; angleWith = it.id;
+              break;
+            }
+          }
+        }
         ps.live = this.shapeKind === 'angle'
           ? { kind: 'angle', id: uid(), x: wx, y: wy, a1: 0, a2: 0, len1: 0, len2: 0, color: this.color, width: this.width }
           : {
             kind: 'shape', id: uid(), shape: this.shapeKind,
-            x0: wx, y0: wy, x1: wx, y1: wy, color: this.color, width: this.width,
+            x0: sx, y0: sy, x1: wx, y1: wy, color: this.color, width: this.width, angleWith,
           };
         this.renderLive();
         break;
