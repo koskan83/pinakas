@@ -1,11 +1,26 @@
 import {
-  AngleItem, AxesItem, AxesMode, Background, Doc, Item, Op, Page, Pic, Pt, Shape, ShapeKind, Stroke, TextItem, Tool, View,
-  angleDegrees, angleEnds, axesRange, erasePartial, hitItem, isDark, itemBounds, newDoc, newPage, reboxShape, recognizeShape, roundAngle,
-  textFont, textLines, translateItem, trianglePts, uid,
+  AngleItem, AxesItem, AxesMode, Background, Doc, Item, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TextItem, Tool, TrigItem, View,
+  angleDegrees, angleEnds, axesRange, cloneItem, erasePartial, hitItem, inLasso, isDark, itemBounds, newDoc, newPage, reboxShape,
+  recognizeShape, roundAngle, scaleItem, textFont, textLines, translateItem, trianglePts, uid,
 } from './model';
+import { compileCached } from './expr';
+import { STAMPS } from './stamps';
 import { CM, GadgetDrag, GadgetKind, Gadgets } from './gadgets';
 
-type Mode = 'draw' | 'shape' | 'gadget' | 'erase' | 'move' | 'resize' | 'pan' | 'none';
+type Mode = 'draw' | 'shape' | 'gadget' | 'erase' | 'move' | 'resize' | 'pan' | 'lasso' | 'gmove' | 'gresize' | 'laser' | 'none';
+
+type Box = { x0: number; y0: number; x1: number; y1: number };
+/** Ίχνος του δείκτη λέιζερ· t = στιγμή που σηκώθηκε η γραφίδα (0 όσο γράφει). */
+interface Laser { pts: Pt[]; t: number }
+const LASER_MS = 1800;
+
+function trigPoint(t: TrigItem): Pt {
+  return [t.x + t.r * Math.cos(t.a), t.y - t.r * Math.sin(t.a)];
+}
+
+function fmt(n: number): string {
+  return n.toLocaleString('el', { maximumFractionDigits: 1 });
+}
 
 interface PState {
   id: number;
@@ -24,6 +39,12 @@ interface PState {
   /** Η λίστα της σελίδας πριν αρχίσει το σβήσιμο. */
   before?: Item[];
   changed?: boolean;
+  lasso?: Pt[];
+  /** Στοιχείο κάτω από την αρχή του λάσου: επιλέγεται αν τελικά ήταν απλό άγγιγμα. */
+  tapHit?: string;
+  ids?: Set<string>;
+  gb?: Box;
+  laser?: Laser;
   orig?: Item;
   preview?: Item;
   start?: Pt;
@@ -53,6 +74,12 @@ export class Board {
   shapeKind: ShapeKind | 'angle' = 'line';
   readonly gadgets = new Gadgets();
   selected: string | null = null;
+  /** Πολλαπλή επιλογή (λάσο). Όταν έχει στοιχεία, το `selected` είναι null. */
+  multi: string[] = [];
+  /** Εμφάνιση μηκών, γωνιών και εμβαδών πάνω στα σχήματα. */
+  showMeasures = false;
+  /** Διαφανές φόντο (γράψιμο πάνω από άλλα προγράμματα). */
+  transparent = false;
   palmThreshold = 40;
   /** Ύψος (px) που καλύπτει η γραμμή εργαλείων στο κάτω μέρος. */
   bottomInset = 110;
@@ -69,6 +96,10 @@ export class Board {
   private ptrs = new Map<number, PState>();
   private gesture: Gesture | null = null;
   private eraserAt: { x: number; y: number } | null = null;
+  private lasers: Laser[] = [];
+  private laserRaf = 0;
+  private replay: { i: number; prog: number; wait: number; paused: boolean } | null = null;
+  private replayRaf = 0;
   private dpr = 1;
   private W = 0;
   private H = 0;
@@ -111,7 +142,10 @@ export class Board {
 
   setTool(t: Tool): void {
     this.tool = t;
-    if (t !== 'select') this.selected = null;
+    if (t !== 'select') {
+      this.selected = null;
+      this.multi = [];
+    }
     this.renderLive();
     this.onUi();
   }
@@ -138,6 +172,7 @@ export class Board {
     this.doc = d;
     this.cur = 0;
     this.selected = null;
+    this.multi = [];
     this.undoStack = [];
     this.redoStack = [];
     this.redraw();
@@ -149,12 +184,29 @@ export class Board {
     if (i < 0 || i >= this.doc.pages.length) return;
     this.cur = i;
     this.selected = null;
+    this.multi = [];
     this.redraw();
     this.onUi();
   }
 
   addPage(): void {
     this.doc.pages.push(newPage());
+    this.goto(this.doc.pages.length - 1);
+    this.onChange();
+  }
+
+  /** Νέα σελίδα με αντίγραφα των στοιχείων (πρότυπο). Αν η τρέχουσα είναι κενή, μπαίνουν σε αυτήν. */
+  addPageWith(src: Item[]): void {
+    const items = src.map(cloneItem);
+    if (this.page.items.length === 0) {
+      this.page.items = items;
+      this.push({ t: 'set', p: this.cur, before: [], after: items.slice() });
+      this.redraw();
+      return;
+    }
+    const p = newPage();
+    p.items = items;
+    this.doc.pages.push(p);
     this.goto(this.doc.pages.length - 1);
     this.onChange();
   }
@@ -169,6 +221,7 @@ export class Board {
     this.undoStack = [];
     this.redoStack = [];
     this.selected = null;
+    this.multi = [];
     this.redraw();
     this.onChange();
     this.onUi();
@@ -245,6 +298,7 @@ export class Board {
   private afterHistory(op: Op): void {
     this.cur = op.p;
     this.selected = null;
+    this.multi = [];
     this.redraw();
     this.onChange();
     this.onUi();
@@ -265,6 +319,7 @@ export class Board {
     this.push({ t: 'add', p: this.cur, item: pic });
     this.tool = 'select';
     this.selected = pic.id;
+    this.multi = [];
     this.redraw();
     return pic;
   }
@@ -288,6 +343,7 @@ export class Board {
     this.push({ t: 'add', p: this.cur, item: axes });
     this.tool = 'select';
     this.selected = axes.id;
+    this.multi = [];
     this.redraw();
     this.onUi();
   }
@@ -309,13 +365,122 @@ export class Board {
     this.redraw();
   }
 
+  private center(): Pt {
+    return this.toWorld(this.W / 2, (this.H - this.bottomInset) / 2);
+  }
+
+  private addAndSelect(item: Item): void {
+    this.page.items.push(item);
+    this.push({ t: 'add', p: this.cur, item });
+    this.tool = 'select';
+    this.selected = item.id;
+    this.multi = [];
+    this.redraw();
+    this.onUi();
+  }
+
+  /** Εισαγωγή έτοιμου σχήματος φυσικής στο κέντρο της οθόνης. */
+  addStamp(name: string): void {
+    const d = STAMPS[name];
+    if (!d) return;
+    const [cx, cy] = this.center();
+    this.addAndSelect({ kind: 'stamp', id: uid(), name, x: cx - d.w / 2, y: cy - d.h / 2, w: d.w, h: d.h, color: this.color, width: 3 });
+  }
+
+  addTrig(): void {
+    const [cx, cy] = this.center();
+    this.addAndSelect({ kind: 'trig', id: uid(), x: cx, y: cy, r: 4 * CM, a: Math.PI / 6, color: this.color });
+  }
+
+  /** Ορίζει τις συναρτήσεις που σχεδιάζονται στους επιλεγμένους άξονες. */
+  setAxesFns(fns: { expr: string; color: string }[]): void {
+    const before = this.selectedAxes;
+    if (!before) return;
+    const after: AxesItem = { ...before, fns };
+    this.page.items[this.page.items.indexOf(before)] = after;
+    this.push({ t: 'mod', p: this.cur, before, after });
+    this.redraw();
+  }
+
+  get hasSelection(): boolean {
+    return !!this.selected || this.multi.length > 0;
+  }
+
+  private selectedIds(): Set<string> {
+    return new Set(this.multi.length ? this.multi : this.selected ? [this.selected] : []);
+  }
+
+  private groupBounds(): Box | null {
+    const ids = new Set(this.multi);
+    let b: Box | null = null;
+    for (const it of this.page.items) {
+      if (!ids.has(it.id)) continue;
+      const ib = itemBounds(it);
+      b = b ? { x0: Math.min(b.x0, ib.x0), y0: Math.min(b.y0, ib.y0), x1: Math.max(b.x1, ib.x1), y1: Math.max(b.y1, ib.y1) } : ib;
+    }
+    return b;
+  }
+
+  /** Αντίγραφο της επιλογής, λίγο πιο κάτω-δεξιά. */
+  duplicateSelected(): void {
+    const ids = this.selectedIds();
+    if (ids.size === 0) return;
+    const before = this.page.items.slice();
+    const copies = before.filter((it) => ids.has(it.id)).map((it) => translateItem(cloneItem(it), 30, 30));
+    this.page.items.push(...copies);
+    this.selected = copies.length === 1 ? copies[0].id : null;
+    this.multi = copies.length > 1 ? copies.map((c) => c.id) : [];
+    this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
+    this.redraw();
+  }
+
+  /** Δύο βέλη με κοινή αρχή, αν το επιλεγμένο είναι ένα από αυτά. */
+  get resultantPair(): [Shape, Shape] | null {
+    const a = this.selected ? this.page.items.find((x) => x.id === this.selected) : undefined;
+    if (!a || a.kind !== 'shape' || a.shape !== 'arrow') return null;
+    const b = this.page.items.find((o): o is Shape =>
+      o.id !== a.id && o.kind === 'shape' && o.shape === 'arrow' && Math.hypot(o.x0 - a.x0, o.y0 - a.y0) < 1);
+    return b ? [a, b] : null;
+  }
+
+  /** Σχεδιάζει το παραλληλόγραμμο και τη συνισταμένη δύο βελών με κοινή αρχή. */
+  addResultant(): void {
+    const pair = this.resultantPair;
+    if (!pair) return;
+    const [a, b] = pair;
+    const rx = a.x1 + b.x1 - a.x0, ry = a.y1 + b.y1 - a.y0;
+    const before = this.page.items.slice();
+    const side = (from: Shape): Shape => ({
+      kind: 'shape', id: uid(), shape: 'line', x0: from.x1, y0: from.y1, x1: rx, y1: ry,
+      color: a.color, width: Math.max(1.5, a.width / 2), dash: true,
+    });
+    const color = a.color === '#e11d48' || a.color === '#fb7185' ? '#2563eb' : isDark(this.doc.bg) ? '#fb7185' : '#e11d48';
+    const sum: Shape = {
+      kind: 'shape', id: uid(), shape: 'arrow', x0: a.x0, y0: a.y0, x1: rx, y1: ry, color, width: a.width, angleWith: a.id,
+    };
+    this.page.items.push(side(a), side(b), sum);
+    this.selected = sum.id;
+    this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
+    this.redraw();
+  }
+
   deleteSelected(): void {
+    if (this.multi.length) {
+      const ids = new Set(this.multi);
+      const before = this.page.items.slice();
+      this.page.items = before.filter((it) => !ids.has(it.id));
+      this.multi = [];
+      this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
+      this.redraw();
+      return;
+    }
     if (!this.selected) return;
     const items = this.page.items;
     const i = items.findIndex((x) => x.id === this.selected);
     if (i < 0) return;
     const [item] = items.splice(i, 1);
     this.selected = null;
+    this.multi = [];
     this.push({ t: 'del', p: this.cur, items: [{ item, i }] });
     this.redraw();
   }
@@ -326,6 +491,7 @@ export class Board {
     const removed = items.map((item, i) => ({ item, i }));
     items.length = 0;
     this.selected = null;
+    this.multi = [];
     this.push({ t: 'del', p: this.cur, items: removed });
     this.redraw();
   }
@@ -394,8 +560,10 @@ export class Board {
   private paintBackground(c: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, k: number): void {
     const bg = this.doc.bg;
     const dark = isDark(bg);
-    c.fillStyle = dark ? '#14201b' : '#ffffff';
-    c.fillRect(x0, y0, x1 - x0, y1 - y0);
+    if (!this.transparent) {
+      c.fillStyle = dark ? '#14201b' : '#ffffff';
+      c.fillRect(x0, y0, x1 - x0, y1 - y0);
+    }
     const grid = bg.endsWith('grid');
     if (!grid && !bg.endsWith('lines')) return;
     // πλέγμα ανά 1 cm, γραμμές τετραδίου ανά 2 cm
@@ -451,6 +619,7 @@ export class Board {
     c.lineJoin = 'round';
     c.lineWidth = s.hl ? s.width * 4 : s.width;
     c.globalAlpha = s.hl ? 0.35 : 1;
+    if (s.dash) c.setLineDash([10, 9]);
     c.beginPath();
     if (s.shape === 'triangle') {
       const t = trianglePts(s);
@@ -569,6 +738,47 @@ export class Board {
     c.stroke();
     c.globalAlpha = 1;
 
+    // συναρτήσεις
+    if (a.fns?.length) {
+      c.save();
+      c.beginPath();
+      c.rect(X(xmin), Y(ymax), (xmax - xmin) * u, (ymax - ymin) * u);
+      c.clip();
+      c.lineWidth = 3;
+      const n = Math.max(80, Math.min(1500, Math.round(((xmax - xmin) * u) / 1.5)));
+      for (const f of a.fns) {
+        const fn = compileCached(f.expr);
+        if (!fn) continue;
+        c.strokeStyle = this.ink(f.color);
+        c.beginPath();
+        let pen = false, py = 0;
+        for (let i = 0; i <= n; i++) {
+          const xv = xmin + ((xmax - xmin) * i) / n;
+          const yv = Math.max(-1e5, Math.min(1e5, fn(xv)));
+          if (!Number.isFinite(yv)) {
+            pen = false;
+            continue;
+          }
+          // μεγάλο άλμα = ασύμπτωτη: δεν ενώνουμε τα δύο σκέλη
+          if (pen && Math.abs(yv - py) < ymax - ymin) c.lineTo(X(xv), Y(yv));
+          else c.moveTo(X(xv), Y(yv));
+          pen = true;
+          py = yv;
+        }
+        c.stroke();
+      }
+      c.restore();
+      const lf = Math.max(11, Math.min(20, u * 0.45));
+      c.font = `italic 600 ${lf}px system-ui, "Segoe UI", Roboto, sans-serif`;
+      c.textAlign = 'left';
+      c.textBaseline = 'top';
+      a.fns.forEach((f, i) => {
+        c.fillStyle = this.ink(f.color);
+        c.fillText(compileCached(f.expr) ? f.expr : `${f.expr} ?`, X(xmax + 1.1), Y(ymax) + i * lf * 1.4);
+      });
+      c.fillStyle = this.ink(a.color);
+    }
+
     // άξονες με βέλη
     const ext = 0.6;
     const xa = xmin < 0 ? xmin - ext : 0;
@@ -613,8 +823,144 @@ export class Board {
     c.restore();
   }
 
+  private drawStamp(c: CanvasRenderingContext2D, s: StampItem): void {
+    const d = STAMPS[s.name];
+    if (!d) return;
+    c.save();
+    c.translate(s.x, s.y);
+    c.strokeStyle = c.fillStyle = this.ink(s.color);
+    c.lineWidth = s.width;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    d.draw(c, s.w, s.h);
+    c.restore();
+  }
+
+  private drawTrig(c: CanvasRenderingContext2D, t: TrigItem): void {
+    const { x, y, r, a } = t;
+    const [px, py] = trigPoint(t);
+    const dark = isDark(this.doc.bg);
+    const cosC = dark ? '#7dd3fc' : '#2563eb';
+    const sinC = dark ? '#fb7185' : '#e11d48';
+    const ink = this.ink(t.color);
+    c.save();
+    c.lineCap = 'round';
+    c.strokeStyle = c.fillStyle = ink;
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(x - r * 1.2, y); c.lineTo(x + r * 1.2, y);
+    c.moveTo(x, y - r * 1.2); c.lineTo(x, y + r * 1.2);
+    c.stroke();
+    c.lineWidth = 2.5;
+    c.beginPath();
+    c.arc(x, y, r, 0, Math.PI * 2);
+    c.stroke();
+    c.beginPath();
+    c.moveTo(x, y); c.lineTo(px, py);
+    c.stroke();
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.arc(x, y, r * 0.2, 0, -a, true);
+    c.stroke();
+    c.lineWidth = 5;
+    c.strokeStyle = cosC;
+    c.beginPath();
+    c.moveTo(x, y); c.lineTo(px, y);
+    c.stroke();
+    c.strokeStyle = sinC;
+    c.beginPath();
+    c.moveTo(px, y); c.lineTo(px, py);
+    c.stroke();
+    c.beginPath();
+    c.arc(px, py, Math.max(6, r * 0.045), 0, Math.PI * 2);
+    c.fill();
+
+    const fs = r * 0.11;
+    const sin = Math.sin(a), cos = Math.cos(a);
+    const deg = ((Math.round((a * 180) / Math.PI) % 360) + 360) % 360;
+    const n2 = (v: number) => (Math.abs(v) < 0.005 ? 0 : v).toLocaleString('el', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    c.font = `600 ${fs}px system-ui, "Segoe UI", Roboto, sans-serif`;
+    c.textAlign = 'left';
+    c.textBaseline = 'middle';
+    const parts: [string, string][] = [
+      [`θ = ${deg}°`, ink],
+      [`ημθ = ${n2(sin)}`, sinC],
+      [`συνθ = ${n2(cos)}`, cosC],
+      [`εφθ = ${Math.abs(cos) < 1e-9 ? '—' : n2(sin / cos)}`, ink],
+    ];
+    const gap = fs * 1.1;
+    const widths = parts.map(([text]) => c.measureText(text).width);
+    let tx = x - (widths.reduce((p, w) => p + w, 0) + gap * 3) / 2;
+    parts.forEach(([text, col], i) => {
+      c.fillStyle = col;
+      c.fillText(text, tx, y + r * 1.28 + fs);
+      tx += widths[i] + gap;
+    });
+    c.restore();
+  }
+
+  /** Μήκη πλευρών, γωνίες και εμβαδόν ενός σχήματος, σε μονάδες του χάρακα. */
+  private drawMeasures(c: CanvasRenderingContext2D, s: Shape): void {
+    if (s.dash) return;
+    c.save();
+    c.fillStyle = isDark(this.doc.bg) ? '#5eead4' : '#0f766e';
+    c.font = '600 17px system-ui, "Segoe UI", Roboto, sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    const len = (a: Pt, b: Pt) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+    /** Ετικέτα στο μέσο του τμήματος ab, από την πλευρά που δεν είναι το σημείο `away`. */
+    const side = (a: Pt, b: Pt, away?: Pt): void => {
+      const l = len(a, b);
+      if (l < 30) return;
+      const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+      let nx = -(b[1] - a[1]) / l, ny = (b[0] - a[0]) / l;
+      if (away ? (away[0] - mx) * nx + (away[1] - my) * ny > 0 : ny > 0) { nx = -nx; ny = -ny; }
+      c.fillText(fmt(l / CM), mx + nx * 18, my + ny * 18);
+    };
+    const { x0, y0, x1, y1 } = s;
+    if (s.shape === 'line' || s.shape === 'arrow') {
+      side([x0, y0], [x1, y1]);
+    } else if (s.shape === 'rect') {
+      const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+      const ctr: Pt = [(x0 + x1) / 2, (y0 + y1) / 2];
+      side([x0, y0], [x1, y0], ctr);
+      side([x0, y0], [x0, y1], ctr);
+      if (w > 90 && h > 40) c.fillText(`Ε = ${fmt((w * h) / CM / CM)}`, ctr[0], ctr[1]);
+    } else if (s.shape === 'ellipse') {
+      const a = Math.abs(x1 - x0) / 2, b = Math.abs(y1 - y0) / 2;
+      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+      if (a < 45 || b < 30) { c.restore(); return; }
+      const circle = Math.abs(a - b) < Math.max(a, b) * 0.03;
+      c.fillText(circle ? `r = ${fmt(a / CM)}` : `a = ${fmt(a / CM)}  b = ${fmt(b / CM)}`, cx, cy - 12);
+      c.fillText(`Ε = ${fmt((Math.PI * a * b) / CM / CM)}`, cx, cy + 12);
+    } else {
+      const t = trianglePts(s);
+      const g: Pt = [(t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3];
+      const area = Math.abs((t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1])) / 2;
+      for (let i = 0; i < 3; i++) {
+        const p = t[i], q = t[(i + 1) % 3], o = t[(i + 2) % 3];
+        side(p, q, o);
+        // γωνία στην κορυφή p
+        const u1 = Math.atan2(q[1] - p[1], q[0] - p[0]), u2 = Math.atan2(o[1] - p[1], o[0] - p[0]);
+        let d = Math.abs(u1 - u2) % (2 * Math.PI);
+        if (d > Math.PI) d = 2 * Math.PI - d;
+        const gl = Math.max(len(p, g), 1);
+        const off = Math.min(42, gl * 0.45);
+        c.fillText(`${Math.round((d * 180) / Math.PI)}°`, p[0] + ((g[0] - p[0]) / gl) * off, p[1] + ((g[1] - p[1]) / gl) * off);
+      }
+      if (area > 6000) c.fillText(`Ε = ${fmt(area / CM / CM)}`, g[0], g[1]);
+    }
+    c.restore();
+  }
+
   private drawItem(c: CanvasRenderingContext2D, it: Item): void {
     switch (it.kind) {
+      case 'stamp':
+        this.drawStamp(c, it);
+        break;
+      case 'trig':
+        this.drawTrig(c, it);
+        break;
       case 'angle':
         this.drawAngle(c, it);
         break;
@@ -659,8 +1005,18 @@ export class Board {
     const [x1, y1] = this.toWorld(this.W, this.H);
     this.paintBackground(c, x0, y0, x1, y1, v.k);
     const hidden = this.dragPreviewIds();
-    for (const it of this.page.items) {
-      if (!hidden.has(it.id)) this.drawItem(c, it);
+    const rp = this.replay;
+    const items = this.page.items;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (hidden.has(it.id)) continue;
+      if (rp && i > rp.i) break;
+      if (rp && i === rp.i && it.kind === 'stroke') {
+        if (rp.prog > 0) this.drawStroke(c, { ...it, pts: it.pts.slice(0, rp.prog) });
+        break;
+      }
+      this.drawItem(c, it);
+      if (this.showMeasures && it.kind === 'shape') this.drawMeasures(c, it);
     }
     this.renderLive();
   }
@@ -673,8 +1029,23 @@ export class Board {
     const k = this.page.view.k;
     let selItem: Item | undefined;
     for (const p of this.ptrs.values()) {
-      if (p.live) this.drawItem(c, p.live);
-      else if (p.stroke) this.drawStroke(c, p.stroke);
+      if (p.live) {
+        this.drawItem(c, p.live);
+        if (this.showMeasures && p.live.kind === 'shape') this.drawMeasures(c, p.live);
+      } else if (p.stroke) this.drawStroke(c, p.stroke);
+      if (p.lasso && p.lasso.length > 1) {
+        c.save();
+        c.strokeStyle = '#2563eb';
+        c.fillStyle = 'rgba(37,99,235,0.07)';
+        c.lineWidth = 2 / k;
+        c.setLineDash([8 / k, 6 / k]);
+        c.beginPath();
+        p.lasso.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+        c.closePath();
+        c.fill();
+        c.stroke();
+        c.restore();
+      }
       if (p.preview) {
         this.drawItem(c, p.preview);
         selItem = p.preview;
@@ -690,16 +1061,57 @@ export class Board {
       c.strokeRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
       c.setLineDash([]);
       c.fillStyle = '#2563eb';
-      if (selItem.kind === 'image' || selItem.kind === 'shape' || selItem.kind === 'axes') {
+      if (this.cornerResizable(selItem)) {
         c.beginPath();
         c.arc(b.x1, b.y1, 12 / k, 0, Math.PI * 2);
         c.fill();
-      } else if (selItem.kind === 'angle') {
-        for (const p of angleEnds(selItem)) {
-          c.beginPath();
-          c.arc(p[0], p[1], 12 / k, 0, Math.PI * 2);
-          c.fill();
-        }
+      }
+      for (const p of this.pointHandles(selItem)) {
+        c.beginPath();
+        c.arc(p[0], p[1], 12 / k, 0, Math.PI * 2);
+        c.fill();
+      }
+      c.restore();
+    }
+    if (this.multi.length && this.tool === 'select') {
+      const ids = new Set(this.multi);
+      c.save();
+      c.strokeStyle = '#2563eb';
+      c.fillStyle = '#2563eb';
+      c.lineWidth = 1 / k;
+      c.globalAlpha = 0.5;
+      for (const it of this.page.items) {
+        if (!ids.has(it.id)) continue;
+        const ib = itemBounds(it);
+        c.strokeRect(ib.x0, ib.y0, ib.x1 - ib.x0, ib.y1 - ib.y0);
+      }
+      c.globalAlpha = 1;
+      const b = this.groupBounds();
+      if (b) {
+        c.lineWidth = 2 / k;
+        c.setLineDash([8 / k, 6 / k]);
+        c.strokeRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
+        c.beginPath();
+        c.arc(b.x1, b.y1, 12 / k, 0, Math.PI * 2);
+        c.fill();
+      }
+      c.restore();
+    }
+    if (this.lasers.length) {
+      const now = performance.now();
+      c.save();
+      c.strokeStyle = c.fillStyle = '#ff2d2d';
+      c.shadowColor = '#ff2d2d';
+      c.shadowBlur = 14;
+      c.lineCap = 'round';
+      c.lineJoin = 'round';
+      c.lineWidth = 6 / k;
+      for (const l of this.lasers) {
+        c.globalAlpha = l.t ? Math.max(0, 1 - (now - l.t) / LASER_MS) : 1;
+        c.beginPath();
+        l.pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+        if (l.pts.length === 1) c.lineTo(l.pts[0][0] + 0.01, l.pts[0][1]);
+        c.stroke();
       }
       c.restore();
     }
@@ -717,14 +1129,123 @@ export class Board {
     }
   }
 
+  private cornerResizable(it: Item): boolean {
+    return it.kind === 'image' || it.kind === 'shape' || it.kind === 'axes' || it.kind === 'stamp' || it.kind === 'trig';
+  }
+
+  /** Λαβές-σημεία ενός στοιχείου (άκρα γωνίας, σημείο τριγωνομετρικού κύκλου). */
+  private pointHandles(it: Item): Pt[] {
+    if (it.kind === 'angle') return angleEnds(it);
+    if (it.kind === 'trig') return [trigPoint(it)];
+    return [];
+  }
+
+  private fadeLasers(): void {
+    if (this.laserRaf) return;
+    const loop = (): void => {
+      const now = performance.now();
+      this.lasers = this.lasers.filter((l) => !l.t || now - l.t < LASER_MS);
+      this.renderLive();
+      this.laserRaf = this.lasers.some((l) => l.t) ? requestAnimationFrame(loop) : 0;
+    };
+    this.laserRaf = requestAnimationFrame(loop);
+  }
+
+  // ---------- αναπαραγωγή ----------
+
+  get replaying(): boolean {
+    return !!this.replay;
+  }
+
+  get replayPaused(): boolean {
+    return !!this.replay?.paused;
+  }
+
+  /** Ξαναπαίζει τη σελίδα με τη σειρά που γράφτηκε. */
+  startReplay(): void {
+    if (this.replay || this.page.items.length === 0) return;
+    this.selected = null;
+    this.multi = [];
+    this.replay = { i: 0, prog: 0, wait: 0, paused: false };
+    this.onUi();
+    const loop = (): void => {
+      if (!this.replay) return;
+      if (!this.replay.paused) this.replayAdvance();
+      if (!this.replay) return;
+      this.redraw();
+      this.replayRaf = requestAnimationFrame(loop);
+    };
+    loop();
+  }
+
+  private replayNext(): void {
+    const rp = this.replay!;
+    rp.i++;
+    rp.prog = 0;
+    rp.wait = 0;
+    const items = this.page.items;
+    // οι εικόνες εμφανίζονται αμέσως
+    while (rp.i < items.length && items[rp.i].kind === 'image') rp.i++;
+    if (rp.i >= items.length) this.stopReplay();
+  }
+
+  private replayAdvance(): void {
+    const rp = this.replay!;
+    const it = this.page.items[rp.i];
+    if (!it) {
+      this.stopReplay();
+      return;
+    }
+    if (it.kind === 'image') {
+      this.replayNext();
+    } else if (it.kind === 'stroke' && rp.prog < it.pts.length) {
+      let d = 0;
+      while (rp.prog < it.pts.length && d < 16) {
+        if (rp.prog > 0) d += Math.hypot(it.pts[rp.prog][0] - it.pts[rp.prog - 1][0], it.pts[rp.prog][1] - it.pts[rp.prog - 1][1]);
+        rp.prog++;
+      }
+    } else if (++rp.wait > (it.kind === 'stroke' ? 5 : 22)) {
+      this.replayNext();
+    }
+  }
+
+  toggleReplayPause(): void {
+    if (!this.replay) return;
+    this.replay.paused = !this.replay.paused;
+    this.onUi();
+  }
+
+  /** Ολοκληρώνει το τρέχον βήμα, πάει στο επόμενο και σταματά εκεί. */
+  replayStep(): void {
+    if (!this.replay) return;
+    this.replay.paused = true;
+    const it = this.page.items[this.replay.i];
+    if (it && it.kind === 'stroke' && this.replay.prog < it.pts.length) this.replay.prog = it.pts.length;
+    else this.replayNext();
+    if (this.replay) {
+      const nx = this.page.items[this.replay.i];
+      if (nx && nx.kind === 'stroke') this.replay.prog = nx.pts.length;
+    }
+    this.onUi();
+  }
+
+  stopReplay(): void {
+    if (!this.replay) return;
+    cancelAnimationFrame(this.replayRaf);
+    this.replay = null;
+    this.redraw();
+    this.onUi();
+  }
+
   private eraserRadius(): number {
     return this.sizes.eraser / this.page.view.k;
   }
 
   // ---------- εξαγωγή ----------
 
-  async exportPng(): Promise<Blob> {
-    const items = this.page.items;
+  /** Ζωγραφίζει ολόκληρη μια σελίδα (όλα τα στοιχεία της με περιθώριο) σε νέο καμβά. */
+  private async pageCanvas(pi: number, opaque: boolean): Promise<HTMLCanvasElement> {
+    const items = this.doc.pages[pi].items;
     let x0 = 0, y0 = 0, x1 = this.W, y1 = this.H;
     if (items.length > 0) {
       x0 = Infinity; y0 = Infinity; x1 = -Infinity; y1 = -Infinity;
@@ -742,8 +1263,6 @@ export class Board {
     cv.width = Math.max(1, Math.round(bw * s));
     cv.height = Math.max(1, Math.round(bh * s));
     const c = cv.getContext('2d')!;
-    c.setTransform(s, 0, 0, s, -x0 * s, -y0 * s);
-    this.paintBackground(c, x0, y0, x1, y1, s);
     await Promise.all(
       items.filter((i): i is Pic => i.kind === 'image').map((p) => {
         this.getImg(p);
@@ -751,8 +1270,42 @@ export class Board {
         return img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = () => r(); img.onerror = () => r(); });
       })
     );
-    for (const it of items) this.drawItem(c, it);
+    // η σχεδίαση διαβάζει την τρέχουσα σελίδα· την αλλάζουμε προσωρινά (σύγχρονα)
+    const keep = this.cur;
+    this.cur = pi;
+    try {
+      if (opaque && this.transparent) {
+        c.fillStyle = '#ffffff';
+        c.fillRect(0, 0, cv.width, cv.height);
+      }
+      c.setTransform(s, 0, 0, s, -x0 * s, -y0 * s);
+      this.paintBackground(c, x0, y0, x1, y1, s);
+      for (const it of items) {
+        this.drawItem(c, it);
+        if (this.showMeasures && it.kind === 'shape') this.drawMeasures(c, it);
+      }
+    } finally {
+      this.cur = keep;
+    }
+    return cv;
+  }
+
+  async exportPng(): Promise<Blob> {
+    const cv = await this.pageCanvas(this.cur, false);
     return new Promise((res, rej) => cv.toBlob((b) => (b ? res(b) : rej(new Error('PNG'))), 'image/png'));
+  }
+
+  /** Όλες οι σελίδες ως εικόνες JPEG, για το PDF. */
+  async exportJpegPages(onProgress: (done: number, total: number) => void): Promise<{ jpeg: Uint8Array; w: number; h: number }[]> {
+    const out: { jpeg: Uint8Array; w: number; h: number }[] = [];
+    const n = this.doc.pages.length;
+    for (let i = 0; i < n; i++) {
+      onProgress(i, n);
+      const cv = await this.pageCanvas(i, true);
+      const blob = await new Promise<Blob>((res, rej) => cv.toBlob((b) => (b ? res(b) : rej(new Error('JPEG'))), 'image/jpeg', 0.9));
+      out.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), w: cv.width, h: cv.height });
+    }
+    return out;
   }
 
   // ---------- είσοδος ----------
@@ -772,7 +1325,7 @@ export class Board {
     let changed = false;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      if (it.kind === 'image' || it.kind === 'axes') continue;
+      if (it.kind === 'image' || it.kind === 'axes' || it.kind === 'trig') continue;
       if (this.eraserMode === 'partial') {
         const rest = erasePartial(it, x, y, r);
         if (!rest) continue;
@@ -822,6 +1375,7 @@ export class Board {
 
   private down(e: PointerEvent): void {
     e.preventDefault();
+    if (this.replay) return;
     this.live.setPointerCapture(e.pointerId);
     this.onPointerInfo(e, this.ptrs.size + 1);
     const ps: PState = { id: e.pointerId, type: e.pointerType, x: e.clientX, y: e.clientY, t0: performance.now(), mode: 'none' };
@@ -916,19 +1470,27 @@ export class Board {
         this.eraseAt(ps, wx, wy);
         this.renderLive();
         break;
+      case 'laser':
+        ps.mode = 'laser';
+        ps.laser = { pts: [[wx, wy]], t: 0 };
+        this.lasers.push(ps.laser);
+        this.renderLive();
+        break;
       case 'hand':
         ps.mode = 'pan';
         ps.start = [e.clientX, e.clientY];
         ps.v0 = { ...v };
         break;
       case 'select': {
-        const sel = this.selected ? this.page.items.find((x) => x.id === this.selected) : undefined;
-        if (sel && sel.kind === 'angle') {
-          const ends = angleEnds(sel);
-          const hi = ends.findIndex((p) => Math.hypot(wx - p[0], wy - p[1]) < 24 / v.k);
-          if (hi >= 0) {
+        const items = this.page.items;
+        const sel = this.selected ? items.find((x) => x.id === this.selected) : undefined;
+        if (sel) {
+          const hi = this.pointHandles(sel).findIndex((p) => Math.hypot(wx - p[0], wy - p[1]) < 24 / v.k);
+          const b = itemBounds(sel);
+          const corner = this.cornerResizable(sel) && Math.hypot(wx - b.x1, wy - b.y1) < 24 / v.k;
+          if (hi >= 0 || corner) {
             ps.mode = 'resize';
-            ps.handle = hi + 1;
+            ps.handle = hi >= 0 ? hi + 1 : 0;
             ps.orig = sel;
             ps.preview = sel;
             ps.start = [wx, wy];
@@ -936,26 +1498,36 @@ export class Board {
             return;
           }
         }
-        if (sel && (sel.kind === 'image' || sel.kind === 'shape' || sel.kind === 'axes')) {
-          const b = itemBounds(sel);
-          if (Math.hypot(wx - b.x1, wy - b.y1) < 24 / v.k) {
-            ps.mode = 'resize';
-            ps.orig = sel;
-            ps.preview = sel;
-            ps.start = [wx, wy];
-            this.redraw();
-            return;
+        if (this.multi.length) {
+          const b = this.groupBounds();
+          if (b) {
+            const corner = Math.hypot(wx - b.x1, wy - b.y1) < 24 / v.k;
+            const inside = wx >= b.x0 && wx <= b.x1 && wy >= b.y0 && wy <= b.y1;
+            if (corner || inside) {
+              ps.mode = corner ? 'gresize' : 'gmove';
+              ps.before = items.slice();
+              ps.ids = new Set(this.multi);
+              ps.gb = b;
+              ps.start = [wx, wy];
+              return;
+            }
           }
         }
         const hit = this.hitTest(wx, wy);
-        this.selected = hit ? hit.id : null;
-        if (hit) {
+        this.multi = [];
+        // πάνω σε μη επιλεγμένη εικόνα (π.χ. σελίδα PDF) το σύρσιμο κάνει λάσο· το απλό άγγιγμα την επιλέγει
+        if (hit && !(hit.kind === 'image' && hit.id !== this.selected)) {
+          this.selected = hit.id;
           ps.mode = 'move';
           ps.orig = hit;
           ps.preview = hit;
           ps.start = [wx, wy];
           this.redraw();
         } else {
+          this.selected = null;
+          ps.mode = 'lasso';
+          ps.lasso = [[wx, wy]];
+          ps.tapHit = hit?.id;
           this.renderLive();
         }
         this.onUi();
@@ -978,7 +1550,10 @@ export class Board {
 
   /** Ακυρώνει ό,τι έκανε ένας δείκτης χωρίς να το καταχωρήσει. */
   private cancelPointer(ps: PState): void {
-    if (ps.mode === 'erase' && ps.changed && ps.before) this.page.items = ps.before;
+    if ((ps.mode === 'erase' || ps.mode === 'gmove' || ps.mode === 'gresize') && ps.changed && ps.before) this.page.items = ps.before;
+    if (ps.laser) this.lasers = this.lasers.filter((l) => l !== ps.laser);
+    ps.laser = undefined;
+    ps.lasso = undefined;
     clearTimeout(ps.timer);
     ps.stroke = undefined;
     ps.live = undefined;
@@ -1127,6 +1702,25 @@ export class Board {
         this.eraserAt = { x: wx, y: wy };
         this.eraseAt(ps, wx, wy);
         break;
+      case 'laser':
+        ps.laser!.pts.push([wx, wy]);
+        break;
+      case 'lasso':
+        ps.lasso!.push([wx, wy]);
+        break;
+      case 'gmove':
+      case 'gresize': {
+        const dx = wx - ps.start![0];
+        const dy = wy - ps.start![1];
+        const b = ps.gb!;
+        const f = Math.max(0.1, (b.x1 - b.x0 + dx) / Math.max(b.x1 - b.x0, 1));
+        const ids = ps.ids!;
+        const move = ps.mode === 'gmove';
+        this.page.items = ps.before!.map((it) => (!ids.has(it.id) ? it : move ? translateItem(it, dx, dy) : scaleItem(it, b.x0, b.y0, f)));
+        ps.changed = true;
+        this.redraw();
+        break;
+      }
       case 'pan': {
         const v = this.page.view;
         v.x = ps.v0!.x + (e.clientX - ps.start![0]);
@@ -1145,9 +1739,19 @@ export class Board {
         const o = ps.orig!;
         const dx = wx - ps.start![0];
         const dy = wy - ps.start![1];
-        if (o.kind === 'image') {
+        if (o.kind === 'image' || o.kind === 'stamp') {
           const nw = Math.max(40, o.w + dx);
           ps.preview = { ...o, w: nw, h: (nw * o.h) / o.w };
+        } else if (o.kind === 'trig') {
+          if (ps.handle === 1) {
+            // ακέραιες μοίρες· κοντά σε πολλαπλάσια των 15° «κουμπώνει»
+            let deg = Math.round((Math.atan2(o.y - wy, wx - o.x) * 180) / Math.PI);
+            const near = Math.round(deg / 15) * 15;
+            if (Math.abs(near - deg) <= 2) deg = near;
+            ps.preview = { ...o, a: (((deg % 360) + 360) % 360) * (Math.PI / 180) };
+          } else {
+            ps.preview = { ...o, r: Math.max(60, o.r + dx / 1.28) };
+          }
         } else if (o.kind === 'shape') {
           const fx = o.x1 >= o.x0;
           const fy = o.y1 >= o.y0;
@@ -1202,6 +1806,7 @@ export class Board {
         c.save();
         this.setWorldTransform(c);
         this.drawItem(c, s);
+        if (this.showMeasures && s.kind === 'shape') this.drawMeasures(c, s);
         c.restore();
         break;
       }
@@ -1214,6 +1819,31 @@ export class Board {
       case 'pan':
         this.onChange();
         break;
+      case 'laser':
+        ps.laser!.t = performance.now();
+        this.fadeLasers();
+        break;
+      case 'lasso': {
+        const poly = ps.lasso!;
+        const xs = poly.map((q) => q[0]), ys = poly.map((q) => q[1]);
+        const ext = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+        if (ext < 12 / this.page.view.k) {
+          this.selected = ps.tapHit ?? null;
+        } else {
+          const ids = this.page.items.filter((it) => inLasso(it, poly)).map((it) => it.id);
+          this.selected = ids.length === 1 ? ids[0] : null;
+          this.multi = ids.length > 1 ? ids : [];
+        }
+        this.onUi();
+        break;
+      }
+      case 'gmove':
+      case 'gresize':
+        if (ps.changed && ps.before) {
+          this.push({ t: 'set', p: this.cur, before: ps.before, after: this.page.items.slice() });
+        }
+        this.redraw();
+        return;
       case 'move':
       case 'resize': {
         const before = ps.orig!;

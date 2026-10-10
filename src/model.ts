@@ -36,6 +36,8 @@ export interface Shape {
   pts?: Pt[];
   /** Ευθεία/βέλος με κοινή αρχή: id του άλλου σχήματος, για να δείχνεται η μεταξύ τους γωνία. */
   angleWith?: string;
+  /** Διακεκομμένη γραμμή. */
+  dash?: boolean;
 }
 
 export interface TextItem {
@@ -78,9 +80,35 @@ export interface AxesItem {
   /** Ονόματα αξόνων· αν λείπουν, x και y. */
   lx?: string;
   ly?: string;
+  /** Συναρτήσεις που σχεδιάζονται πάνω στους άξονες. */
+  fns?: { expr: string; color: string }[];
 }
 
-export type Item = Stroke | Pic | Shape | TextItem | AngleItem | AxesItem;
+/** Έτοιμο σχήμα φυσικής (βλ. stamps.ts). */
+export interface StampItem {
+  kind: 'stamp';
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color: string;
+  width: number;
+}
+
+/** Τριγωνομετρικός κύκλος με κέντρο (x, y), ακτίνα r και γωνία a (rad, αντίθετα από το ρολόι). */
+export interface TrigItem {
+  kind: 'trig';
+  id: string;
+  x: number;
+  y: number;
+  r: number;
+  a: number;
+  color: string;
+}
+
+export type Item = Stroke | Pic | Shape | TextItem | AngleItem | AxesItem | StampItem | TrigItem;
 
 export interface View {
   x: number;
@@ -105,7 +133,7 @@ export interface Doc {
   pages: Page[];
 }
 
-export type Tool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'hand' | 'shape' | 'text';
+export type Tool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'hand' | 'shape' | 'text' | 'laser';
 
 let counter = 0;
 export function uid(): string {
@@ -165,7 +193,11 @@ export function textSize(t: TextItem): { w: number; h: number } {
 }
 
 export function itemBounds(it: Item): { x0: number; y0: number; x1: number; y1: number } {
-  if (it.kind === 'image') return { x0: it.x, y0: it.y, x1: it.x + it.w, y1: it.y + it.h };
+  if (it.kind === 'image' || it.kind === 'stamp') return { x0: it.x, y0: it.y, x1: it.x + it.w, y1: it.y + it.h };
+  if (it.kind === 'trig') {
+    const m = it.r * 1.28;
+    return { x0: it.x - it.r * 1.6, y0: it.y - m, x1: it.x + it.r * 1.6, y1: it.y + m + it.r * 0.26 };
+  }
   if (it.kind === 'text') {
     const { w, h } = textSize(it);
     return { x0: it.x, y0: it.y, x1: it.x + w, y1: it.y + h };
@@ -211,6 +243,8 @@ export function hitItem(it: Item, x: number, y: number, r: number): boolean {
       return strokeHit(it, x, y, r);
     case 'image':
     case 'axes':
+    case 'stamp':
+    case 'trig':
     case 'text': {
       const b = itemBounds(it);
       return x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
@@ -248,6 +282,8 @@ export function translateItem(it: Item, dx: number, dy: number): Item {
     case 'text':
     case 'angle':
     case 'axes':
+    case 'stamp':
+    case 'trig':
       return { ...it, x: it.x + dx, y: it.y + dy };
     case 'shape':
       return {
@@ -479,8 +515,8 @@ function shapePolylines(s: Shape): Pt[][] {
  * Επιστρέφει τα κομμάτια που απομένουν, ή null αν το στοιχείο δεν αγγίχτηκε.
  */
 export function erasePartial(it: Item, x: number, y: number, r: number): Item[] | null {
-  if (it.kind === 'image' || it.kind === 'axes') return null;
-  if (it.kind === 'text' || it.kind === 'angle') return hitItem(it, x, y, r) ? [] : null;
+  if (it.kind === 'image' || it.kind === 'axes' || it.kind === 'trig') return null;
+  if (it.kind === 'text' || it.kind === 'angle' || it.kind === 'stamp') return hitItem(it, x, y, r) ? [] : null;
   const b = itemBounds(it);
   if (x < b.x0 - r || x > b.x1 + r || y < b.y0 - r || y > b.y1 + r) return null;
   const lines = it.kind === 'stroke' ? [it.pts] : shapePolylines(it);
@@ -493,4 +529,61 @@ export function erasePartial(it: Item, x: number, y: number, r: number): Item[] 
     }
   });
   return out;
+}
+
+// ---------- ομαδικές πράξεις ----------
+
+/** Αντίγραφο με νέο id. */
+export function cloneItem(it: Item): Item {
+  return { ...it, id: uid() };
+}
+
+/** Ομοιόμορφη κλιμάκωση γύρω από το σημείο (ox, oy). */
+export function scaleItem(it: Item, ox: number, oy: number, f: number): Item {
+  const X = (x: number) => ox + (x - ox) * f;
+  const Y = (y: number) => oy + (y - oy) * f;
+  switch (it.kind) {
+    case 'stroke':
+      return { ...it, pts: it.pts.map(([x, y]) => [X(x), Y(y)] as Pt), width: it.width * f };
+    case 'shape':
+      return {
+        ...it, x0: X(it.x0), y0: Y(it.y0), x1: X(it.x1), y1: Y(it.y1), width: it.width * f,
+        pts: it.pts?.map(([x, y]) => [X(x), Y(y)] as Pt),
+      };
+    case 'image':
+    case 'stamp':
+      return { ...it, x: X(it.x), y: Y(it.y), w: it.w * f, h: it.h * f };
+    case 'text':
+      return { ...it, x: X(it.x), y: Y(it.y), size: it.size * f };
+    case 'angle':
+      return { ...it, x: X(it.x), y: Y(it.y), len1: it.len1 * f, len2: it.len2 * f };
+    case 'axes':
+      return { ...it, x: X(it.x), y: Y(it.y), unit: it.unit * f };
+    case 'trig':
+      return { ...it, x: X(it.x), y: Y(it.y), r: it.r * f };
+  }
+}
+
+export function pointInPolygon(x: number, y: number, poly: Pt[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Αν το στοιχείο βρίσκεται (κατά το μεγαλύτερο μέρος του) μέσα στο λάσο. */
+export function inLasso(it: Item, poly: Pt[]): boolean {
+  if (it.kind === 'stroke') {
+    const step = Math.max(1, Math.floor(it.pts.length / 24));
+    let n = 0, inside = 0;
+    for (let i = 0; i < it.pts.length; i += step) {
+      n++;
+      if (pointInPolygon(it.pts[i][0], it.pts[i][1], poly)) inside++;
+    }
+    return inside >= n * 0.6;
+  }
+  const b = itemBounds(it);
+  return pointInPolygon((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, poly);
 }

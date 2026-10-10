@@ -2,6 +2,6 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Βασικά δικαιώματα του κύριου παραθύρου",
-  "windows": ["main"],
+  "windows": ["main", "overlay"],
   "permissions": ["core:default"]
 }

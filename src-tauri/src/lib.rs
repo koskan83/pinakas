@@ -2,7 +2,7 @@ use std::io::Cursor;
 use std::time::Duration;
 
 use tauri::ipc::{InvokeBody, Request, Response};
-use tauri::{AppHandle, WebviewWindow};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 use xcap::Monitor;
 
@@ -66,11 +66,48 @@ async fn save_file(app: AppHandle, request: Request<'_>) -> Result<bool, String>
     Ok(true)
 }
 
+/// Ανοίγει διαφανές παράθυρο πάνω από όλα τα προγράμματα, για γράψιμο πάνω τους,
+/// και ελαχιστοποιεί τον κύριο πίνακα.
+#[tauri::command]
+async fn open_overlay(app: AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("overlay") {
+        return w.set_focus().map_err(|e| e.to_string());
+    }
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.minimize();
+    }
+    WebviewWindowBuilder::new(&app, "overlay", WebviewUrl::App("index.html".into()))
+        .title("Γραφίδα – γράψιμο πάνω από την οθόνη")
+        .initialization_script("window.__GRAFIDA_OVERLAY__ = true;")
+        .transparent(true)
+        .decorations(false)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .fullscreen(true)
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Κλείνει το διαφανές παράθυρο και επαναφέρει τον πίνακα.
+#[tauri::command]
+async fn close_overlay(app: AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("overlay") {
+        w.close().map_err(|e| e.to_string())?;
+    }
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.unminimize();
+        let _ = main.set_focus();
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![capture_screen, save_file])
+        .invoke_handler(tauri::generate_handler![capture_screen, save_file, open_overlay, close_overlay])
         .run(tauri::generate_context!())
         .expect("σφάλμα κατά την εκκίνηση της εφαρμογής");
 }

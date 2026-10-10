@@ -19,3 +19,15 @@ export async function nativeSave(blob: Blob, name: string): Promise<boolean> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   return core!.invoke<boolean>('save_file', bytes, { headers: { 'x-file-name': name } });
 }
+
+/** true όταν τρέχουμε στο διαφανές παράθυρο «γράψιμο πάνω από άλλα προγράμματα». */
+export const isOverlay = !!(window as unknown as { __GRAFIDA_OVERLAY__?: boolean }).__GRAFIDA_OVERLAY__;
+
+/** Ανοίγει διαφανές παράθυρο πάνω από όλα και ελαχιστοποιεί τον πίνακα. */
+export function openOverlay(): Promise<void> {
+  return core!.invoke<void>('open_overlay');
+}
+
+export function closeOverlay(): Promise<void> {
+  return core!.invoke<void>('close_overlay');
+}

@@ -31,6 +31,7 @@ body.inking #toolbar { pointer-events: none; }
 #toolbar {
   --ts: 1;
   zoom: var(--ts);
+  position: relative;
   pointer-events: auto;
   max-width: calc((100vw - 16px) / var(--ts));
   display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 6px;
@@ -45,9 +46,30 @@ body.inking #toolbar { pointer-events: none; }
 #toolbar button:hover:not(:disabled) { background: var(--bar-2); }
 #toolbar button.on { background: var(--accent); }
 #toolbar button.accent { background: #059669; }
-#toolbar button.mini { width: 28px; opacity: .75; }
-#toolbar button.mini span { font-size: 17px; }
-#toolbar #barDrag { cursor: move; touch-action: none; opacity: .75; }
+
+/* λαβή πάνω από τη γραμμή: μετακίνηση, μέγεθος, σύμπτυξη */
+#barTab {
+  position: absolute; left: 12px; bottom: 100%; display: flex; gap: 1px; padding: 2px 5px 0;
+  border-radius: 11px 11px 0 0; background: rgba(31, 41, 55, .9);
+}
+#toolbar #barTab button { width: 34px; height: 28px; border-radius: 8px; opacity: .8; }
+#toolbar #barTab button span { font-size: 16px; }
+#toolbar #barTab #barDrag { width: 44px; cursor: move; touch-action: none; }
+#toolbar #barTab #barDrag span { font-size: 19px; }
+
+/* δεύτερη σειρά: επιλογές του εργαλείου που κρατάς */
+#subbar {
+  position: absolute; right: 12px; bottom: calc(100% + 6px); display: flex; gap: 4px 6px;
+  padding: 4px 7px; border-radius: 14px; background: rgba(31, 41, 55, .9); box-shadow: 0 4px 16px rgba(0,0,0,.28);
+}
+#toolbar.sub-below #subbar { bottom: auto; top: calc(100% + 6px); }
+#toolbar #axesOpts button span, #toolbar #sumBtn span { font-style: italic; font-weight: 600; font-size: 19px; }
+
+#dockHint {
+  position: fixed; left: 0; top: 0; bottom: 0; width: 64px; z-index: 9; pointer-events: none;
+  background: linear-gradient(90deg, rgba(37,99,235,.45), transparent);
+}
+#dockHint.right { left: auto; right: 0; background: linear-gradient(270deg, rgba(37,99,235,.45), transparent); }
 #toolbar button.color { width: 30px; height: 30px; margin: 0 2px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); }
 #toolbar button.color.on { border-color: #fff; box-shadow: 0 0 0 3px var(--accent); }
 #toolbar button.width { width: 34px; }
@@ -55,13 +77,18 @@ body.inking #toolbar { pointer-events: none; }
 #toolbar button.width.on { background: var(--bar-2); box-shadow: inset 0 0 0 2px var(--accent); }
 .pages #pageLabel { min-width: 52px; text-align: center; font-weight: 600; font-size: 14px; }
 
-#toolbar.folded .group:not(#barCtl) { display: none; }
-#toolbar.folded #barCtl { border-right: 0; padding-right: 0; }
+#toolbar.folded { padding: 3px 5px; }
+#toolbar.folded > .group, #toolbar.folded #subbar { display: none; }
+#toolbar.folded #barTab { position: static; padding: 0; background: none; }
 
 #toolbar.vertical { flex-direction: column; max-width: none; max-height: calc((100vh - 100px) / var(--ts)); align-content: flex-start; align-items: center; justify-content: flex-start; }
 #toolbar.vertical .group { flex-direction: column; padding-right: 0; border-right: 0; padding-bottom: 5px; border-bottom: 1px solid var(--bar-2); }
 #toolbar.vertical .group:last-child { border-bottom: 0; padding-bottom: 0; }
 #toolbar.vertical #pageLabel { min-width: 0; padding: 2px 0; }
+#toolbar.vertical #subbar { flex-direction: column; bottom: auto; top: 0; right: calc(100% + 6px); max-height: 100%; flex-wrap: wrap; }
+#toolbar.vertical.sub-right #subbar { right: auto; left: calc(100% + 6px); }
+#toolbar.vertical #barTab { left: auto; right: 0; }
+#toolbar.vertical.sub-right #barTab { left: 0; right: auto; }
 
 .popup {
   position: fixed; z-index: 20; min-width: 270px; padding: 8px; border-radius: 16px;
@@ -138,7 +165,55 @@ body.inking #toolbar { pointer-events: none; }
 #colorPick { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; font-size: 16px; cursor: pointer; }
 #colorPick input { width: 54px; height: 38px; padding: 0; border: 0; background: none; cursor: pointer; }
 
-#toolbar #axesOpts button span { font-style: italic; font-weight: 600; font-size: 18px; }
 #labelMenu { min-width: 0; }
 #labelGrid { display: grid; grid-template-columns: repeat(6, 48px); gap: 4px; }
 #labelGrid button { padding: 12px 0; text-align: center; font-style: italic; font-size: 19px; }
+
+.popup button.sq { width: 44px; height: 40px; padding: 0; text-align: center; font-size: 22px; background: var(--bar-2); }
+
+#stampMenu { min-width: 0; }
+#stampGrid { display: grid; grid-template-columns: repeat(5, 96px); gap: 4px; }
+#stampGrid button { padding: 6px 2px; text-align: center; font-size: 11.5px; line-height: 1.2; }
+#stampGrid canvas { position: static; display: block; width: 72px; height: 56px; margin: 0 auto 3px; touch-action: auto; }
+
+.tplItem { display: flex; gap: 2px; }
+.tplItem button:first-child { flex: 1; }
+.tplItem button[data-tpldel] { padding: 14px; opacity: .7; }
+
+#fnMenu { min-width: 340px; }
+.fnItem { display: flex; align-items: center; gap: 10px; padding: 4px 6px 4px 12px; font-size: 18px; font-style: italic; }
+.fnItem i { width: 18px; height: 4px; border-radius: 2px; }
+.fnItem span { flex: 1; }
+.fnItem button { padding: 8px 12px; font-style: normal; opacity: .7; }
+.fnRow { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 18px; font-style: italic; }
+.fnRow input { flex: 1; min-width: 0; font: 20px ui-monospace, Menlo, Consolas, monospace; padding: 9px 10px; border-radius: 9px; border: 0;
+  outline: 2px solid var(--accent); user-select: text; -webkit-user-select: text; }
+.fnRow button { background: #059669; padding: 10px 16px; font-style: normal; }
+#fnKeys { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 8px 4px; max-width: 340px; }
+#fnKeys button { padding: 9px 12px; background: var(--bar-2); font-size: 16px; }
+
+#replayBar {
+  position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 22; display: flex; align-items: center; gap: 4px;
+  padding: 6px 8px 6px 16px; border-radius: 14px; background: var(--bar); color: var(--fg); box-shadow: 0 6px 20px rgba(0,0,0,.35);
+}
+#replayBar span { margin-right: 8px; font-weight: 600; }
+#replayBar button { width: 48px; height: 44px; border-radius: 10px; font-size: 20px; background: var(--bar-2); }
+
+#curtain {
+  position: fixed; left: 0; right: 0; top: 30%; bottom: 0; z-index: 9; background: #1f2937;
+  background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.04) 0 18px, transparent 18px 36px);
+}
+#curtain .chandle {
+  position: absolute; left: 0; right: 0; top: 0; height: 46px; display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: #374151; color: var(--fg); cursor: ns-resize; touch-action: none; font-size: 16px;
+}
+#curtain .chandle button { width: 44px; height: 38px; border-radius: 9px; font-size: 19px; background: rgba(255,255,255,.1); }
+#curtain.horiz .chandle { right: auto; bottom: 0; width: 46px; height: auto; flex-direction: column; cursor: ew-resize; }
+#curtain.horiz .chandle span { writing-mode: vertical-rl; }
+
+#spot { position: fixed; inset: 0; z-index: 9; touch-action: none; cursor: move; }
+#spot .sctl { position: absolute; display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--bar); color: var(--fg); }
+#spot .sctl button { width: 48px; height: 42px; border-radius: 9px; font-size: 20px; }
+
+#overlayClose { left: 80px; background: #b91c1c; }
+html.overlay, html.overlay body { background: transparent; }
