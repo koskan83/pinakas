@@ -218,3 +218,14 @@ body.inking #toolbar { pointer-events: none; }
 
 #overlayClose { left: 80px; background: #b91c1c; }
 html.overlay, html.overlay body { background: transparent; }
+
+#toolbar button.rec span { font-size: 15px; font-weight: 700; letter-spacing: -.5px; color: #fde68a; }
+#aiMenu { left: 14px; top: 80px; width: 380px; padding: 14px; gap: 8px; }
+#aiMenu b { font-size: 18px; padding: 0 4px; }
+.popup button.pill { padding: 9px 16px; background: var(--bar-2); font-size: 16px; }
+.field { display: flex; flex-direction: column; gap: 4px; padding: 0 4px; font-size: 14px; opacity: .95; }
+.field input { font: 16px ui-monospace, Menlo, Consolas, monospace; padding: 10px; border-radius: 9px; border: 0; user-select: text; -webkit-user-select: text; }
+.aiRow { display: flex; gap: 8px; padding: 4px; }
+.aiRow button { flex: 1; text-align: center; background: var(--bar-2); }
+.aiRow #aiSave { background: #059669; }
+#aiMenu .hint { max-width: none; }

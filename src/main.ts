@@ -10,6 +10,8 @@ import { Curtain, Spotlight } from './overlays';
 import { STAMPS } from './stamps';
 import { compile } from './expr';
 import { buildPdf } from './pdf';
+import { MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage } from './ai';
+import { uid } from './model';
 
 /** Βασικά χρώματα ανά φόντο· ίδια θέση = αντίστοιχο χρώμα στο άλλο φόντο. */
 const PALETTE = {
@@ -59,6 +61,7 @@ app.insertAdjacentHTML(
     <button data-act="delpage">🗑 Διαγραφή σελίδας</button>
     <hr />
     <button data-act="overlay" id="overlayAct" class="hidden">🖊 Γράψιμο πάνω από άλλα προγράμματα</button>
+    <button data-act="ai">✨ Αναγνώριση γραφής (ρυθμίσεις)…</button>
     <button data-act="full">⛶ Πλήρης οθόνη</button>
     <button data-act="diag">🔬 Διάγνωση αφής/γραφίδας</button>
   </div>
@@ -76,6 +79,8 @@ app.insertAdjacentHTML(
         <button data-pen="pen"><span>✏️</span>Στυλό</button>
         <button data-pen="highlighter"><span>🖍</span>Μαρκαδόρος</button>
         <button data-pen="laser"><span>🔦</span>Δείκτης λέιζερ (σβήνει μόνος του)</button>
+        <button data-auto="text" class="rec"><span>Aα</span>Αυτόματη αναγνώριση κειμένου: ό,τι γράφεις γίνεται καθαρό κείμενο μόλις σταματήσεις</button>
+        <button data-auto="math" class="rec"><span>√x</span>Αυτόματη αναγνώριση τύπων: ό,τι γράφεις γίνεται τυπωμένος τύπος μόλις σταματήσεις</button>
       </div>
       <div class="group" id="shapes">
         <button data-shape="line"><span>╱</span>Ευθεία</button>
@@ -94,6 +99,8 @@ app.insertAdjacentHTML(
         <button id="del"><span>🗑</span>Διαγραφή επιλογής</button>
         <button id="dup"><span>⧉</span>Αντίγραφο επιλογής</button>
         <button id="sumBtn"><span>Σ</span>Συνισταμένη των δύο βελών</button>
+        <button data-rec="text" class="rec"><span>Aα</span>Αναγνώριση της επιλογής ως κείμενο</button>
+        <button data-rec="math" class="rec"><span>√x</span>Αναγνώριση της επιλογής ως τύπο</button>
       </div>
       <div class="group" id="axesOpts">
         <button data-axis="x"><span>x</span>Όνομα οριζόντιου άξονα</button>
@@ -178,6 +185,19 @@ app.insertAdjacentHTML(
     <div class="fnRow"><span>f(x) =</span><input id="fnInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="x²-3x+2" /><button id="fnAdd">✓</button></div>
     <div id="fnKeys"></div>
     <div id="fnErr" class="hint"></div>
+  </div>
+
+  <div id="aiMenu" class="popup hidden">
+    <b>Αναγνώριση γραφής</b>
+    <div class="bgRow">
+      <span>Υπηρεσία</span>
+      <button data-prov="gemini" class="pill">Gemini</button>
+      <button data-prov="claude" class="pill">Claude</button>
+    </div>
+    <label class="field">Μοντέλο<input id="aiModel" type="text" list="aiModels" autocomplete="off" spellcheck="false" /><datalist id="aiModels"></datalist></label>
+    <label class="field">Κλειδί API<input id="aiKey" type="password" autocomplete="off" spellcheck="false" /></label>
+    <div class="aiRow"><button id="aiSave">✓ Αποθήκευση</button><button id="aiForget">Διαγραφή κλειδιού</button></div>
+    <div class="hint" id="aiHint"></div>
   </div>
 
   <div id="replayBar" class="hidden">
@@ -533,6 +553,143 @@ $('fnList').addEventListener('click', (e) => {
   renderFns();
 });
 
+// ---------- αναγνώριση γραφής ----------
+
+const ai = loadAi();
+const aiMenu = $('aiMenu');
+const aiKey = $('aiKey') as HTMLInputElement;
+const aiModel = $('aiModel') as HTMLInputElement;
+const AI_HINT: Record<Provider, string> = {
+  gemini: 'Δωρεάν κλειδί από το Google AI Studio (aistudio.google.com), με ημερήσιο όριο. Στη δωρεάν βαθμίδα η Google χρησιμοποιεί ό,τι στέλνεις για να βελτιώνει τα προϊόντα της.',
+  claude: 'Κλειδί από το console.anthropic.com. Χρεώνεται ανά χρήση.',
+};
+function renderAi(): void {
+  document.querySelectorAll<HTMLElement>('[data-prov]').forEach((b) => b.classList.toggle('on', b.dataset.prov === ai.provider));
+  $('aiModels').innerHTML = MODELS[ai.provider].map((m) => `<option value="${m}"></option>`).join('');
+  aiModel.value = ai.models[ai.provider];
+  aiKey.value = '';
+  aiKey.placeholder = ai.keys[ai.provider] ? '•••••••• (αποθηκευμένο σε αυτή τη συσκευή)' : 'επικόλλησε εδώ το κλειδί σου';
+  $('aiHint').textContent = `${AI_HINT[ai.provider]} Το κλειδί μένει μόνο σε αυτή τη συσκευή. Η εικόνα όσων αναγνωρίζεις στέλνεται στην υπηρεσία.`;
+}
+function openAi(): void {
+  closePopups();
+  renderAi();
+  aiMenu.classList.remove('hidden');
+}
+aiMenu.addEventListener('click', (e) => {
+  const t = e.target as HTMLElement;
+  const prov = t.closest<HTMLElement>('[data-prov]')?.dataset.prov as Provider | undefined;
+  if (prov) {
+    ai.provider = prov;
+    saveAi(ai);
+    renderAi();
+  } else if (t.closest('#aiSave')) {
+    if (aiKey.value.trim()) ai.keys[ai.provider] = aiKey.value.trim();
+    if (aiModel.value.trim()) ai.models[ai.provider] = aiModel.value.trim();
+    saveAi(ai);
+    closePopups();
+    toast(ai.keys[ai.provider] ? 'Οι ρυθμίσεις αποθηκεύτηκαν' : 'Αποθηκεύτηκαν, αλλά λείπει το κλειδί');
+  } else if (t.closest('#aiForget')) {
+    ai.keys[ai.provider] = '';
+    saveAi(ai);
+    renderAi();
+    toast('Το κλειδί διαγράφηκε από αυτή τη συσκευή');
+  }
+});
+
+let aiBusy = 0;
+/** Στέλνει τα στοιχεία για αναγνώριση και τα αντικαθιστά με κείμενο ή τυπωμένο τύπο. */
+async function runRecognition(ids: string[], kind: RecKind): Promise<void> {
+  if (!ai.keys[ai.provider]) {
+    openAi();
+    toast('Βάλε πρώτα το κλειδί της υπηρεσίας');
+    return;
+  }
+  const page = board.cur;
+  const img = await board.inkImage(ids);
+  if (!img) return;
+  aiBusy++;
+  toast('✨ Αναγνώριση…', 0);
+  try {
+    const out = await recognize(img.blob, kind, ai);
+    if (!out) {
+      toast('Δεν μπόρεσα να το διαβάσω');
+      return;
+    }
+    if (board.cur !== page) {
+      toast('Άλλαξες σελίδα· η αναγνώριση δεν εφαρμόστηκε');
+      return;
+    }
+    const { box, color } = img;
+    const bh = box.y1 - box.y0;
+    if (kind === 'text') {
+      const lines = out.split('\n').length;
+      const size = Math.max(22, Math.min(96, (bh / lines) * 0.75));
+      board.replaceItems(ids, { kind: 'text', id: uid(), x: box.x0, y: box.y0, text: out, size, color });
+    } else {
+      let pic = await texToImage(out, board.ink(color), Math.max(24, Math.min(90, bh * 0.45)));
+      // ο τύπος να μην βγει πολύ ψηλότερος από το χειρόγραφο
+      const f = Math.min(1, (Math.max(bh, 50) * 1.15) / pic.h);
+      pic = { ...pic, w: pic.w * f, h: pic.h * f };
+      board.replaceItems(ids, { kind: 'image', id: uid(), x: box.x0, y: box.y0 + (bh - pic.h) / 2, w: pic.w, h: pic.h, src: pic.src });
+    }
+    $('toast').classList.add('hidden');
+  } catch (err) {
+    toast(`Η αναγνώριση απέτυχε: ${(err as Error).message}`, 6000);
+  } finally {
+    aiBusy--;
+  }
+}
+$('selOpts').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>('[data-rec]');
+  if (b) void runRecognition(board.selectionIds, b.dataset.rec as RecKind);
+});
+
+// αυτόματη αναγνώριση: ό,τι γράφεται στέλνεται μόλις η γραφίδα μείνει σηκωμένη για λίγο
+let autoKind: RecKind | null = null;
+let autoBatch: string[] = [];
+let autoTimer = 0;
+const AUTO_IDLE_MS = 1600;
+function autoFlush(): void {
+  clearTimeout(autoTimer);
+  const ids = autoBatch;
+  autoBatch = [];
+  if (autoKind && ids.length) void runRecognition(ids, autoKind);
+}
+board.onStroke = (s) => {
+  if (!autoKind) return;
+  autoBatch.push(s.id);
+  clearTimeout(autoTimer);
+  autoTimer = window.setTimeout(autoFlush, AUTO_IDLE_MS);
+};
+$('live').addEventListener('pointerdown', () => clearTimeout(autoTimer));
+const autoRearm = (): void => {
+  if (!autoKind || autoBatch.length === 0) return;
+  clearTimeout(autoTimer);
+  autoTimer = window.setTimeout(autoFlush, AUTO_IDLE_MS);
+};
+$('live').addEventListener('pointerup', autoRearm);
+$('live').addEventListener('pointercancel', autoRearm);
+$('penKinds').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>('[data-auto]');
+  if (!b) return;
+  const k = b.dataset.auto as RecKind;
+  if (autoKind === k) {
+    autoKind = null;
+  } else if (!ai.keys[ai.provider]) {
+    openAi();
+    toast('Βάλε πρώτα το κλειδί της υπηρεσίας');
+    return;
+  } else {
+    autoKind = k;
+    if (board.tool !== 'pen') board.setTool('pen');
+    toast(k === 'text' ? 'Αυτόματη αναγνώριση κειμένου: γράψε και σταμάτα για λίγο' : 'Αυτόματη αναγνώριση τύπων: γράψε και σταμάτα για λίγο', 4000);
+  }
+  clearTimeout(autoTimer);
+  autoBatch = [];
+  refreshUi();
+});
+
 // ---------- κατάσταση κουμπιών ----------
 
 function refreshUi(): void {
@@ -543,6 +700,7 @@ function refreshUi(): void {
   $('penBtn').classList.toggle('on', isPenKind(tool));
   $('penBtn').querySelector('span')!.textContent = PEN_ICON[penKind];
   document.querySelectorAll<HTMLElement>('[data-pen]').forEach((b) => b.classList.toggle('on', b.dataset.pen === tool));
+  document.querySelectorAll<HTMLElement>('[data-auto]').forEach((b) => b.classList.toggle('on', b.dataset.auto === autoKind));
   renderColors();
   document.querySelectorAll<HTMLElement>('[data-color]').forEach((b) => b.classList.toggle('on', b.dataset.color === board.color));
   const st = sizedTool();
@@ -948,6 +1106,8 @@ menu.addEventListener('click', async (e) => {
     else await document.documentElement.requestFullscreen().catch(() => {});
   } else if (act === 'overlay') {
     openOverlay().catch((err) => toast(`Δεν άνοιξε: ${err}`, 6000));
+  } else if (act === 'ai') {
+    openAi();
   } else if (act === 'diag') {
     $('diag').classList.toggle('hidden');
   }

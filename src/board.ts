@@ -89,6 +89,8 @@ export class Board {
   onChange: () => void = () => {};
   onUi: () => void = () => {};
   onPointerInfo: (e: PointerEvent, count: number) => void = () => {};
+  /** Καλείται όταν ολοκληρωθεί μια γραμμή του στυλό (για την αυτόματη αναγνώριση). */
+  onStroke: (s: Stroke) => void = () => {};
 
   private undoStack: Op[] = [];
   private redoStack: Op[] = [];
@@ -404,6 +406,53 @@ export class Board {
 
   get hasSelection(): boolean {
     return !!this.selected || this.multi.length > 0;
+  }
+
+  /** Τα id της τρέχουσας επιλογής (μονής ή ομαδικής). */
+  get selectionIds(): string[] {
+    return [...this.selectedIds()];
+  }
+
+  /** Εικόνα PNG των στοιχείων με τα δοσμένα id, για αποστολή σε αναγνώριση. */
+  async inkImage(ids: string[]): Promise<{ blob: Blob; box: Box; color: string } | null> {
+    const set = new Set(ids);
+    const items = this.page.items.filter((it) => set.has(it.id));
+    if (items.length === 0) return null;
+    let box: Box | null = null;
+    for (const it of items) {
+      const b = itemBounds(it);
+      box = box ? { x0: Math.min(box.x0, b.x0), y0: Math.min(box.y0, b.y0), x1: Math.max(box.x1, b.x1), y1: Math.max(box.y1, b.y1) } : b;
+    }
+    const b = box!;
+    const pad = 18;
+    const bw = b.x1 - b.x0 + pad * 2, bh = b.y1 - b.y0 + pad * 2;
+    const s = Math.min(3, 1400 / Math.max(bw, bh));
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(bw * s));
+    cv.height = Math.max(1, Math.round(bh * s));
+    const c = cv.getContext('2d')!;
+    c.fillStyle = isDark(this.doc.bg) ? '#14201b' : '#ffffff';
+    c.fillRect(0, 0, cv.width, cv.height);
+    c.setTransform(s, 0, 0, s, (pad - b.x0) * s, (pad - b.y0) * s);
+    for (const it of items) this.drawItem(c, it);
+    const blob = await new Promise<Blob | null>((res) => cv.toBlob(res, 'image/png'));
+    const first = items[0];
+    return blob ? { blob, box: b, color: 'color' in first ? first.color : this.color } : null;
+  }
+
+  /** Αντικαθιστά τα στοιχεία με τα δοσμένα id από ένα νέο (αναιρείται με ένα ↶). */
+  replaceItems(ids: string[], item: Item): boolean {
+    const set = new Set(ids);
+    const before = this.page.items.slice();
+    const rest = before.filter((it) => !set.has(it.id));
+    if (rest.length === before.length) return false;
+    rest.push(item);
+    this.page.items = rest;
+    this.selected = null;
+    this.multi = [];
+    this.push({ t: 'set', p: this.cur, before, after: rest.slice() });
+    this.redraw();
+    return true;
   }
 
   private selectedIds(): Set<string> {
@@ -1803,6 +1852,7 @@ export class Board {
         }
         this.page.items.push(s);
         this.push({ t: 'add', p: this.cur, item: s });
+        if (ps.mode === 'draw' && s.kind === 'stroke' && !s.hl) this.onStroke(s);
         const c = this.bctx;
         c.save();
         this.setWorldTransform(c);
