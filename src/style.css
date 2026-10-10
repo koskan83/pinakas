@@ -137,3 +137,8 @@ body.inking #toolbar { pointer-events: none; }
 #colorGrid button.color.on { border-color: #fff; box-shadow: 0 0 0 3px var(--accent); }
 #colorPick { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; font-size: 16px; cursor: pointer; }
 #colorPick input { width: 54px; height: 38px; padding: 0; border: 0; background: none; cursor: pointer; }
+
+#toolbar #axesOpts button span { font-style: italic; font-weight: 600; font-size: 18px; }
+#labelMenu { min-width: 0; }
+#labelGrid { display: grid; grid-template-columns: repeat(6, 48px); gap: 4px; }
+#labelGrid button { padding: 12px 0; text-align: center; font-style: italic; font-size: 19px; }

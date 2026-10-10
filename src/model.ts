@@ -73,6 +73,9 @@ export interface AxesItem {
   nx: number;
   ny: number;
   color: string;
+  /** Ονόματα αξόνων· αν λείπουν, x και y. */
+  lx?: string;
+  ly?: string;
 }
 
 export type Item = Stroke | Pic | Shape | TextItem | AngleItem | AxesItem;

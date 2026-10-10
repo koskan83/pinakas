@@ -271,8 +271,15 @@ export class Board {
 
   /** Εισαγωγή καρτεσιανών αξόνων στο κέντρο της οθόνης. */
   addAxes(mode: AxesMode): void {
-    const size = { full: [8, 6], q1: [10, 8], q14: [10, 5] }[mode];
-    const axes: AxesItem = { kind: 'axes', id: uid(), x: 0, y: 0, unit: CM, mode, nx: size[0], ny: size[1], color: this.color };
+    const axes: AxesItem = { kind: 'axes', id: uid(), x: 0, y: 0, unit: CM, mode, nx: 10, ny: 10, color: this.color };
+    // μικραίνουμε τη μονάδα ώστε να χωράνε ολόκληροι στην οθόνη
+    const full = itemBounds(axes);
+    const k = this.page.view.k;
+    const fit = Math.min(
+      (this.W * 0.9) / k / (full.x1 - full.x0),
+      (Math.max(this.H - this.bottomInset, 100) * 0.92) / k / (full.y1 - full.y0),
+    );
+    axes.unit = CM * Math.min(1, fit);
     const b = itemBounds(axes);
     const c = this.toWorld(this.W / 2, (this.H - this.bottomInset) / 2);
     axes.x = c[0] - (b.x0 + b.x1) / 2;
@@ -283,6 +290,23 @@ export class Board {
     this.selected = axes.id;
     this.redraw();
     this.onUi();
+  }
+
+  /** Οι επιλεγμένοι άξονες, αν η επιλογή είναι άξονες. */
+  get selectedAxes(): AxesItem | null {
+    const it = this.selected ? this.page.items.find((x) => x.id === this.selected) : undefined;
+    return it && it.kind === 'axes' ? it : null;
+  }
+
+  /** Αλλάζει το όνομα ενός άξονα (π.χ. y → υ για ταχύτητα). */
+  setAxisLabel(axis: 'x' | 'y', label: string): void {
+    const before = this.selectedAxes;
+    if (!before) return;
+    const after: AxesItem = axis === 'x' ? { ...before, lx: label } : { ...before, ly: label };
+    const i = this.page.items.indexOf(before);
+    this.page.items[i] = after;
+    this.push({ t: 'mod', p: this.cur, before, after });
+    this.redraw();
   }
 
   deleteSelected(): void {
@@ -558,10 +582,10 @@ export class Board {
     c.font = `italic 600 ${fs * 1.25}px system-ui, "Segoe UI", Roboto, sans-serif`;
     c.textAlign = 'center';
     c.textBaseline = 'top';
-    c.fillText('x', X(xmax + ext), a.y + t + 4);
+    c.fillText(a.lx ?? 'x', X(xmax + ext), a.y + t + 4);
     c.textAlign = 'right';
     c.textBaseline = 'middle';
-    c.fillText('y', a.x - t - 6, Y(ymax + ext) + 4);
+    c.fillText(a.ly ?? 'y', a.x - t - 6, Y(ymax + ext) + 4);
     c.restore();
   }
 
@@ -1024,7 +1048,18 @@ export class Board {
     const [wx, wy] = this.toWorld(e.clientX, e.clientY);
     switch (ps.mode) {
       case 'draw': {
-        if (ps.live) break;
+        if (ps.live) {
+          // μετά την αναγνώριση, όσο κρατάς πατημένο, η άκρη ακολουθεί τη γραφίδα
+          const l = ps.live;
+          if (l.kind === 'angle') {
+            l.a2 = roundAngle(Math.atan2(wy - l.y, wx - l.x));
+            l.len2 = Math.max(20, Math.hypot(wx - l.x, wy - l.y));
+          } else if (l.shape === 'line') {
+            l.x1 = wx;
+            l.y1 = wy;
+          }
+          break;
+        }
         const pts = ps.stroke!.pts;
         const last = pts[pts.length - 1];
         const minD = 1.2 / this.page.view.k;

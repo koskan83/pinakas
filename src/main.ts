@@ -83,6 +83,10 @@ app.insertAdjacentHTML(
       <button data-eraser="stroke"><span>〰</span>Σβήνει ολόκληρη τη γραμμή</button>
       <button id="eraseAll"><span>🧹</span>Σβήσιμο όλων</button>
     </div>
+    <div class="group hidden" id="axesOpts">
+      <button data-axis="x"><span>x</span>Όνομα οριζόντιου άξονα</button>
+      <button data-axis="y"><span>y</span>Όνομα κατακόρυφου άξονα</button>
+    </div>
     <div class="group" id="colors"></div>
     <div class="group" id="widths"></div>
     <div class="group">
@@ -125,6 +129,10 @@ app.insertAdjacentHTML(
   <div id="colorMenu" class="popup hidden">
     <div id="colorGrid"></div>
     <label id="colorPick">🎨 Οποιοδήποτε χρώμα…<input id="colorInput" type="color" value="#2563eb" /></label>
+  </div>
+  <div id="labelMenu" class="popup hidden">
+    <div id="labelGrid"></div>
+    <button id="labelOther">⌨ Άλλο…</button>
   </div>
   <div id="textEd" class="hidden">
     <textarea rows="2" placeholder="Γράψε εδώ…"></textarea>
@@ -354,6 +362,26 @@ widthsEl.addEventListener('click', (e) => {
   savePrefs();
   refreshUi();
 });
+const AXIS_LABELS = ['x', 'y', 't', 's', 'υ', 'u', 'v', 'a', 'F', 'm', 'V', 'P', 'T', 'I', 'R', 'W', 'E', 'f(x)'];
+let labelAxis: 'x' | 'y' = 'y';
+$('labelGrid').innerHTML = AXIS_LABELS.map((l) => `<button data-label="${l}">${l}</button>`).join('');
+$('axesOpts').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>('[data-axis]');
+  if (!b) return;
+  const same = !labelMenu.classList.contains('hidden') && labelAxis === b.dataset.axis;
+  closePopups();
+  if (same) return;
+  labelAxis = b.dataset.axis as 'x' | 'y';
+  labelMenu.classList.remove('hidden');
+  placeNear(labelMenu, b);
+});
+$('labelMenu').addEventListener('click', (e) => {
+  const t = e.target as HTMLElement;
+  let label = t.closest<HTMLElement>('[data-label]')?.dataset.label;
+  if (t.closest('#labelOther')) label = prompt('Όνομα άξονα:')?.trim().slice(0, 12) || undefined;
+  closePopups();
+  if (label) board.setAxisLabel(labelAxis, label);
+});
 $('eraserOpts').addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
   if (t.closest('#eraseAll')) {
@@ -384,6 +412,10 @@ function refreshUi(): void {
   document.querySelectorAll<HTMLElement>('[data-width]').forEach((b) => b.classList.toggle('on', SIZES[st][Number(b.dataset.width)] === board.sizes[st]));
   document.querySelectorAll<HTMLElement>('[data-eraser]').forEach((b) => b.classList.toggle('on', b.dataset.eraser === board.eraserMode));
   $('eraserOpts').classList.toggle('hidden', board.tool !== 'eraser');
+  const ax = board.tool === 'select' ? board.selectedAxes : null;
+  $('axesOpts').classList.toggle('hidden', !ax);
+  $('axesOpts').querySelector('[data-axis=x] span')!.textContent = ax?.lx ?? 'x';
+  $('axesOpts').querySelector('[data-axis=y] span')!.textContent = ax?.ly ?? 'y';
   colorsEl.classList.toggle('hidden', board.tool === 'eraser');
   document.querySelectorAll<HTMLElement>('.bgSw').forEach((b) => b.classList.toggle('on', b.dataset.act === `bg-${board.doc.bg}`));
   document.body.classList.toggle('dark', isDark(board.doc.bg));
@@ -469,7 +501,8 @@ function initToolbar(): void {
 
   const grip = $('barDrag');
   let off: { x: number; y: number } | null = null;
-  let lastX = 0;
+  /** Πού θα ήταν η γραμμή αν δεν την κρατούσαμε μέσα στην οθόνη. */
+  let rawX = 0;
   let dragged = false;
   grip.addEventListener('pointerdown', (e) => {
     const r = bar.getBoundingClientRect();
@@ -479,7 +512,7 @@ function initToolbar(): void {
   });
   grip.addEventListener('pointermove', (e) => {
     if (!off) return;
-    lastX = e.clientX;
+    rawX = e.clientX - off.x;
     dragged = true;
     st.pos = { x: e.clientX - off.x, y: e.clientY - off.y };
     apply();
@@ -491,9 +524,12 @@ function initToolbar(): void {
     // κοντά στο κάτω-κεντρικό σημείο επιστρέφει στην αρχική της θέση
     const r = bar.getBoundingClientRect();
     const centered = Math.abs(r.left + r.width / 2 - window.innerWidth / 2) < 60;
-    st.vertical = lastX < 50 || lastX > window.innerWidth - 50;
+    // σπρωγμένη τέρμα αριστερά ή τέρμα δεξιά γίνεται κατακόρυφη
+    const atLeft = rawX < 8;
+    const atRight = rawX + r.width > window.innerWidth - 8;
+    st.vertical = atLeft || atRight;
     if (!st.vertical && centered && r.bottom > window.innerHeight - 40) st.pos = null;
-    if (st.vertical && st.pos && lastX > window.innerWidth - 50) st.pos.x = window.innerWidth;
+    if (st.vertical && st.pos) st.pos.x = atLeft ? 0 : window.innerWidth;
     apply();
     save();
   };
@@ -522,7 +558,9 @@ const menu = $('menu');
 const impMenu = $('importMenu');
 const gadgetMenu = $('gadgetMenu');
 const colorMenu = $('colorMenu');
+const labelMenu = $('labelMenu');
 function closePopups(): void {
+  labelMenu.classList.add('hidden');
   colorMenu.classList.add('hidden');
   menu.classList.add('hidden');
   impMenu.classList.add('hidden');
@@ -574,7 +612,7 @@ $('importBtn').onclick = (e) => {
   if (open) placeNear(impMenu, $('importBtn'));
 };
 document.addEventListener('pointerdown', (e) => {
-  if (!(e.target as HTMLElement).closest('.popup, #menuBtn, #importBtn, #gadgetBtn, #colorBtn')) closePopups();
+  if (!(e.target as HTMLElement).closest('.popup, #menuBtn, #importBtn, #gadgetBtn, #colorBtn, #axesOpts')) closePopups();
 });
 
 impMenu.addEventListener('click', (e) => {
