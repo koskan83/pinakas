@@ -50,7 +50,7 @@ body.inking #toolbar { pointer-events: none; }
 #toolbar #barDrag { cursor: move; touch-action: none; opacity: .75; }
 #toolbar button.color { width: 30px; height: 30px; margin: 0 2px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); }
 #toolbar button.color.on { border-color: #fff; box-shadow: 0 0 0 3px var(--accent); }
-#toolbar button.width { width: 36px; }
+#toolbar button.width { width: 34px; }
 #toolbar button.width i { display: block; background: #fff; border-radius: 50%; }
 #toolbar button.width.on { background: var(--bar-2); box-shadow: inset 0 0 0 2px var(--accent); }
 .pages #pageLabel { min-width: 52px; text-align: center; font-weight: 600; font-size: 14px; }
@@ -122,3 +122,18 @@ body.inking #toolbar { pointer-events: none; }
 #timer .row button.go { background: #059669; }
 #timer.done .tdisplay { color: #f87171; animation: blink .6s steps(2) infinite; }
 @keyframes blink { 50% { opacity: .25; } }
+
+.bgRow { display: flex; align-items: center; gap: 8px; padding: 6px 12px; }
+.bgRow span { font-size: 17px; margin-right: auto; }
+.popup button.bgSw { width: 40px; height: 40px; padding: 0; border-radius: 9px; background: #fff; border: 2px solid var(--bar-2); }
+.popup button.bgSw.dark { background-color: #14201b; }
+.popup button.bgSw.grid { background-image: linear-gradient(rgba(128,128,128,.55) 1px, transparent 1px), linear-gradient(90deg, rgba(128,128,128,.55) 1px, transparent 1px); background-size: 9px 9px; }
+.popup button.bgSw.lines { background-image: linear-gradient(rgba(96,165,250,.9) 1.5px, transparent 1.5px); background-size: 9px 9px; }
+.popup button.bgSw.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+
+#colorMenu { min-width: 0; }
+#colorGrid { display: grid; grid-template-columns: repeat(6, 42px); gap: 8px; padding: 6px; }
+#colorGrid button.color { width: 42px; height: 42px; padding: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); }
+#colorGrid button.color.on { border-color: #fff; box-shadow: 0 0 0 3px var(--accent); }
+#colorPick { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; font-size: 16px; cursor: pointer; }
+#colorPick input { width: 54px; height: 38px; padding: 0; border: 0; background: none; cursor: pointer; }

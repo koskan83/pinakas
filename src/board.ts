@@ -1,6 +1,6 @@
 import {
   AngleItem, AxesItem, AxesMode, Background, Doc, Item, Op, Page, Pic, Pt, Shape, ShapeKind, Stroke, TextItem, Tool, View,
-  angleDegrees, angleEnds, axesRange, hitItem, itemBounds, newDoc, newPage, reboxShape, recognizeShape, roundAngle,
+  angleDegrees, angleEnds, axesRange, erasePartial, hitItem, isDark, itemBounds, newDoc, newPage, reboxShape, recognizeShape, roundAngle,
   textFont, textLines, translateItem, trianglePts, uid,
 } from './model';
 import { CM, GadgetDrag, GadgetKind, Gadgets } from './gadgets';
@@ -21,7 +21,9 @@ interface PState {
   handle?: number;
   timer?: number;
   gadget?: GadgetDrag;
-  erased?: { item: Item; i: number }[];
+  /** Η λίστα της σελίδας πριν αρχίσει το σβήσιμο. */
+  before?: Item[];
+  changed?: boolean;
   orig?: Item;
   preview?: Item;
   start?: Pt;
@@ -36,18 +38,18 @@ interface Gesture {
   v0: View;
 }
 
-const BG_COLOR: Record<Background, string> = {
-  white: '#ffffff',
-  grid: '#ffffff',
-  dark: '#14201b',
-};
+export type SizedTool = 'pen' | 'highlighter' | 'eraser';
+export type EraserMode = 'stroke' | 'partial';
 
 export class Board {
   doc: Doc = newDoc();
   cur = 0;
   tool: Tool = 'pen';
   color = '#111111';
-  width = 4;
+  /** Πάχος ανά εργαλείο· για τη γόμα είναι η ακτίνα του κύκλου (px οθόνης). */
+  sizes: Record<SizedTool, number> = { pen: 4, highlighter: 4, eraser: 16 };
+  /** 'stroke': σβήνει ολόκληρη τη γραμμή· 'partial': μόνο ό,τι είναι μέσα στον κύκλο. */
+  eraserMode: EraserMode = 'partial';
   shapeKind: ShapeKind | 'angle' = 'line';
   readonly gadgets = new Gadgets();
   selected: string | null = null;
@@ -85,6 +87,18 @@ export class Board {
 
   get page(): Page {
     return this.doc.pages[this.cur];
+  }
+
+  get width(): number {
+    return this.tool === 'highlighter' ? this.sizes.highlighter : this.sizes.pen;
+  }
+
+  /** Το χρώμα όπως φαίνεται στο τρέχον φόντο: το μαύρο γίνεται λευκό σε σκούρο πίνακα και αντίστροφα. */
+  ink(color: string): string {
+    const dark = isDark(this.doc.bg);
+    if (dark && color === '#111111') return '#ffffff';
+    if (!dark && color === '#ffffff') return '#111111';
+    return color;
   }
 
   get canUndo(): boolean {
@@ -187,6 +201,10 @@ export class Board {
   }
 
   private apply(op: Op, inverse: boolean): void {
+    if (op.t === 'set') {
+      this.doc.pages[op.p].items = (inverse ? op.before : op.after).slice();
+      return;
+    }
     const items = this.doc.pages[op.p].items;
     const removeById = (id: string) => {
       const i = items.findIndex((x) => x.id === id);
@@ -350,15 +368,20 @@ export class Board {
   }
 
   private paintBackground(c: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, k: number): void {
-    c.fillStyle = BG_COLOR[this.doc.bg];
+    const bg = this.doc.bg;
+    const dark = isDark(bg);
+    c.fillStyle = dark ? '#14201b' : '#ffffff';
     c.fillRect(x0, y0, x1 - x0, y1 - y0);
-    if (this.doc.bg !== 'grid') return;
-    const step = 40;
+    const grid = bg.endsWith('grid');
+    if (!grid && !bg.endsWith('lines')) return;
+    // πλέγμα ανά 1 cm, γραμμές τετραδίου ανά 2 cm
+    const step = grid ? 40 : 80;
     if (step * k < 8) return;
-    c.strokeStyle = 'rgba(0,0,0,0.13)';
-    c.lineWidth = 1 / k;
+    if (grid) c.strokeStyle = dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.13)';
+    else c.strokeStyle = dark ? 'rgba(147,197,253,0.3)' : 'rgba(37,99,235,0.3)';
+    c.lineWidth = (grid ? 1 : 1.5) / k;
     c.beginPath();
-    for (let x = Math.floor(x0 / step) * step; x <= x1; x += step) {
+    for (let x = Math.floor(x0 / step) * step; grid && x <= x1; x += step) {
       c.moveTo(x, y0);
       c.lineTo(x, y1);
     }
@@ -372,8 +395,7 @@ export class Board {
   private drawStroke(c: CanvasRenderingContext2D, s: Stroke): void {
     const pts = s.pts;
     c.save();
-    c.strokeStyle = s.color;
-    c.fillStyle = s.color;
+    c.strokeStyle = c.fillStyle = this.ink(s.color);
     c.lineCap = 'round';
     c.lineJoin = 'round';
     const w = s.hl ? s.width * 4 : s.width;
@@ -400,8 +422,7 @@ export class Board {
 
   private drawShape(c: CanvasRenderingContext2D, s: Shape): void {
     c.save();
-    c.strokeStyle = s.color;
-    c.fillStyle = s.color;
+    c.strokeStyle = c.fillStyle = this.ink(s.color);
     c.lineCap = 'round';
     c.lineJoin = 'round';
     c.lineWidth = s.hl ? s.width * 4 : s.width;
@@ -435,7 +456,7 @@ export class Board {
 
   private drawText(c: CanvasRenderingContext2D, t: TextItem): void {
     c.save();
-    c.fillStyle = t.color;
+    c.fillStyle = this.ink(t.color);
     c.font = textFont(t.size);
     c.textBaseline = 'top';
     textLines(t).forEach((line, i) => c.fillText(line, t.x, t.y + i * t.size * 1.25));
@@ -446,8 +467,7 @@ export class Board {
     const [p1, p2] = angleEnds(a);
     const deg = angleDegrees(a);
     c.save();
-    c.strokeStyle = a.color;
-    c.fillStyle = a.color;
+    c.strokeStyle = c.fillStyle = this.ink(a.color);
     c.lineCap = 'round';
     c.lineJoin = 'round';
     c.lineWidth = a.width;
@@ -488,8 +508,7 @@ export class Board {
     const X = (v: number) => a.x + v * u;
     const Y = (v: number) => a.y - v * u;
     c.save();
-    c.strokeStyle = a.color;
-    c.fillStyle = a.color;
+    c.strokeStyle = c.fillStyle = this.ink(a.color);
     c.lineCap = 'round';
     c.lineJoin = 'round';
 
@@ -636,20 +655,22 @@ export class Board {
       }
       c.restore();
     }
-    this.gadgets.draw(c, k, this.color);
+    this.gadgets.draw(c, k, this.ink(this.color));
     if (this.eraserAt) {
       c.save();
       c.strokeStyle = '#ef4444';
+      c.fillStyle = 'rgba(239,68,68,0.12)';
       c.lineWidth = 2 / k;
       c.beginPath();
       c.arc(this.eraserAt.x, this.eraserAt.y, this.eraserRadius(), 0, Math.PI * 2);
+      c.fill();
       c.stroke();
       c.restore();
     }
   }
 
   private eraserRadius(): number {
-    return 16 / this.page.view.k;
+    return this.sizes.eraser / this.page.view.k;
   }
 
   // ---------- εξαγωγή ----------
@@ -703,13 +724,21 @@ export class Board {
     let changed = false;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      if (it.kind !== 'image' && it.kind !== 'axes' && hitItem(it, x, y, r)) {
+      if (it.kind === 'image' || it.kind === 'axes') continue;
+      if (this.eraserMode === 'partial') {
+        const rest = erasePartial(it, x, y, r);
+        if (!rest) continue;
+        items.splice(i, 1, ...rest);
+      } else {
+        if (!hitItem(it, x, y, r)) continue;
         items.splice(i, 1);
-        ps.erased!.push({ item: it, i });
-        changed = true;
       }
+      changed = true;
     }
-    if (changed) this.redraw();
+    if (changed) {
+      ps.changed = true;
+      this.redraw();
+    }
   }
 
   private bindEvents(): void {
@@ -822,7 +851,7 @@ export class Board {
       }
       case 'eraser':
         ps.mode = 'erase';
-        ps.erased = [];
+        ps.before = this.page.items.slice();
         this.eraserAt = { x: wx, y: wy };
         this.eraseAt(ps, wx, wy);
         this.renderLive();
@@ -889,16 +918,15 @@ export class Board {
 
   /** Ακυρώνει ό,τι έκανε ένας δείκτης χωρίς να το καταχωρήσει. */
   private cancelPointer(ps: PState): void {
-    if (ps.mode === 'erase' && ps.erased && ps.erased.length) {
-      for (const { item, i } of [...ps.erased].sort((a, b) => a.i - b.i)) this.page.items.splice(i, 0, item);
-    }
+    if (ps.mode === 'erase' && ps.changed && ps.before) this.page.items = ps.before;
     clearTimeout(ps.timer);
     ps.stroke = undefined;
     ps.live = undefined;
     ps.gadget = undefined;
     ps.preview = undefined;
     ps.orig = undefined;
-    ps.erased = undefined;
+    ps.before = undefined;
+    ps.changed = false;
     ps.mode = 'none';
     this.eraserAt = null;
     this.redraw();
@@ -1107,8 +1135,8 @@ export class Board {
         break;
       }
       case 'erase':
-        if (ps.erased && ps.erased.length) {
-          this.push({ t: 'del', p: this.cur, items: ps.erased });
+        if (ps.changed && ps.before) {
+          this.push({ t: 'set', p: this.cur, before: ps.before, after: this.page.items.slice() });
         }
         this.eraserAt = null;
         break;

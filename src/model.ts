@@ -88,7 +88,11 @@ export interface Page {
   view: View;
 }
 
-export type Background = 'white' | 'dark' | 'grid';
+export type Background = 'white' | 'grid' | 'lines' | 'dark' | 'dark-grid' | 'dark-lines';
+
+export function isDark(bg: Background): boolean {
+  return bg.startsWith('dark');
+}
 
 export interface Doc {
   v: 1;
@@ -115,7 +119,9 @@ export function newDoc(): Doc {
 export type Op =
   | { t: 'add'; p: number; item: Item }
   | { t: 'del'; p: number; items: { item: Item; i: number }[] }
-  | { t: 'mod'; p: number; before: Item; after: Item };
+  | { t: 'mod'; p: number; before: Item; after: Item }
+  /** Ολόκληρη η λίστα της σελίδας πριν και μετά (σβήσιμο με γόμα). */
+  | { t: 'set'; p: number; before: Item[]; after: Item[] };
 
 export function distToSeg(px: number, py: number, a: Pt, b: Pt): number {
   const dx = b[0] - a[0];
@@ -378,4 +384,108 @@ export function recognizeShape(pts: Pt[]): Recognized | null {
   ];
   cand.sort((p, q) => p[0] - q[0]);
   return cand[0][0] < 1 ? cand[0][1] : null;
+}
+
+// ---------- μερικό σβήσιμο ----------
+
+/** Κόβει από μια τεθλασμένη ό,τι πέφτει μέσα στον κύκλο. null αν ο κύκλος δεν την αγγίζει. */
+function clipPolyline(pts: Pt[], cx: number, cy: number, r: number): Pt[][] | null {
+  if (pts.length === 1) return Math.hypot(pts[0][0] - cx, pts[0][1] - cy) <= r ? [] : null;
+  const out: Pt[][] = [];
+  let cur: Pt[] = [];
+  let touched = false;
+  const flush = () => {
+    if (cur.length >= 2) {
+      let len = 0;
+      for (let i = 1; i < cur.length; i++) len += Math.hypot(cur[i][0] - cur[i - 1][0], cur[i][1] - cur[i - 1][1]);
+      if (len >= 1.5) out.push(cur);
+    }
+    cur = [];
+  };
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const fx = a[0] - cx, fy = a[1] - cy;
+    const A = dx * dx + dy * dy;
+    if (A === 0) continue;
+    const B = 2 * (fx * dx + fy * dy);
+    const C = fx * fx + fy * fy - r * r;
+    const disc = B * B - 4 * A * C;
+    let t1 = 2, t2 = -1;
+    if (disc > 0) {
+      const q = Math.sqrt(disc);
+      t1 = (-B - q) / (2 * A);
+      t2 = (-B + q) / (2 * A);
+    }
+    if (t2 <= 0 || t1 >= 1) {
+      if (cur.length === 0) cur.push(a);
+      cur.push(b);
+      continue;
+    }
+    touched = true;
+    if (t1 > 0) {
+      if (cur.length === 0) cur.push(a);
+      cur.push([a[0] + dx * t1, a[1] + dy * t1]);
+    }
+    flush();
+    if (t2 < 1) cur = [[a[0] + dx * t2, a[1] + dy * t2], b];
+  }
+  flush();
+  return touched ? out : null;
+}
+
+/** Πυκνώνει μια τεθλασμένη ώστε οι γωνίες της να μένουν αιχμηρές όταν σχεδιαστεί ως γραμμή. */
+function densify(pts: Pt[], step: number): Pt[] {
+  if (pts.length <= 2) return pts;
+  const out: Pt[] = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step));
+    for (let j = 1; j <= n; j++) out.push([a[0] + ((b[0] - a[0]) * j) / n, a[1] + ((b[1] - a[1]) * j) / n]);
+  }
+  return out;
+}
+
+/** Το περίγραμμα ενός σχήματος ως τεθλασμένες γραμμές. */
+function shapePolylines(s: Shape): Pt[][] {
+  const { x0, y0, x1, y1 } = s;
+  if (s.shape === 'line') return [[[x0, y0], [x1, y1]]];
+  if (s.shape === 'arrow') {
+    const ang = Math.atan2(y1 - y0, x1 - x0);
+    const L = Math.max(s.width * 4, 16);
+    const head: Pt[] = [-0.45, 0, 0.45].map((d) => (d === 0 ? [x1, y1] : [x1 - L * Math.cos(ang + d), y1 - L * Math.sin(ang + d)]) as Pt);
+    return [[[x0, y0], [x1, y1]], densify(head, 2)];
+  }
+  if (s.shape === 'rect') return [densify([[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]], 3)];
+  if (s.shape === 'triangle') {
+    const t = trianglePts(s);
+    return [densify([t[0], t[1], t[2], t[0]], 3)];
+  }
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const a = Math.max(Math.abs(x1 - x0) / 2, 0.5), b = Math.max(Math.abs(y1 - y0) / 2, 0.5);
+  const n = Math.max(48, Math.min(360, Math.round((a + b) / 2)));
+  const ell: Pt[] = [];
+  for (let i = 0; i <= n; i++) ell.push([cx + a * Math.cos((i / n) * 2 * Math.PI), cy + b * Math.sin((i / n) * 2 * Math.PI)]);
+  return [ell];
+}
+
+/**
+ * Σβήνει από ένα στοιχείο μόνο ό,τι βρίσκεται μέσα στον κύκλο.
+ * Επιστρέφει τα κομμάτια που απομένουν, ή null αν το στοιχείο δεν αγγίχτηκε.
+ */
+export function erasePartial(it: Item, x: number, y: number, r: number): Item[] | null {
+  if (it.kind === 'image' || it.kind === 'axes') return null;
+  if (it.kind === 'text' || it.kind === 'angle') return hitItem(it, x, y, r) ? [] : null;
+  const b = itemBounds(it);
+  if (x < b.x0 - r || x > b.x1 + r || y < b.y0 - r || y > b.y1 + r) return null;
+  const lines = it.kind === 'stroke' ? [it.pts] : shapePolylines(it);
+  const clipped = lines.map((l) => clipPolyline(l, x, y, r));
+  if (clipped.every((c) => c === null)) return null;
+  const out: Item[] = [];
+  lines.forEach((l, i) => {
+    for (const pts of clipped[i] ?? [l]) {
+      out.push({ kind: 'stroke', id: uid(), pts, color: it.color, width: it.width, hl: !!it.hl });
+    }
+  });
+  return out;
 }

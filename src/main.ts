@@ -1,14 +1,29 @@
 import './style.css';
-import { Board } from './board';
-import { AxesMode, Background, Doc, ShapeKind, TextItem, Tool, newDoc } from './model';
+import { Board, EraserMode, SizedTool } from './board';
+import { AxesMode, Background, Doc, ShapeKind, TextItem, Tool, isDark, newDoc } from './model';
 import { blobToPic, captureScreen, clipboardImage, pdfToPages } from './importers';
 import { loadDoc, saveDoc } from './storage';
 import { Timer } from './timer';
 import { GadgetKind } from './gadgets';
 import { isNative, nativeSave, nativeScreenshot } from './native';
 
-const COLORS = ['#111111', '#e11d48', '#2563eb', '#16a34a', '#f59e0b', '#facc15', '#ffffff'];
-const WIDTHS = [3, 6, 12];
+/** Βασικά χρώματα ανά φόντο· ίδια θέση = αντίστοιχο χρώμα στο άλλο φόντο. */
+const PALETTE = {
+  light: ['#111111', '#e11d48', '#2563eb', '#16a34a', '#ea580c', '#7c3aed'],
+  dark: ['#ffffff', '#fb7185', '#7dd3fc', '#86efac', '#fde047', '#c4b5fd'],
+};
+const MORE_COLORS = [
+  '#111111', '#6b7280', '#d1d5db', '#ffffff', '#92400e', '#d6a36c',
+  '#b91c1c', '#ef4444', '#fb7185', '#f472b6', '#be185d', '#a21caf',
+  '#ea580c', '#f59e0b', '#fde047', '#a3e635', '#16a34a', '#166534',
+  '#0f766e', '#2dd4bf', '#7dd3fc', '#2563eb', '#1e3a8a', '#7c3aed',
+];
+const SIZES: Record<SizedTool, number[]> = {
+  pen: [2, 4, 8, 16],
+  highlighter: [2, 4, 8, 16],
+  eraser: [8, 16, 32, 64],
+};
+const SIZE_NAME = ['Λεπτό', 'Κανονικό', 'Παχύ', 'Πολύ παχύ'];
 
 const app = document.getElementById('app')!;
 app.insertAdjacentHTML(
@@ -21,9 +36,15 @@ app.insertAdjacentHTML(
     <button data-act="save">💾 Αποθήκευση αρχείου</button>
     <button data-act="png">🖼 Εξαγωγή σελίδας σε PNG</button>
     <hr />
-    <button data-act="bg-white">⬜ Φόντο: λευκό</button>
-    <button data-act="bg-grid">▦ Φόντο: πλέγμα</button>
-    <button data-act="bg-dark">⬛ Φόντο: σκούρο</button>
+    <div class="bgRow">
+      <span>Φόντο</span>
+      <button data-act="bg-white" class="bgSw" title="Λευκό"></button>
+      <button data-act="bg-grid" class="bgSw grid" title="Λευκό με πλέγμα"></button>
+      <button data-act="bg-lines" class="bgSw lines" title="Λευκό με γραμμές τετραδίου"></button>
+      <button data-act="bg-dark" class="bgSw dark" title="Σκούρο"></button>
+      <button data-act="bg-dark-grid" class="bgSw dark grid" title="Σκούρο με πλέγμα"></button>
+      <button data-act="bg-dark-lines" class="bgSw dark lines" title="Σκούρο με γραμμές τετραδίου"></button>
+    </div>
     <hr />
     <button data-act="clear">🧹 Καθαρισμός σελίδας</button>
     <button data-act="delpage">🗑 Διαγραφή σελίδας</button>
@@ -56,6 +77,11 @@ app.insertAdjacentHTML(
       <button data-shape="ellipse"><span>◯</span>Έλλειψη</button>
       <button data-shape="triangle"><span>△</span>Τρίγωνο</button>
       <button data-shape="angle"><span>∠</span>Γωνία με μοίρες</button>
+    </div>
+    <div class="group hidden" id="eraserOpts">
+      <button data-eraser="partial"><span>◌</span>Σβήνει μόνο ό,τι είναι μέσα στον κύκλο</button>
+      <button data-eraser="stroke"><span>〰</span>Σβήνει ολόκληρη τη γραμμή</button>
+      <button id="eraseAll"><span>🧹</span>Σβήσιμο όλων</button>
     </div>
     <div class="group" id="colors"></div>
     <div class="group" id="widths"></div>
@@ -95,6 +121,10 @@ app.insertAdjacentHTML(
     <button data-axes="q1">┗ Άξονες: 1ο τεταρτημόριο</button>
     <button data-axes="q14">┣ Άξονες: 1ο και 4ο (x ≥ 0)</button>
     <div class="hint">Χάρακας: γράψε δίπλα στην ακμή του για ευθεία γραμμή. Διαβήτης: σύρε το χρωματιστό μολύβι για τόξο, το ↔ για ακτίνα.</div>
+  </div>
+  <div id="colorMenu" class="popup hidden">
+    <div id="colorGrid"></div>
+    <label id="colorPick">🎨 Οποιοδήποτε χρώμα…<input id="colorInput" type="color" value="#2563eb" /></label>
   </div>
   <div id="textEd" class="hidden">
     <textarea rows="2" placeholder="Γράψε εδώ…"></textarea>
@@ -227,22 +257,61 @@ window.addEventListener('drop', (e) => {
 
 // ---------- γραμμή εργαλείων ----------
 
-const colorsEl = $('colors');
-for (const c of COLORS) {
-  const b = document.createElement('button');
-  b.className = 'color';
-  b.dataset.color = c;
-  b.style.background = c;
-  b.setAttribute('aria-label', c);
-  colorsEl.append(b);
+const PREFS_KEY = 'grafida.prefs';
+/** Το τελευταίο χρώμα που διάλεξε ο χρήστης εκτός βασικής παλέτας. */
+let customColor: string | null = null;
+try {
+  const p = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}');
+  for (const t of ['pen', 'highlighter', 'eraser'] as SizedTool[]) {
+    if (SIZES[t].includes(p.sizes?.[t])) board.sizes[t] = p.sizes[t];
+  }
+  if (p.eraserMode === 'stroke' || p.eraserMode === 'partial') board.eraserMode = p.eraserMode;
+  if (typeof p.customColor === 'string') customColor = p.customColor;
+} catch {
+  /* χωρίς αποθηκευμένες προτιμήσεις */
 }
+function savePrefs(): void {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ sizes: board.sizes, eraserMode: board.eraserMode, customColor }));
+  } catch {
+    /* δεν πειράζει */
+  }
+}
+
+const palette = (): string[] => PALETTE[isDark(board.doc.bg) ? 'dark' : 'light'];
+const colorsEl = $('colors');
+let colorsKey = '';
+function renderColors(): void {
+  const list = [...palette()];
+  if (customColor && !list.includes(customColor)) list.push(customColor);
+  if (!list.includes(board.color)) list.push(board.color);
+  const key = list.join();
+  if (key === colorsKey) return;
+  colorsKey = key;
+  colorsEl.innerHTML =
+    list.map((c) => `<button class="color" data-color="${c}" style="background:${c}" aria-label="${c}"></button>`).join('') +
+    '<button id="colorBtn" title="Περισσότερα χρώματα" aria-label="Περισσότερα χρώματα"><span>🎨</span></button>';
+}
+$('colorGrid').innerHTML = MORE_COLORS.map((c) => `<button class="color" data-color="${c}" style="background:${c}" aria-label="${c}"></button>`).join('');
+
 const widthsEl = $('widths');
-for (const w of WIDTHS) {
+SIZE_NAME.forEach((name, i) => {
   const b = document.createElement('button');
   b.className = 'width';
-  b.dataset.width = String(w);
-  b.innerHTML = `<i style="width:${8 + w * 2}px;height:${8 + w * 2}px"></i>`;
+  b.dataset.width = String(i);
+  b.title = name;
+  b.innerHTML = `<i style="width:${6 + i * 6}px;height:${6 + i * 6}px"></i>`;
   widthsEl.append(b);
+});
+/** Το εργαλείο του οποίου το μέγεθος δείχνουν τα κουμπιά πάχους. */
+const sizedTool = (): SizedTool => (board.tool === 'eraser' || board.tool === 'highlighter' ? board.tool : 'pen');
+
+function pickColor(c: string): void {
+  board.color = c;
+  if (!palette().includes(c)) customColor = c;
+  if (!['highlighter', 'pen', 'shape', 'text'].includes(board.tool)) board.setTool('pen');
+  savePrefs();
+  refreshUi();
 }
 
 $('shapes').addEventListener('click', (e) => {
@@ -256,16 +325,47 @@ $('tools').addEventListener('click', (e) => {
   if (b) board.setTool(b.dataset.tool as Tool);
 });
 colorsEl.addEventListener('click', (e) => {
+  const t = e.target as HTMLElement;
+  if (t.closest('#colorBtn')) {
+    const open = colorMenu.classList.contains('hidden');
+    closePopups();
+    colorMenu.classList.toggle('hidden', !open);
+    if (open) placeNear(colorMenu, $('colorBtn'));
+    return;
+  }
+  const b = t.closest<HTMLElement>('[data-color]');
+  if (b) pickColor(b.dataset.color!);
+});
+$('colorGrid').addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-color]');
   if (!b) return;
-  board.color = b.dataset.color!;
-  if (!['highlighter', 'pen', 'shape', 'text'].includes(board.tool)) board.setTool('pen');
-  refreshUi();
+  closePopups();
+  pickColor(b.dataset.color!);
 });
+($('colorInput') as HTMLInputElement).onchange = (e) => {
+  closePopups();
+  pickColor((e.target as HTMLInputElement).value.toLowerCase());
+};
 widthsEl.addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-width]');
   if (!b) return;
-  board.width = Number(b.dataset.width);
+  const t = sizedTool();
+  board.sizes[t] = SIZES[t][Number(b.dataset.width)];
+  savePrefs();
+  refreshUi();
+});
+$('eraserOpts').addEventListener('click', (e) => {
+  const t = e.target as HTMLElement;
+  if (t.closest('#eraseAll')) {
+    if (board.page.items.length === 0) return;
+    board.clearPage();
+    toast('Σβήστηκαν όλα στη σελίδα — πάτα ↶ για να τα φέρεις πίσω');
+    return;
+  }
+  const b = t.closest<HTMLElement>('[data-eraser]');
+  if (!b) return;
+  board.eraserMode = b.dataset.eraser as EraserMode;
+  savePrefs();
   refreshUi();
 });
 $('undo').onclick = () => board.undo();
@@ -278,8 +378,15 @@ $('addPage').onclick = () => board.addPage();
 
 function refreshUi(): void {
   document.querySelectorAll<HTMLElement>('[data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === board.tool));
+  renderColors();
   document.querySelectorAll<HTMLElement>('[data-color]').forEach((b) => b.classList.toggle('on', b.dataset.color === board.color));
-  document.querySelectorAll<HTMLElement>('[data-width]').forEach((b) => b.classList.toggle('on', Number(b.dataset.width) === board.width));
+  const st = sizedTool();
+  document.querySelectorAll<HTMLElement>('[data-width]').forEach((b) => b.classList.toggle('on', SIZES[st][Number(b.dataset.width)] === board.sizes[st]));
+  document.querySelectorAll<HTMLElement>('[data-eraser]').forEach((b) => b.classList.toggle('on', b.dataset.eraser === board.eraserMode));
+  $('eraserOpts').classList.toggle('hidden', board.tool !== 'eraser');
+  colorsEl.classList.toggle('hidden', board.tool === 'eraser');
+  document.querySelectorAll<HTMLElement>('.bgSw').forEach((b) => b.classList.toggle('on', b.dataset.act === `bg-${board.doc.bg}`));
+  document.body.classList.toggle('dark', isDark(board.doc.bg));
   document.querySelectorAll<HTMLElement>('[data-shape]').forEach((b) => b.classList.toggle('on', b.dataset.shape === board.shapeKind));
   $('shapes').classList.toggle('hidden', board.tool !== 'shape');
   ($('undo') as HTMLButtonElement).disabled = !board.canUndo;
@@ -414,7 +521,9 @@ function initToolbar(): void {
 const menu = $('menu');
 const impMenu = $('importMenu');
 const gadgetMenu = $('gadgetMenu');
+const colorMenu = $('colorMenu');
 function closePopups(): void {
+  colorMenu.classList.add('hidden');
   menu.classList.add('hidden');
   impMenu.classList.add('hidden');
   gadgetMenu.classList.add('hidden');
@@ -465,7 +574,7 @@ $('importBtn').onclick = (e) => {
   if (open) placeNear(impMenu, $('importBtn'));
 };
 document.addEventListener('pointerdown', (e) => {
-  if (!(e.target as HTMLElement).closest('.popup, #menuBtn, #importBtn, #gadgetBtn')) closePopups();
+  if (!(e.target as HTMLElement).closest('.popup, #menuBtn, #importBtn, #gadgetBtn, #colorBtn')) closePopups();
 });
 
 impMenu.addEventListener('click', (e) => {
@@ -490,8 +599,8 @@ impMenu.addEventListener('click', (e) => {
 menu.addEventListener('click', async (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
   if (!b) return;
-  closePopups();
   const act = b.dataset.act!;
+  if (!act.startsWith('bg-')) closePopups();
   if (act === 'new') {
     if (confirm('Να δημιουργηθεί νέος πίνακας; Ο τρέχων θα χαθεί αν δεν τον έχεις αποθηκεύσει.')) board.loadDoc(newDoc());
   } else if (act === 'open') {
@@ -501,9 +610,10 @@ menu.addEventListener('click', async (e) => {
   } else if (act === 'png') {
     download(await board.exportPng(), `selida_${board.cur + 1}_${stamp()}.png`);
   } else if (act.startsWith('bg-')) {
+    // το τρέχον χρώμα περνά στο αντίστοιχο της παλέτας του νέου φόντου
+    const i = palette().indexOf(board.color);
     board.setBackground(act.slice(3) as Background);
-    if (act === 'bg-dark' && board.color === '#111111') board.color = '#ffffff';
-    if (act !== 'bg-dark' && board.color === '#ffffff') board.color = '#111111';
+    if (i >= 0) board.color = palette()[i];
     refreshUi();
   } else if (act === 'clear') {
     board.clearPage();
@@ -554,7 +664,7 @@ board.onPointerInfo = (e, n) => {
 
 // ---------- κείμενο ----------
 
-const TEXT_SIZES = [28, 44, 72];
+const TEXT_SIZES = [20, 28, 44, 72];
 const textEd = $('textEd');
 const textArea = textEd.querySelector('textarea')!;
 let textCtx: { x: number; y: number; existing?: TextItem } | null = null;
@@ -562,14 +672,14 @@ let textCtx: { x: number; y: number; existing?: TextItem } | null = null;
 function openText(x: number, y: number, existing?: TextItem): void {
   if (textCtx) closeText(true);
   textCtx = { x, y, existing };
-  const size = existing?.size ?? TEXT_SIZES[Math.max(0, WIDTHS.indexOf(board.width))];
+  const size = existing?.size ?? TEXT_SIZES[Math.max(0, SIZES.pen.indexOf(board.sizes.pen))];
   const [sx, sy] = board.toScreen(x, y);
   const fs = Math.max(14, size * board.zoom);
   textEd.style.left = Math.max(8, Math.min(sx, window.innerWidth - 340)) + 'px';
   textEd.style.top = Math.max(8, Math.min(sy, window.innerHeight - 220)) + 'px';
   textArea.style.fontSize = fs + 'px';
-  textArea.style.color = existing?.color ?? board.color;
-  textArea.style.background = board.color === '#ffffff' || existing?.color === '#ffffff' ? '#374151' : '#fff';
+  textArea.style.color = board.ink(existing?.color ?? board.color);
+  textArea.style.background = isDark(board.doc.bg) ? '#14201b' : '#fff';
   textArea.value = existing?.text ?? '';
   textEd.classList.remove('hidden');
   textArea.focus();
@@ -581,7 +691,7 @@ function closeText(save: boolean): void {
   textCtx = null;
   textEd.classList.add('hidden');
   if (save) {
-    const size = c.existing?.size ?? TEXT_SIZES[Math.max(0, WIDTHS.indexOf(board.width))];
+    const size = c.existing?.size ?? TEXT_SIZES[Math.max(0, SIZES.pen.indexOf(board.sizes.pen))];
     board.commitText(c.x, c.y, textArea.value, size, c.existing);
   }
 }
