@@ -1,12 +1,14 @@
 import {
-  AngleItem, AxesAn, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TableStyle, TextItem, Tool, TrigItem, View,
-  angleDegrees, angleEnds, axesRange, cloneItem, distToSeg, erasePartial, hitItem, inLasso, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, pointInPolygon, reboxShape,
-  recognizeShape, rotateItem, roundAngle, scaleItem, tableLines, textFont, textLines, translateItem, trianglePts, uid, unrot,
+  AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TableStyle, TextItem, Tool, View, angleEnds, cloneItem, distToSeg, erasePartial, hitItem, inLasso, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, pointInPolygon, reboxShape, recognizeShape, rotateItem, roundAngle, scaleItem, translateItem, trianglePts, uid, unrot,
 } from './model';
-import { Fn, Params, compileCached, keyPoints } from './expr';
-import { Asymptotes, asymptotes, integrate, lineEq, nf, oneSided, riemann, slope } from './analysis';
+import { Params } from './expr';
 import { STAMPS, SpringState } from './stamps';
 import { CM, GadgetDrag, GadgetKind, Gadgets } from './gadgets';
+import { ANGLE_KEY, angleSides, eraseMeasures, fmt, measureAngles, measureSides, trigPoint } from './measure';
+import { Renderer } from './render';
+
+// οι δοκιμές και όποιος τα χρειάζεται τα βρίσκουν ακόμα εδώ
+export { eraseMeasures, hlFlat, measureAngles, measureSides, radText } from './measure';
 
 type Mode = 'draw' | 'shape' | 'gadget' | 'erase' | 'move' | 'resize' | 'pan' | 'lasso' | 'gmove' | 'gresize' | 'rotate' | 'grotate' | 'measure' | 'laser' | 'osc' | 'none';
 
@@ -15,153 +17,9 @@ type Box = { x0: number; y0: number; x1: number; y1: number };
 interface Laser { pts: Pt[]; t: number }
 const LASER_MS = 1800;
 
-function trigPoint(t: TrigItem): Pt {
-  return [t.x + t.r * Math.cos(t.a), t.y - t.r * Math.sin(t.a)];
-}
-
 /** Περίοδος της ταλάντωσης των ελατηρίων και χρόνος απόσβεσης. */
 const OSC_PERIOD_MS = 1600;
 const OSC_FADE_MS = 5000;
-
-/** Ακέραιες μοίρες ως κλάσμα του π: 30 → «π/6», 135 → «3π/4». */
-export function radText(deg: number): string {
-  if (deg === 0) return '0';
-  const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
-  const g = gcd(deg, 180);
-  const n = deg / g, d = 180 / g;
-  return `${n === 1 ? '' : n}π${d === 1 ? '' : `/${d}`}`;
-}
-
-const HL_ALPHA = 0.35;
-/** Το χρώμα του υπογραμμιστικού όπως φαίνεται πάνω στο φόντο `bg`, χωρίς διαφάνεια. null αν το χρώμα δεν είναι #rrggbb. */
-export function hlFlat(color: string, bg: [number, number, number]): string | null {
-  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
-  if (!m) return null;
-  const ch = bg.map((b, i) => Math.round(b + (parseInt(m[i + 1], 16) - b) * HL_ALPHA));
-  return `rgb(${ch.join(',')})`;
-}
-
-function fmt(n: number): string {
-  return n.toLocaleString('el', { maximumFractionDigits: 1 });
-}
-
-/** Μια πλευρά σχήματος που μετριέται: τα άκρα της, το μήκος της και η θέση της ετικέτας. */
-interface MSide {
-  i: number;
-  a: Pt;
-  b: Pt;
-  len: number;
-  pos: Pt;
-}
-export function measureSides(s: Shape): MSide[] {
-  const out: MSide[] = [];
-  /** Ετικέτα στο μέσο του τμήματος ab, από την πλευρά που δεν είναι το σημείο `away`. */
-  const side = (i: number, a: Pt, b: Pt, away?: Pt): void => {
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    if (len < 30) return;
-    const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
-    let nx = -(b[1] - a[1]) / len, ny = (b[0] - a[0]) / len;
-    if (away ? (away[0] - mx) * nx + (away[1] - my) * ny > 0 : ny > 0) { nx = -nx; ny = -ny; }
-    out.push({ i, a, b, len, pos: [mx + nx * 18, my + ny * 18] });
-  };
-  const { x0, y0, x1, y1 } = s;
-  if (s.dash) return out;
-  if (s.shape === 'line' || s.shape === 'arrow') side(0, [x0, y0], [x1, y1]);
-  else if (s.shape === 'rect') {
-    const ctr: Pt = [(x0 + x1) / 2, (y0 + y1) / 2];
-    side(0, [x0, y0], [x1, y0], ctr);
-    side(1, [x0, y0], [x0, y1], ctr);
-  } else if (isPoly(s.shape)) {
-    const t = trianglePts(s);
-    const g: Pt = [t.reduce((a, p) => a + p[0], 0) / t.length, t.reduce((a, p) => a + p[1], 0) / t.length];
-    for (let i = 0; i < t.length; i++) side(i, t[i], t[(i + 1) % t.length], g);
-  }
-  return out;
-}
-
-/** Οι γωνίες τριγώνου, ρόμβου ή παραλληλογράμμου σε ακέραιες μοίρες με άθροισμα ακριβώς 180 (ή 360), και η θέση της ετικέτας καθεμιάς. */
-export function measureAngles(s: Shape): { i: number; deg: number; pos: Pt }[] {
-  if (!isPoly(s.shape) || s.dash) return [];
-  const t = trianglePts(s);
-  const n = t.length;
-  const g: Pt = [t.reduce((a, p) => a + p[0], 0) / n, t.reduce((a, p) => a + p[1], 0) / n];
-  const raw = t.map((p, i) => {
-    const q = t[(i + 1) % n], o = t[(i + n - 1) % n];
-    let d = Math.abs(Math.atan2(q[1] - p[1], q[0] - p[0]) - Math.atan2(o[1] - p[1], o[0] - p[0])) % (2 * Math.PI);
-    if (d > Math.PI) d = 2 * Math.PI - d;
-    return (d * 180) / Math.PI;
-  });
-  // στρογγύλεμα «μεγαλύτερου υπολοίπου»: αλλιώς οι στρογγυλεμένες γωνίες μπορεί να δώσουν 179 ή 181
-  const deg = raw.map(Math.floor);
-  const order = raw.map((_, i) => i).sort((a, b) => raw[b] - deg[b] - (raw[a] - deg[a]));
-  const need = Math.max(0, Math.min(n, (n - 2) * 180 - deg.reduce((a, v) => a + v, 0)));
-  for (let k = 0; k < need; k++) deg[order[k]]++;
-  return t.map((p, i) => {
-    const gl = Math.max(Math.hypot(g[0] - p[0], g[1] - p[1]), 1);
-    const off = Math.min(42, gl * 0.45);
-    return { i, deg: deg[i], pos: [p[0] + ((g[0] - p[0]) / gl) * off, p[1] + ((g[1] - p[1]) / gl) * off] as Pt };
-  });
-}
-/**
- * Η γόμα πάνω σε μετρήσεις: σβήνει όσες ετικέτες (μήκη, γωνίες, εμβαδόν/περίμετρος) ακουμπά ο κύκλος της.
- * Επιστρέφει το στοιχείο χωρίς αυτές, ή null αν δεν ακούμπησε καμία. Το ίδιο το σχήμα μένει.
- */
-export function eraseMeasures(it: Item, x: number, y: number, r: number): Item | null {
-  if ((it.kind !== 'shape' && it.kind !== 'angle') || !it.meas) return null;
-  const o = it.meas;
-  const [wx, wy] = it.kind === 'shape' ? unrot(it, x, y) : [x, y];
-  const near = (p: Pt, hw = 26, hh = 13): boolean => Math.abs(wx - p[0]) < hw + r && Math.abs(wy - p[1]) < hh + r;
-  const m: MeasOpts = { ...o };
-  if (it.kind === 'angle') {
-    if (o.len && angleSides(it).some((q) => near(q.pos))) m.len = false;
-  } else {
-    if (o.len && measureSides(it).some((q) => near(q.pos))) m.len = false;
-    const { x0, y0, x1, y1 } = it;
-    let ctr: Pt = [(x0 + x1) / 2, (y0 + y1) / 2];
-    if (o.ang && isPoly(it.shape) && measureAngles(it).some((q) => near(q.pos))) m.ang = false;
-    if (o.ang && it.shape === 'rect') {
-      const hit = ([[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as Pt[]).some((p) => {
-        const gl = Math.max(Math.hypot(ctr[0] - p[0], ctr[1] - p[1]), 1);
-        const off = Math.min(42, gl * 0.45);
-        return near([p[0] + ((ctr[0] - p[0]) / gl) * off, p[1] + ((ctr[1] - p[1]) / gl) * off]);
-      });
-      if (hit) m.ang = false;
-    }
-    if (isPoly(it.shape)) {
-      const t = trianglePts(it);
-      ctr = [t.reduce((a, p) => a + p[0], 0) / t.length, t.reduce((a, p) => a + p[1], 0) / t.length];
-    }
-    // οι γραμμές στο κέντρο (r/a/b της έλλειψης, Ε, Π) με τη σειρά που ζωγραφίζονται
-    const mid: (keyof MeasOpts)[] = [];
-    if (it.shape === 'ellipse' && o.len) mid.push('len');
-    if (it.shape !== 'line' && it.shape !== 'arrow') {
-      if (o.area) mid.push('area');
-      if (o.per) mid.push('per');
-    }
-    mid.forEach((key, i) => {
-      if (near([ctr[0], ctr[1] + (i - (mid.length - 1) / 2) * 24], 60, 11)) m[key] = false;
-    });
-  }
-  if (m.len === o.len && m.ang === o.ang && m.area === o.area && m.per === o.per) return null;
-  return { ...it, meas: m };
-}
-
-/** Στις ετικέτες του σχήματος οι γωνίες έχουν αριθμό 10 + κορυφή (οι πλευρές 0, 1, 2). */
-const ANGLE_KEY = 10;
-
-function angleSides(a: AngleItem): MSide[] {
-  if (a.arc) return [];
-  const [p1, p2] = angleEnds(a);
-  const o: Pt = [a.x, a.y];
-  return [p1, p2].map((p, i) => {
-    const len = i ? a.len2 : a.len1;
-    const away = i ? p1 : p2;
-    const mx = (o[0] + p[0]) / 2, my = (o[1] + p[1]) / 2;
-    let nx = -(p[1] - o[1]) / Math.max(len, 1), ny = (p[0] - o[0]) / Math.max(len, 1);
-    if ((away[0] - mx) * nx + (away[1] - my) * ny > 0) { nx = -nx; ny = -ny; }
-    return { i, a: o, b: p, len, pos: [mx + nx * 20, my + ny * 20] as Pt };
-  });
-}
 
 interface PState {
   id: number;
@@ -208,6 +66,8 @@ export type SizedTool = 'pen' | 'highlighter' | 'eraser';
 export type EraserMode = 'stroke' | 'partial';
 
 export class Board {
+  /** Η σχεδίαση των στοιχείων στον καμβά ζει στο render.ts. */
+  private r = new Renderer(this);
   doc: Doc = newDoc();
   cur = 0;
   tool: Tool = 'pen';
@@ -257,7 +117,7 @@ export class Board {
   private W = 0;
   private H = 0;
   private bctx: CanvasRenderingContext2D;
-  private lctx: CanvasRenderingContext2D;
+  lctx: CanvasRenderingContext2D;
 
   constructor(private base: HTMLCanvasElement, private live: HTMLCanvasElement) {
     this.bctx = base.getContext('2d')!;
@@ -894,7 +754,7 @@ export class Board {
     c.fillStyle = isDark(this.doc.bg) ? '#14201b' : '#ffffff';
     c.fillRect(0, 0, cv.width, cv.height);
     c.setTransform(s, 0, 0, s, (pad - b.x0) * s, (pad - b.y0) * s);
-    for (const it of items) this.drawItem(c, it);
+    for (const it of items) this.r.drawItem(c, it);
     const blob = await new Promise<Blob | null>((res) => cv.toBlob(res, 'image/png'));
     const first = items[0];
     return blob ? { blob, box: b, color: 'color' in first ? first.color : this.color } : null;
@@ -1141,7 +1001,7 @@ export class Board {
     this.redraw();
   }
 
-  private getImg(p: Pic): HTMLImageElement | null {
+  getImg(p: Pic): HTMLImageElement | null {
     let img = this.imgs.get(p.id);
     if (!img) {
       img = new Image();
@@ -1152,747 +1012,6 @@ export class Board {
     return img.complete && img.naturalWidth > 0 ? img : null;
   }
 
-  private paintBackground(c: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, k: number): void {
-    const bg = this.doc.bg;
-    const dark = isDark(bg);
-    if (!this.transparent) {
-      c.fillStyle = dark ? '#14201b' : '#ffffff';
-      c.fillRect(x0, y0, x1 - x0, y1 - y0);
-    }
-    const grid = bg.endsWith('grid');
-    if (!grid && !bg.endsWith('lines')) return;
-    // πλέγμα ανά 1 cm, γραμμές τετραδίου ανά 2 cm
-    const step = grid ? 40 : 80;
-    if (step * k < 8) return;
-    if (grid) c.strokeStyle = dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.13)';
-    else c.strokeStyle = dark ? 'rgba(147,197,253,0.3)' : 'rgba(37,99,235,0.3)';
-    c.lineWidth = (grid ? 1 : 1.5) / k;
-    c.beginPath();
-    for (let x = Math.floor(x0 / step) * step; grid && x <= x1; x += step) {
-      c.moveTo(x, y0);
-      c.lineTo(x, y1);
-    }
-    for (let y = Math.floor(y0 / step) * step; y <= y1; y += step) {
-      c.moveTo(x0, y);
-      c.lineTo(x1, y);
-    }
-    c.stroke();
-  }
-
-  private drawStroke(c: CanvasRenderingContext2D, s: Stroke): void {
-    const pts = s.pts;
-    c.save();
-    c.strokeStyle = c.fillStyle = this.ink(s.color);
-    c.lineCap = 'round';
-    c.lineJoin = 'round';
-    const w = s.hl ? s.width * 4 : s.width;
-    if (s.hl) {
-      // Πάνω στη σελίδα το υπογραμμιστικό «βάφει» μόνο ό,τι είναι πιο ανοιχτό από το χρώμα του (πιο σκούρο, σε σκούρο φόντο):
-      // δεύτερο πέρασμα στο ίδιο σημείο δεν το σκουραίνει και η γραφή από κάτω μένει καθαρή.
-      const dark = isDark(this.doc.bg);
-      const flat = c !== this.lctx && !this.transparent ? hlFlat(this.ink(s.color), dark ? [20, 32, 27] : [255, 255, 255]) : null;
-      if (flat) {
-        c.strokeStyle = c.fillStyle = flat;
-        c.globalCompositeOperation = dark ? 'lighten' : 'darken';
-      } else c.globalAlpha = HL_ALPHA;
-    }
-    c.lineWidth = w;
-    if (pts.length === 1) {
-      c.beginPath();
-      c.arc(pts[0][0], pts[0][1], w / 2, 0, Math.PI * 2);
-      c.fill();
-    } else {
-      c.beginPath();
-      c.moveTo(pts[0][0], pts[0][1]);
-      for (let i = 1; i < pts.length - 1; i++) {
-        const mx = (pts[i][0] + pts[i + 1][0]) / 2;
-        const my = (pts[i][1] + pts[i + 1][1]) / 2;
-        c.quadraticCurveTo(pts[i][0], pts[i][1], mx, my);
-      }
-      const last = pts[pts.length - 1];
-      c.lineTo(last[0], last[1]);
-      c.stroke();
-    }
-    c.restore();
-  }
-
-  private drawShape(c: CanvasRenderingContext2D, s: Shape): void {
-    c.save();
-    c.strokeStyle = c.fillStyle = this.ink(s.color);
-    c.lineCap = 'round';
-    c.lineJoin = 'round';
-    c.lineWidth = s.hl ? s.width * 4 : s.width;
-    c.globalAlpha = s.hl ? 0.35 : 1;
-    if (s.dash) c.setLineDash([10, 9]);
-    c.beginPath();
-    if (isPoly(s.shape)) {
-      const t = trianglePts(s);
-      t.forEach((q, i) => (i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])));
-      c.closePath();
-    } else if (s.shape === 'table') {
-      for (const [p, q] of tableLines(s)) {
-        c.moveTo(p[0], p[1]);
-        c.lineTo(q[0], q[1]);
-      }
-    } else if (s.shape === 'rect') {
-      c.rect(Math.min(s.x0, s.x1), Math.min(s.y0, s.y1), Math.abs(s.x1 - s.x0), Math.abs(s.y1 - s.y0));
-    } else if (s.shape === 'ellipse') {
-      c.ellipse((s.x0 + s.x1) / 2, (s.y0 + s.y1) / 2, Math.max(Math.abs(s.x1 - s.x0) / 2, 0.5), Math.max(Math.abs(s.y1 - s.y0) / 2, 0.5), 0, 0, Math.PI * 2);
-    } else {
-      c.moveTo(s.x0, s.y0);
-      c.lineTo(s.x1, s.y1);
-      if (s.shape === 'arrow') {
-        const ang = Math.atan2(s.y1 - s.y0, s.x1 - s.x0);
-        const L = Math.max(s.width * 4, 16);
-        for (const d of [-0.45, 0.45]) {
-          c.moveTo(s.x1, s.y1);
-          c.lineTo(s.x1 - L * Math.cos(ang + d), s.y1 - L * Math.sin(ang + d));
-        }
-      }
-    }
-    c.stroke();
-    // γωνία με το πιο κοντινό (σε άνοιγμα) προηγούμενο βέλος/ευθεία που ξεκινά από το ίδιο σημείο
-    const l2 = Math.hypot(s.x1 - s.x0, s.y1 - s.y0);
-    if (s.angleWith && l2 > 20) {
-      const a2 = Math.atan2(s.y1 - s.y0, s.x1 - s.x0);
-      let best: { a1: number; d: number; len: number } | null = null;
-      for (const o of this.page.items) {
-        if (o.id === s.id) break;
-        if (o.kind !== 'shape' || (o.shape !== 'arrow' && o.shape !== 'line') || Math.hypot(o.x0 - s.x0, o.y0 - s.y0) >= 1) continue;
-        const l1 = Math.hypot(o.x1 - o.x0, o.y1 - o.y0);
-        if (l1 <= 20) continue;
-        const a1 = Math.atan2(o.y1 - o.y0, o.x1 - o.x0);
-        let d = Math.abs(a1 - a2) % (2 * Math.PI);
-        if (d > Math.PI) d = 2 * Math.PI - d;
-        if (!best || d < best.d) best = { a1, d, len: Math.min(l1, l2) };
-      }
-      if (best) {
-        c.globalAlpha = 1;
-        this.drawAngleMark(c, s.x0, s.y0, best.a1, a2, best.len, s.width, Math.round((best.d * 180) / Math.PI));
-      }
-    }
-    c.restore();
-  }
-
-  private drawText(c: CanvasRenderingContext2D, t: TextItem): void {
-    c.save();
-    c.fillStyle = this.ink(t.color);
-    c.font = textFont(t.size);
-    c.textBaseline = 'top';
-    textLines(t).forEach((line, i) => c.fillText(line, t.x, t.y + i * t.size * 1.25));
-    c.restore();
-  }
-
-  private drawAngle(c: CanvasRenderingContext2D, a: AngleItem): void {
-    const [p1, p2] = angleEnds(a);
-    const deg = angleDegrees(a);
-    c.save();
-    c.strokeStyle = c.fillStyle = this.ink(a.color);
-    c.lineCap = 'round';
-    c.lineJoin = 'round';
-    c.lineWidth = a.width;
-    if (!a.arc) {
-      c.beginPath();
-      c.moveTo(p1[0], p1[1]);
-      c.lineTo(a.x, a.y);
-      c.lineTo(p2[0], p2[1]);
-      c.stroke();
-    }
-
-    this.drawAngleMark(c, a.x, a.y, a.a1, a.a2, Math.min(a.len1, a.len2), a.width, deg, a.arc ? a.len1 * 0.4 : undefined);
-    if (a.meas?.len) {
-      c.fillStyle = isDark(this.doc.bg) ? '#5eead4' : '#0f766e';
-      c.font = '600 17px system-ui, "Segoe UI", Roboto, sans-serif';
-      for (const m of angleSides(a)) c.fillText(a.labels?.[m.i] ?? fmt(m.len / CM), m.pos[0], m.pos[1]);
-    }
-    c.restore();
-  }
-
-  /** Τόξο (ή τετραγωνάκι για ορθή γωνία) και ένδειξη μοιρών, με το τρέχον χρώμα του c. */
-  private drawAngleMark(c: CanvasRenderingContext2D, x: number, y: number, a1: number, a2: number, len: number, width: number, deg: number, radius?: number): void {
-    const r = radius ?? Math.max(18, Math.min(46, len * 0.4));
-    const diff = Math.atan2(Math.sin(a2 - a1), Math.cos(a2 - a1));
-    c.lineWidth = Math.max(1.5, width * 0.5);
-    c.beginPath();
-    if (deg === 90) {
-      const q = r * 0.6;
-      const u1: Pt = [Math.cos(a1) * q, Math.sin(a1) * q];
-      const u2: Pt = [Math.cos(a2) * q, Math.sin(a2) * q];
-      c.moveTo(x + u1[0], y + u1[1]);
-      c.lineTo(x + u1[0] + u2[0], y + u1[1] + u2[1]);
-      c.lineTo(x + u2[0], y + u2[1]);
-    } else {
-      c.arc(x, y, r, a1, a1 + diff, diff < 0);
-    }
-    c.stroke();
-    const mid = a1 + diff / 2;
-    const lr = r + 26;
-    c.font = '600 22px system-ui, "Segoe UI", Roboto, sans-serif';
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.fillText(`${deg}°`, x + lr * Math.cos(mid), y + lr * Math.sin(mid));
-  }
-
-  private drawAxes(c: CanvasRenderingContext2D, a: AxesItem): void {
-    const { xmin, xmax, ymin, ymax } = axesRange(a);
-    const u = a.unit;
-    const X = (v: number) => a.x + v * u;
-    const Y = (v: number) => a.y - v * u;
-    c.save();
-    c.strokeStyle = c.fillStyle = this.ink(a.color);
-    c.lineCap = 'round';
-    c.lineJoin = 'round';
-
-    // βοηθητικό πλέγμα
-    c.globalAlpha = 0.16;
-    c.lineWidth = 1;
-    c.beginPath();
-    for (let i = xmin; i <= xmax; i++) { c.moveTo(X(i), Y(ymin)); c.lineTo(X(i), Y(ymax)); }
-    for (let j = ymin; j <= ymax; j++) { c.moveTo(X(xmin), Y(j)); c.lineTo(X(xmax), Y(j)); }
-    c.stroke();
-    c.globalAlpha = 1;
-
-    // συναρτήσεις
-    const live = a.id === this.selected;
-    let all: FnDef[] = a.fns ?? [];
-    const pv = live ? this.fnPreview : null;
-    if (pv) all = pv.index === null ? [...all, { expr: pv.expr, color: pv.color }] : all.map((f, i) => (i === pv.index ? { ...f, expr: pv.expr } : f));
-    const fns = all.filter((f) => !f.hidden);
-    const prm: Params = { ...a.params, ...(live ? this.paramPreview : null) };
-    if (fns.length) {
-      c.save();
-      c.beginPath();
-      c.rect(X(xmin), Y(ymax), (xmax - xmin) * u, (ymax - ymin) * u);
-      c.clip();
-      c.lineWidth = 3;
-      const n = Math.max(80, Math.min(1500, Math.round(((xmax - xmin) * u) / 1.5)));
-      for (const f of fns) {
-        const fn = compileCached(f.expr);
-        if (!fn) continue;
-        c.strokeStyle = this.ink(f.color);
-        c.beginPath();
-        let pen = false, py = 0;
-        for (let i = 0; i <= n; i++) {
-          const xv = xmin + ((xmax - xmin) * i) / n;
-          const yv = Math.max(-1e5, Math.min(1e5, fn(xv, prm)));
-          if (!Number.isFinite(yv)) {
-            pen = false;
-            continue;
-          }
-          // μεγάλο άλμα = ασύμπτωτη: δεν ενώνουμε τα δύο σκέλη
-          if (pen && Math.abs(yv - py) < ymax - ymin) c.lineTo(X(xv), Y(yv));
-          else c.moveTo(X(xv), Y(yv));
-          pen = true;
-          py = yv;
-        }
-        c.stroke();
-      }
-      const info = a.an ? this.drawAnalysis(c, a, fns, prm) : [];
-      c.restore();
-      const lf = Math.max(11, Math.min(20, u * 0.45));
-      c.font = `italic 600 ${lf}px system-ui, "Segoe UI", Roboto, sans-serif`;
-      c.textAlign = 'left';
-      c.textBaseline = 'top';
-      fns.forEach((f, i) => {
-        c.fillStyle = this.ink(f.color);
-        c.fillText(compileCached(f.expr) ? f.expr : `${f.expr} ?`, X(xmax + 1.1), Y(ymax) + i * lf * 1.4);
-      });
-      if (a.points) {
-        const ok = fns.map((f) => compileCached(f.expr)).filter((f): f is Fn => !!f);
-        const num = (v: number): string => String(+v.toFixed(2) || 0);
-        c.font = `600 ${lf * 0.85}px system-ui, "Segoe UI", Roboto, sans-serif`;
-        c.textBaseline = 'bottom';
-        c.fillStyle = this.ink(a.color);
-        for (const k of keyPoints(ok, prm, xmin, xmax, ymin, ymax)) {
-          c.beginPath();
-          c.arc(X(k.x), Y(k.y), Math.max(4, u * 0.09), 0, Math.PI * 2);
-          c.fill();
-          c.fillText(`(${num(k.x)}, ${num(k.y)})`, X(k.x) + 7, Y(k.y) - 5);
-        }
-      }
-      // αποτελέσματα ανάλυσης, κάτω από τα ονόματα των συναρτήσεων
-      c.font = `600 ${lf * 0.9}px system-ui, "Segoe UI", Roboto, sans-serif`;
-      c.textBaseline = 'top';
-      info.forEach(([text, col], i) => {
-        c.fillStyle = col;
-        c.fillText(text, X(xmax + 1.1), Y(ymax) + (fns.length + 0.6 + i) * lf * 1.4);
-      });
-      c.fillStyle = this.ink(a.color);
-    }
-
-    // άξονες με βέλη
-    const ext = 0.6;
-    const xa = xmin < 0 ? xmin - ext : 0;
-    const ya = ymin < 0 ? ymin - ext : 0;
-    const ah = Math.max(8, u * 0.22);
-    c.lineWidth = 2.5;
-    c.beginPath();
-    c.moveTo(X(xa), a.y);
-    c.lineTo(X(xmax + ext), a.y);
-    c.moveTo(X(xmax + ext) - ah, a.y - ah * 0.55);
-    c.lineTo(X(xmax + ext), a.y);
-    c.lineTo(X(xmax + ext) - ah, a.y + ah * 0.55);
-    c.moveTo(a.x, Y(ya));
-    c.lineTo(a.x, Y(ymax + ext));
-    c.moveTo(a.x - ah * 0.55, Y(ymax + ext) + ah);
-    c.lineTo(a.x, Y(ymax + ext));
-    c.lineTo(a.x + ah * 0.55, Y(ymax + ext) + ah);
-    // υποδιαιρέσεις
-    const t = Math.max(3, u * 0.1);
-    for (let i = xmin; i <= xmax; i++) if (i !== 0) { c.moveTo(X(i), a.y - t); c.lineTo(X(i), a.y + t); }
-    for (let j = ymin; j <= ymax; j++) if (j !== 0) { c.moveTo(a.x - t, Y(j)); c.lineTo(a.x + t, Y(j)); }
-    c.stroke();
-
-    // αριθμοί και ονόματα αξόνων
-    const fs = Math.max(9, Math.min(17, u * 0.38));
-    c.font = `${fs}px system-ui, "Segoe UI", Roboto, sans-serif`;
-    c.textAlign = 'center';
-    c.textBaseline = 'top';
-    for (let i = xmin; i <= xmax; i++) if (i !== 0) c.fillText(String(i), X(i), a.y + t + 3);
-    c.textAlign = 'right';
-    c.textBaseline = 'middle';
-    for (let j = ymin; j <= ymax; j++) if (j !== 0) c.fillText(String(j), a.x - t - 4, Y(j));
-    c.textBaseline = 'top';
-    c.fillText('O', a.x - t - 3, a.y + t + 3);
-    c.font = `italic 600 ${fs * 1.25}px system-ui, "Segoe UI", Roboto, sans-serif`;
-    c.textAlign = 'center';
-    c.textBaseline = 'top';
-    c.fillText(a.lx ?? 'x', X(xmax + ext), a.y + t + 4);
-    c.textAlign = 'right';
-    c.textBaseline = 'middle';
-    c.fillText(a.ly ?? 'y', a.x - t - 6, Y(ymax + ext) + 4);
-    c.restore();
-  }
-
-  /** Οι δύο πρώτες ορατές συναρτήσεις των αξόνων (σε αυτές δουλεύουν ολοκλήρωμα, όριο, εφαπτομένη) με τις παραμέτρους τους. */
-  private axesFn(a: AxesItem): { f?: (x: number) => number; g?: (x: number) => number } {
-    const prm: Params = { ...a.params, ...(a.id === this.selected ? this.paramPreview : null) };
-    const ok = (a.fns ?? []).filter((d) => !d.hidden).map((d) => compileCached(d.expr)).filter((d): d is Fn => !!d);
-    return { f: ok[0] && ((x) => ok[0](x, prm)), g: ok[1] && ((x) => ok[1](x, prm)) };
-  }
-
-  /** Λαβές των εργαλείων ανάλυσης: άκρα ολοκλήρωσης και x0 πάνω στον άξονα x, τα υπόλοιπα πάνω στην καμπύλη. */
-  private axesHandles(a: AxesItem): { k: string; p: Pt }[] {
-    const an = a.an;
-    const { f } = this.axesFn(a);
-    if (!an || !f) return [];
-    const { ymin, ymax } = axesRange(a);
-    const X = (v: number) => a.x + v * a.unit;
-    const on = (x: number): Pt => {
-      const y = f(x);
-      return [X(x), a.y - (Number.isFinite(y) ? Math.max(ymin, Math.min(ymax, y)) : 0) * a.unit];
-    };
-    const out: { k: string; p: Pt }[] = [];
-    if (an.lim) out.push({ k: 'lim.x', p: on(an.lim.x) }, { k: 'lim.x0', p: [X(an.lim.x0), a.y] });
-    if (an.tan) {
-      out.push({ k: 'tan.x', p: on(an.tan.x) });
-      if (an.tan.h) out.push({ k: 'tan.h', p: on(an.tan.x + an.tan.h) });
-    }
-    if (an.int) out.push({ k: 'int.a', p: [X(an.int.a), a.y] }, { k: 'int.b', p: [X(an.int.b), a.y] });
-    return out;
-  }
-
-  /** Μετακίνηση μιας λαβής ανάλυσης στη θέση x (σε μονάδες των αξόνων). */
-  private moveAxesHandle(o: AxesItem, key: string, xw: number): AxesItem {
-    const { xmin, xmax } = axesRange(o);
-    const an: AxesAn = { ...o.an };
-    let x = Math.max(xmin, Math.min(xmax, xw));
-    // βήμα 0,05 και «κούμπωμα» στους ακέραιους· το σημείο του ορίου κινείται πιο λεπτά, για να πλησιάζει το x0
-    const snap = (v: number): number => (Math.abs(v - Math.round(v)) < 0.08 ? Math.round(v) : Math.round(v * 20) / 20);
-    if (key === 'lim.x' && an.lim) {
-      x = Math.round(x * 100) / 100;
-      an.lim = { ...an.lim, x: Math.abs(x - an.lim.x0) < 0.012 ? an.lim.x0 : x };
-    } else if (key === 'lim.x0' && an.lim) an.lim = { ...an.lim, x0: snap(x) };
-    else if (key === 'tan.x' && an.tan) an.tan = { ...an.tan, x: snap(x) };
-    else if (key === 'tan.h' && an.tan) {
-      const h = Math.round((x - an.tan.x) * 20) / 20;
-      an.tan = { ...an.tan, h: Math.abs(h) < 0.05 ? (x < an.tan.x ? -0.05 : 0.05) : h };
-    } else if (key === 'int.a' && an.int) an.int = { ...an.int, a: snap(x) };
-    else if (key === 'int.b' && an.int) an.int = { ...an.int, b: snap(x) };
-    return { ...o, an };
-  }
-
-  private asymCache = new Map<string, Asymptotes>();
-
-  /**
-   * Σχεδιάζει μέσα στο πλαίσιο των αξόνων τα εργαλεία ανάλυσης (ολοκλήρωμα, Riemann, όριο, εφαπτομένη, ασύμπτωτες)
-   * και επιστρέφει τις γραμμές κειμένου με τα αποτελέσματα.
-   */
-  private drawAnalysis(c: CanvasRenderingContext2D, a: AxesItem, fns: FnDef[], prm: Params): [string, string][] {
-    const an = a.an!;
-    const { xmin, xmax, ymin, ymax } = axesRange(a);
-    const u = a.unit;
-    const X = (v: number) => a.x + v * u;
-    const Y = (v: number) => a.y - Math.max(-1e5, Math.min(1e5, v)) * u;
-    const dark = isDark(this.doc.bg);
-    const ink = this.ink(a.color);
-    const ok = fns.map((d) => ({ d, fn: compileCached(d.expr) })).filter((o): o is { d: FnDef; fn: Fn } => !!o.fn);
-    const info: [string, string][] = [];
-    if (!ok.length) return info;
-    const f = (x: number): number => ok[0].fn(x, prm);
-    const fcol = this.ink(ok[0].d.color);
-    const dot = (x: number, y: number, col: string, hollow = false): void => {
-      c.beginPath();
-      c.arc(X(x), Y(y), Math.max(5, u * 0.11), 0, Math.PI * 2);
-      c.fillStyle = hollow ? (dark ? '#14201b' : '#ffffff') : col;
-      c.strokeStyle = col;
-      c.lineWidth = 2.5;
-      c.setLineDash([]);
-      c.fill();
-      c.stroke();
-    };
-    const lineThrough = (x: number, y: number, m: number): void => {
-      c.beginPath();
-      c.moveTo(X(xmin), Y(y + m * (xmin - x)));
-      c.lineTo(X(xmax), Y(y + m * (xmax - x)));
-      c.stroke();
-    };
-    c.save();
-
-    if (an.asym) {
-      c.lineWidth = 1.8;
-      c.setLineDash([9, 7]);
-      const fs = Math.max(10, Math.min(16, u * 0.36));
-      c.font = `600 ${fs}px system-ui, "Segoe UI", Roboto, sans-serif`;
-      for (const o of ok) {
-        const key = `${o.d.expr}|${JSON.stringify(prm)}|${xmin}|${xmax}`;
-        let as = this.asymCache.get(key);
-        if (!as) {
-          if (this.asymCache.size > 200) this.asymCache.clear();
-          as = asymptotes((x) => o.fn(x, prm), xmin, xmax);
-          this.asymCache.set(key, as);
-        }
-        c.strokeStyle = c.fillStyle = this.ink(o.d.color);
-        c.textBaseline = 'top';
-        for (const x of as.vx) {
-          c.beginPath();
-          c.moveTo(X(x), Y(ymin));
-          c.lineTo(X(x), Y(ymax));
-          c.stroke();
-          c.textAlign = 'left';
-          c.fillText(`x = ${nf(x)}`, X(x) + 5, Y(ymax) + 4);
-        }
-        for (const l of as.lines) {
-          lineThrough(0, l.b, l.m);
-          // η ετικέτα μπαίνει στο δεξί (ή αριστερό) άκρο όπου η ευθεία είναι μέσα στο πλαίσιο
-          const right = l.m * xmax + l.b <= ymax && l.m * xmax + l.b >= ymin;
-          const lx = right ? xmax : xmin;
-          c.textAlign = right ? 'right' : 'left';
-          c.textBaseline = 'bottom';
-          c.fillText(lineEq(l.m, l.b), X(lx) + (right ? -5 : 5), Y(l.m * lx + l.b) - 4);
-        }
-      }
-      c.setLineDash([]);
-    }
-
-    if (an.int) {
-      const lo = Math.min(an.int.a, an.int.b), hi = Math.max(an.int.a, an.int.b);
-      const g = an.int.between && ok[1] ? (x: number): number => ok[1].fn(x, prm) : null;
-      const base = (x: number): number => (g ? g(x) : 0);
-      const d = (x: number): number => f(x) - base(x);
-      // το κομμάτι κάτω από τον άξονα σε άλλο χρώμα από τη συνάρτηση
-      const reds = ['#fb7185', '#e11d48'];
-      const neg = reds.includes(fcol) ? (dark ? '#7dd3fc' : '#2563eb') : reds[dark ? 0 : 1];
-      const fin = (v: number): number => (Number.isFinite(v) ? v : 0);
-      if (an.int.n) {
-        const n = an.int.n, w = (hi - lo) / n;
-        c.lineWidth = 1.5;
-        for (let i = 0; i < n; i++) {
-          const x = lo + i * w, h = fin(d(x)), b0 = fin(base(x));
-          c.fillStyle = c.strokeStyle = h >= 0 ? fcol : neg;
-          c.globalAlpha = 0.22;
-          c.fillRect(X(x), Y(b0 + h), w * u, Y(b0) - Y(b0 + h));
-          c.globalAlpha = 0.9;
-          c.strokeRect(X(x), Y(b0 + h), w * u, Y(b0) - Y(b0 + h));
-        }
-      } else {
-        const n = 240;
-        for (const sign of [1, -1]) {
-          c.beginPath();
-          for (let i = 0; i <= n; i++) {
-            const x = lo + ((hi - lo) * i) / n, b0 = fin(base(x)), h = fin(d(x));
-            c.lineTo(X(x), Y(b0 + (h * sign > 0 ? h : 0)));
-          }
-          for (let i = n; i >= 0; i--) {
-            const x = lo + ((hi - lo) * i) / n;
-            c.lineTo(X(x), Y(fin(base(x))));
-          }
-          c.closePath();
-          c.fillStyle = sign > 0 ? fcol : neg;
-          c.globalAlpha = 0.25;
-          c.fill();
-        }
-      }
-      c.globalAlpha = 1;
-      c.strokeStyle = ink;
-      c.lineWidth = 1.5;
-      c.beginPath();
-      for (const x of [an.int.a, an.int.b]) {
-        c.moveTo(X(x), Y(fin(base(x))));
-        c.lineTo(X(x), Y(fin(f(x))));
-      }
-      c.stroke();
-      const what = g ? '(f − g)' : 'f(x)';
-      const val = integrate(d, an.int.a, an.int.b);
-      info.push([`∫ ${what}dx από ${nf(an.int.a)} έως ${nf(an.int.b)} = ${nf(val)}`, ink]);
-      info.push([`Εμβαδόν Ε = ${nf(integrate((x) => Math.abs(d(x)), lo, hi))} τ.μ.`, ink]);
-      if (an.int.n) info.push([`Άθροισμα Riemann, ν = ${an.int.n}: Sν = ${nf(riemann(d, an.int.a, an.int.b, an.int.n))}`, ink]);
-    }
-
-    if (an.tan) {
-      const x = an.tan.x, y = f(x);
-      const tc = dark ? '#fbbf24' : '#d97706';
-      const sc = dark ? '#c4b5fd' : '#7c3aed';
-      if (Number.isFinite(y)) {
-        if (an.tan.h) {
-          const y2 = f(x + an.tan.h);
-          if (Number.isFinite(y2)) {
-            const ms = (y2 - y) / an.tan.h;
-            c.strokeStyle = sc;
-            c.lineWidth = 2;
-            lineThrough(x, y, ms);
-            dot(x + an.tan.h, y2, sc);
-            info.push([`Τέμνουσα (h = ${nf(an.tan.h)}): λ = ${nf(ms)}`, sc]);
-          }
-        }
-        const m = slope(f, x);
-        if (Number.isFinite(m)) {
-          c.strokeStyle = tc;
-          c.lineWidth = 2.5;
-          lineThrough(x, y, m);
-          info.push([`f′(${nf(x)}) = ${nf(m)}`, tc], [`Εφαπτομένη: ${lineEq(m, y - m * x)}`, tc]);
-        } else info.push([`f′(${nf(x)}): δεν υπάρχει`, tc]);
-        dot(x, y, tc);
-      } else info.push([`f(${nf(x)}): δεν ορίζεται`, tc]);
-    }
-
-    if (an.lim) {
-      const { x0, x } = an.lim;
-      const y = f(x);
-      c.strokeStyle = ink;
-      c.lineWidth = 1.5;
-      c.setLineDash([6, 6]);
-      c.beginPath();
-      c.moveTo(X(x0), Y(ymin));
-      c.lineTo(X(x0), Y(ymax));
-      if (Number.isFinite(y)) {
-        c.moveTo(X(x), Y(0));
-        c.lineTo(X(x), Y(y));
-        c.lineTo(X(0), Y(y));
-      }
-      c.stroke();
-      c.setLineDash([]);
-      const l = oneSided(f, x0, -1), r = oneSided(f, x0, 1);
-      const at = f(x0);
-      for (const v of new Set([l, r])) {
-        if (v !== null && Number.isFinite(v) && !(Number.isFinite(at) && Math.abs(at - v) < 1e-6)) dot(x0, v, fcol, true);
-      }
-      if (Number.isFinite(at)) dot(x0, at, fcol);
-      if (Number.isFinite(y)) dot(x, y, ink);
-      const txt = (v: number | null): string => (v === null ? 'δεν υπάρχει' : nf(v));
-      info.push([`x = ${nf(x)}   f(x) = ${Number.isFinite(y) ? (+y.toFixed(3) || 0).toLocaleString('el', { maximumFractionDigits: 3 }).replace('-', '−') : 'δεν ορίζεται'}`, ink]);
-      if (l !== null && l === r) info.push([`lim f(x) = ${nf(l)}  όταν x → ${nf(x0)}`, ink]);
-      else info.push([`x → ${nf(x0)}⁻ :  lim f(x) = ${txt(l)}`, ink], [`x → ${nf(x0)}⁺ :  lim f(x) = ${txt(r)}`, ink]);
-    }
-    c.restore();
-    return info;
-  }
-
-  private drawStamp(c: CanvasRenderingContext2D, s: StampItem): void {
-    const d = STAMPS[s.name];
-    if (!d) return;
-    c.save();
-    c.translate(s.x, s.y);
-    c.strokeStyle = c.fillStyle = this.ink(s.color);
-    c.lineWidth = s.width;
-    c.lineCap = 'round';
-    c.lineJoin = 'round';
-    d.draw(c, s.w, s.h, d.spring ? this.springState(s) : undefined);
-    c.restore();
-  }
-
-  private drawTrig(c: CanvasRenderingContext2D, t: TrigItem): void {
-    const { x, y, r, a } = t;
-    const [px, py] = trigPoint(t);
-    const dark = isDark(this.doc.bg);
-    const cosC = dark ? '#7dd3fc' : '#2563eb';
-    const sinC = dark ? '#fb7185' : '#e11d48';
-    const ink = this.ink(t.color);
-    c.save();
-    c.lineCap = 'round';
-    c.strokeStyle = c.fillStyle = ink;
-    c.lineWidth = 1.5;
-    c.beginPath();
-    c.moveTo(x - r * 1.2, y); c.lineTo(x + r * 1.2, y);
-    c.moveTo(x, y - r * 1.2); c.lineTo(x, y + r * 1.2);
-    c.stroke();
-    c.lineWidth = 2.5;
-    c.beginPath();
-    c.arc(x, y, r, 0, Math.PI * 2);
-    c.stroke();
-    c.beginPath();
-    c.moveTo(x, y); c.lineTo(px, py);
-    c.stroke();
-    c.lineWidth = 1.5;
-    c.beginPath();
-    c.arc(x, y, r * 0.2, 0, -a, true);
-    c.stroke();
-    // η γωνία σε μοίρες πάνω στο σχήμα, στη διχοτόμο του τόξου
-    const degOn = ((Math.round((a * 180) / Math.PI) % 360) + 360) % 360;
-    c.font = `600 ${r * 0.1}px system-ui, "Segoe UI", Roboto, sans-serif`;
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    if (degOn < 40) c.fillText(`${degOn}°`, x + r * 0.4, y + r * 0.1);
-    else if (degOn > 320) c.fillText(`${degOn}°`, x + r * 0.4, y - r * 0.1);
-    else {
-      // κοντά στις 180° η διχοτόμος πέφτει πάνω στον κατακόρυφο άξονα: τη γέρνουμε λίγο
-      const m = Math.abs(degOn - 180) < 25 ? a / 2 - 0.3 : a / 2;
-      c.fillText(`${degOn}°`, x + r * 0.36 * Math.cos(m), y - r * 0.36 * Math.sin(m));
-    }
-    c.lineWidth = 5;
-    c.strokeStyle = cosC;
-    c.beginPath();
-    c.moveTo(x, y); c.lineTo(px, y);
-    c.stroke();
-    c.strokeStyle = sinC;
-    c.beginPath();
-    c.moveTo(px, y); c.lineTo(px, py);
-    c.stroke();
-    c.beginPath();
-    c.arc(px, py, Math.max(6, r * 0.045), 0, Math.PI * 2);
-    c.fill();
-
-    const fs = r * 0.11;
-    const sin = Math.sin(a), cos = Math.cos(a);
-    const deg = ((Math.round((a * 180) / Math.PI) % 360) + 360) % 360;
-    const n2 = (v: number) => (Math.abs(v) < 0.005 ? 0 : v).toLocaleString('el', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    c.font = `600 ${fs}px system-ui, "Segoe UI", Roboto, sans-serif`;
-    c.textAlign = 'left';
-    c.textBaseline = 'middle';
-    const parts: [string, string][] = [
-      [`θ = ${radText(deg)} rad`, ink],
-      [`ημθ = ${n2(sin)}`, sinC],
-      [`συνθ = ${n2(cos)}`, cosC],
-      [`εφθ = ${Math.abs(cos) < 1e-9 ? '—' : n2(sin / cos)}`, ink],
-    ];
-    const gap = fs * 1.1;
-    const widths = parts.map(([text]) => c.measureText(text).width);
-    let tx = x - (widths.reduce((p, w) => p + w, 0) + gap * 3) / 2;
-    parts.forEach(([text, col], i) => {
-      c.fillStyle = col;
-      c.fillText(text, tx, y + r * 1.28 + fs);
-      tx += widths[i] + gap;
-    });
-    c.restore();
-  }
-
-  /** Οι μετρήσεις που έχουν ζητηθεί για ένα σχήμα (μήκη, γωνίες, εμβαδόν, περίμετρος), σε μονάδες του χάρακα. */
-  private drawMeasures(c: CanvasRenderingContext2D, s: Shape): void {
-    const o = s.meas;
-    if (s.dash || !o) return;
-    c.save();
-    c.fillStyle = isDark(this.doc.bg) ? '#5eead4' : '#0f766e';
-    c.font = '600 17px system-ui, "Segoe UI", Roboto, sans-serif';
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    if (s.rot) {
-      // στραμμένο ορθογώνιο ή έλλειψη: οι μετρήσεις στρέφονται μαζί του
-      const mx = (s.x0 + s.x1) / 2, my = (s.y0 + s.y1) / 2;
-      c.translate(mx, my);
-      c.rotate(s.rot);
-      c.translate(-mx, -my);
-    }
-    const len = (a: Pt, b: Pt) => Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const sides = measureSides(s);
-    if (o.len) for (const m of sides) c.fillText(s.labels?.[m.i] ?? fmt(m.len / CM), m.pos[0], m.pos[1]);
-    // με δικές σου ετικέτες το σχήμα δεν είναι σε κλίμακα: εμβαδόν και περίμετρος δεν θα είχαν νόημα
-    const scaled = !Object.keys(s.labels ?? {}).some((key) => +key < ANGLE_KEY);
-    const { x0, y0, x1, y1 } = s;
-    /** Γραμμές κειμένου στο κέντρο του σχήματος. */
-    const mid: string[] = [];
-    let ctr: Pt = [(x0 + x1) / 2, (y0 + y1) / 2];
-    /** Μοίρες στην κορυφή p, λίγο προς το εσωτερικό (σημείο g). */
-    const corner = (p: Pt, q: Pt, w: Pt, g: Pt): void => {
-      const u1 = Math.atan2(q[1] - p[1], q[0] - p[0]), u2 = Math.atan2(w[1] - p[1], w[0] - p[0]);
-      let d = Math.abs(u1 - u2) % (2 * Math.PI);
-      if (d > Math.PI) d = 2 * Math.PI - d;
-      const gl = Math.max(len(p, g), 1);
-      const off = Math.min(42, gl * 0.45);
-      c.fillText(`${Math.round((d * 180) / Math.PI)}°`, p[0] + ((g[0] - p[0]) / gl) * off, p[1] + ((g[1] - p[1]) / gl) * off);
-    };
-    if (s.shape === 'rect') {
-      const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
-      if (o.ang && w > 110 && h > 70) {
-        const q: Pt[] = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
-        for (let i = 0; i < 4; i++) corner(q[i], q[(i + 1) % 4], q[(i + 3) % 4], ctr);
-      }
-      if (scaled && o.area) mid.push(`Ε = ${fmt((w * h) / CM / CM)}`);
-      if (scaled && o.per) mid.push(`Π = ${fmt((2 * (w + h)) / CM)}`);
-    } else if (s.shape === 'ellipse') {
-      const a = Math.abs(x1 - x0) / 2, b = Math.abs(y1 - y0) / 2;
-      const circle = Math.abs(a - b) < Math.max(a, b) * 0.03;
-      if (o.len) mid.push(circle ? `r = ${fmt(a / CM)}` : `a = ${fmt(a / CM)}  b = ${fmt(b / CM)}`);
-      if (o.area) mid.push(`Ε = ${fmt((Math.PI * a * b) / CM / CM)}`);
-      // περίμετρος έλλειψης: προσέγγιση του Ramanujan (ακριβής για κύκλο)
-      if (o.per) mid.push(`Π = ${fmt((Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)))) / CM)}`);
-    } else if (isPoly(s.shape)) {
-      const t = trianglePts(s);
-      const n = t.length;
-      ctr = [t.reduce((a, p) => a + p[0], 0) / n, t.reduce((a, p) => a + p[1], 0) / n];
-      // εμβαδόν πολυγώνου από τις κορυφές του
-      const area = Math.abs(t.reduce((a, p, i) => a + p[0] * t[(i + 1) % n][1] - t[(i + 1) % n][0] * p[1], 0)) / 2;
-      if (o.ang) for (const m of measureAngles(s)) c.fillText(s.labels?.[ANGLE_KEY + m.i] ?? `${m.deg}°`, m.pos[0], m.pos[1]);
-      if (scaled && o.area) mid.push(`Ε = ${fmt(area / CM / CM)}`);
-      if (scaled && o.per) mid.push(`Π = ${fmt(t.reduce((a, p, i) => a + len(p, t[(i + 1) % n]), 0) / CM)}`);
-    }
-    mid.forEach((text, i) => c.fillText(text, ctr[0], ctr[1] + (i - (mid.length - 1) / 2) * 24));
-    c.restore();
-  }
-
-  private drawItem(c: CanvasRenderingContext2D, it: Item): void {
-    const rot = itemRot(it);
-    if (rot) {
-      const [mx, my] = unrot(it, 0, 0), [ox, oy] = unrot(it, 1, 0);
-      // ο αντίστροφος του unrot: στροφή κατά rot γύρω από το κέντρο του στοιχείου
-      c.save();
-      c.transform(ox - mx, -(oy - my), oy - my, ox - mx, 0, 0);
-      c.translate(-mx, -my);
-      this.drawItemRaw(c, it);
-      c.restore();
-      return;
-    }
-    this.drawItemRaw(c, it);
-  }
-
-  private drawItemRaw(c: CanvasRenderingContext2D, it: Item): void {
-    switch (it.kind) {
-      case 'stamp':
-        this.drawStamp(c, it);
-        break;
-      case 'trig':
-        this.drawTrig(c, it);
-        break;
-      case 'angle':
-        this.drawAngle(c, it);
-        break;
-      case 'axes':
-        this.drawAxes(c, it);
-        break;
-      case 'stroke':
-        this.drawStroke(c, it);
-        break;
-      case 'shape':
-        this.drawShape(c, it);
-        break;
-      case 'text':
-        this.drawText(c, it);
-        break;
-      case 'image': {
-        const img = this.getImg(it);
-        if (img) c.drawImage(img, it.x, it.y, it.w, it.h);
-      }
-    }
-  }
 
   private setWorldTransform(c: CanvasRenderingContext2D): void {
     const v = this.page.view;
@@ -1917,7 +1036,7 @@ export class Board {
   private oscDrag: { id: string; d: number } | null = null;
   private oscRaf = 0;
 
-  private springState(s: StampItem): SpringState {
+  springState(s: StampItem): SpringState {
     const marks = !!s.marks;
     if (this.oscDrag?.id === s.id) return { d: this.oscDrag.d, amp: Math.abs(this.oscDrag.d), marks };
     const o = this.osc.get(s.id);
@@ -1997,7 +1116,7 @@ export class Board {
     this.setWorldTransform(c);
     const [x0, y0] = this.toWorld(0, 0);
     const [x1, y1] = this.toWorld(this.W, this.H);
-    this.paintBackground(c, x0, y0, x1, y1, v.k);
+    this.r.paintBackground(c, x0, y0, x1, y1, v.k);
     const hidden = this.dragPreviewIds();
     const rp = this.replay;
     const items = this.page.items;
@@ -2006,11 +1125,11 @@ export class Board {
       if (hidden.has(it.id)) continue;
       if (rp && i > rp.i) break;
       if (rp && i === rp.i && it.kind === 'stroke') {
-        if (rp.prog > 0) this.drawStroke(c, { ...it, pts: it.pts.slice(0, rp.prog) });
+        if (rp.prog > 0) this.r.drawStroke(c, { ...it, pts: it.pts.slice(0, rp.prog) });
         break;
       }
-      this.drawItem(c, it);
-      if (it.kind === 'shape' && it.meas) this.drawMeasures(c, it);
+      this.r.drawItem(c, it);
+      if (it.kind === 'shape' && it.meas) this.r.drawMeasures(c, it);
     }
     this.renderLive();
     this.onView();
@@ -2024,14 +1143,14 @@ export class Board {
     const k = this.page.view.k;
     for (const id of new Set([...this.osc.keys(), ...(this.oscDrag ? [this.oscDrag.id] : [])])) {
       const it = this.page.items.find((x) => x.id === id);
-      if (it && !this.replay) this.drawItem(c, it);
+      if (it && !this.replay) this.r.drawItem(c, it);
     }
     let selItem: Item | undefined;
     for (const p of this.ptrs.values()) {
       if (p.live) {
-        this.drawItem(c, p.live);
-        if (p.live.kind === 'shape' && p.live.meas) this.drawMeasures(c, p.live);
-      } else if (p.stroke) this.drawStroke(c, p.stroke);
+        this.r.drawItem(c, p.live);
+        if (p.live.kind === 'shape' && p.live.meas) this.r.drawMeasures(c, p.live);
+      } else if (p.stroke) this.r.drawStroke(c, p.stroke);
       if (p.lasso && p.lasso.length > 1) {
         c.save();
         c.strokeStyle = '#2563eb';
@@ -2046,7 +1165,7 @@ export class Board {
         c.restore();
       }
       if (p.preview) {
-        this.drawItem(c, p.preview);
+        this.r.drawItem(c, p.preview);
         selItem = p.preview;
       }
     }
@@ -2253,7 +1372,7 @@ export class Board {
   private pointHandles(it: Item): Pt[] {
     if (it.kind === 'angle') return angleEnds(it);
     if (it.kind === 'trig') return [trigPoint(it)];
-    if (it.kind === 'axes') return this.axesHandles(it).map((h) => h.p);
+    if (it.kind === 'axes') return this.r.axesHandles(it).map((h) => h.p);
     return [];
   }
 
@@ -2396,10 +1515,10 @@ export class Board {
         c.fillRect(0, 0, cv.width, cv.height);
       }
       c.setTransform(s, 0, 0, s, -x0 * s, -y0 * s);
-      this.paintBackground(c, x0, y0, x1, y1, s);
+      this.r.paintBackground(c, x0, y0, x1, y1, s);
       for (const it of items) {
-        this.drawItem(c, it);
-        if (it.kind === 'shape' && it.meas) this.drawMeasures(c, it);
+        this.r.drawItem(c, it);
+        if (it.kind === 'shape' && it.meas) this.r.drawMeasures(c, it);
       }
     } finally {
       this.cur = keep;
@@ -3025,8 +2144,8 @@ export class Board {
             fx ? o.x1 + dx : o.x1, fy ? o.y1 + dy : o.y1,
           );
         } else if (o.kind === 'axes' && ps.handle) {
-          const key = this.axesHandles(o)[ps.handle - 1]?.k;
-          if (key) ps.preview = this.moveAxesHandle(o, key, (wx - o.x) / o.unit);
+          const key = this.r.axesHandles(o)[ps.handle - 1]?.k;
+          if (key) ps.preview = this.r.moveAxesHandle(o, key, (wx - o.x) / o.unit);
         } else if (o.kind === 'axes') {
           const b = itemBounds(o);
           const f = Math.max(0.3, (b.x1 - b.x0 + dx) / (b.x1 - b.x0));
@@ -3073,8 +2192,8 @@ export class Board {
         const c = this.bctx;
         c.save();
         this.setWorldTransform(c);
-        this.drawItem(c, s);
-        if (s.kind === 'shape' && s.meas) this.drawMeasures(c, s);
+        this.r.drawItem(c, s);
+        if (s.kind === 'shape' && s.meas) this.r.drawMeasures(c, s);
         c.restore();
         break;
       }

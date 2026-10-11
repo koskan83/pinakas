@@ -176,6 +176,30 @@ test('Πίνακας 3 × 3 ως ορίζουσα', async () => {
   assert(t && t.grid.r === 3 && t.grid.c === 3 && t.grid.style === 'det', 'δεν μπήκε ορίζουσα 3 × 3');
 });
 
+test('Άξονες, τριγωνομετρικός κύκλος και μετρήσεις σχεδιάζονται', async () => {
+  const inked = () => page.evaluate(() => {
+    const cv = document.getElementById('base');
+    const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0 && d[i - 1] + d[i - 2] + d[i - 3] < 600) n++;
+    return n;
+  });
+  const before = await inked();
+  await page.click('#gadgetBtn');
+  await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-axes="full"]');
+  await page.click('#gadgetBtn');
+  await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-ins="trig"]');
+  const it = await items();
+  assert(it.some((i) => i.kind === 'axes') && it.some((i) => i.kind === 'trig'), 'δεν μπήκαν άξονες και τριγωνομετρικός κύκλος');
+  // μετρήσεις στο τρίγωνο: άγγιγμα με τον χάρακα ανάβει τα μήκη
+  await tool('measure');
+  await page.mouse.click(800, 380);
+  await sleep(300);
+  assert((await items()).some((i) => i.shape === 'triangle' && i.meas), 'δεν άναψαν μετρήσεις στο τρίγωνο');
+  assert((await inked()) > before + 2000, 'τα νέα στοιχεία δεν φαίνονται στον καμβά');
+  await page.mouse.click(120, 420);
+});
+
 test('Τα «Πρόσφατα» στα Όργανα θυμούνται ό,τι χρησιμοποιήθηκε', async () => {
   await page.click('#gadgetBtn');
   assert(await visible('#recentTiles [data-shape="triangle"]'), 'το τρίγωνο δεν μπήκε στα πρόσφατα');
