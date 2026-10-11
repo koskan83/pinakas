@@ -121,6 +121,7 @@ app.insertAdjacentHTML(
     ${mi('data-act="ai"', I.spark, 'Αναγνώριση γραφής (ρυθμίσεις)…')}
     ${mi('data-act="full"', I.full, 'Πλήρης οθόνη')}
     ${mi('data-act="labels"', I.tag, 'Ονόματα κάτω από τα εικονίδια')}
+    ${mi('data-act="pdflogo"', I.doc, 'Λογότυπο στις σελίδες του PDF')}
     ${mi('data-act="diag"', I.target, 'Διάγνωση αφής/γραφίδας')}
     ${mi('data-act="test"', I.check, 'Λίστα δοκιμής στην τάξη')}
   </div>
@@ -324,7 +325,7 @@ app.insertAdjacentHTML(
     </div>
     <div class="aiRow"><button id="sendIdEdit">Αλλαγή Client ID</button><button id="sendClose">Κλείσιμο</button></div>
   </div>
-  <div id="qrBig" class="hidden"><canvas width="1200" height="1200"></canvas><div></div></div>
+  <div id="qrBig" class="hidden"><img src="./logo.svg" alt="" /><canvas width="1200" height="1200"></canvas><div></div></div>
 
   <div id="replayBar" class="hidden">
     <span>Αναπαραγωγή</span>
@@ -1600,7 +1601,9 @@ menu.addEventListener('click', async (e) => {
   if (!b) return;
   const act = b.dataset.act!;
   if (!act.startsWith('bg-')) closePopups();
-  if (act === 'labels') {
+  if (act === 'pdflogo') {
+    setPdfLogo(!pdfLogo);
+  } else if (act === 'labels') {
     setLabels(!$('toolbar').classList.contains('labels'));
   } else if (act === 'lib') {
     void lessons?.open();
@@ -1761,8 +1764,32 @@ window.addEventListener('keydown', (e) => {
 
 // ---------- αποστολή στους μαθητές ----------
 
+/** Αν οι σελίδες του PDF παίρνουν το λογότυπο σε μια γωνία (ρύθμιση ανά συσκευή). */
+let pdfLogo = true;
+function setPdfLogo(on: boolean): void {
+  pdfLogo = on;
+  document.querySelector('[data-act=pdflogo]')!.classList.toggle('on', on);
+  try {
+    localStorage.setItem('grafida.pdfLogo', on ? '1' : '0');
+  } catch {
+    /* χωρίς αποθήκευση */
+  }
+}
+setPdfLogo((() => { try { return localStorage.getItem('grafida.pdfLogo') !== '0'; } catch { return true; } })());
+let logoImg: Promise<HTMLImageElement | null> | null = null;
+function loadLogo(): Promise<HTMLImageElement | null> {
+  logoImg ??= new Promise((res) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => res(null);
+    img.src = './logo.svg';
+  });
+  return logoImg;
+}
+
 async function lessonPdf(): Promise<Blob> {
-  const pages = await board.exportJpegPages((d, n) => toast(`Ετοιμάζεται το PDF… σελίδα ${d + 1} από ${n}`, 0));
+  const mark = pdfLogo ? await loadLogo() : null;
+  const pages = await board.exportJpegPages((d, n) => toast(`Ετοιμάζεται το PDF… σελίδα ${d + 1} από ${n}`, 0), mark ?? undefined);
   toast(`Το PDF είναι έτοιμο (${pages.length} σελίδες)`);
   return buildPdf(pages);
 }

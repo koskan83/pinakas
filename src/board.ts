@@ -2219,12 +2219,21 @@ export class Board {
   }
 
   /** Όλες οι σελίδες ως εικόνες JPEG, για το PDF. */
-  async exportJpegPages(onProgress: (done: number, total: number) => void): Promise<{ jpeg: Uint8Array; w: number; h: number }[]> {
+  async exportJpegPages(onProgress: (done: number, total: number) => void, mark?: HTMLImageElement): Promise<{ jpeg: Uint8Array; w: number; h: number }[]> {
     const out: { jpeg: Uint8Array; w: number; h: number }[] = [];
     const n = this.doc.pages.length;
     for (let i = 0; i < n; i++) {
       onProgress(i, n);
       const cv = await this.pageCanvas(i, true);
+      if (mark) {
+        // λογότυπο στην κάτω δεξιά γωνία, μικρό σε σχέση με τη σελίδα
+        const s = Math.max(40, Math.min(cv.width, cv.height) * 0.07);
+        const c = cv.getContext('2d')!;
+        c.setTransform(1, 0, 0, 1, 0, 0);
+        c.globalAlpha = 0.9;
+        c.drawImage(mark, cv.width - s * 1.25, cv.height - s * 1.25, s, s);
+        c.globalAlpha = 1;
+      }
       const blob = await new Promise<Blob>((res, rej) => cv.toBlob((b) => (b ? res(b) : rej(new Error('JPEG'))), 'image/jpeg', 0.9));
       out.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), w: cv.width, h: cv.height });
     }

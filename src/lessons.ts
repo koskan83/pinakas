@@ -56,6 +56,7 @@ export class Lessons {
       `<button id="lessonName" class="fab" title="Μαθήματα"></button>
       <div id="lib" class="hidden">
         <div id="libHead">
+          <img class="lg onDark" src="./logo-light.svg" alt="" /><img class="lg onLight" src="./logo.svg" alt="" />
           <b>Μαθήματα</b>
           <button data-lib="new" class="go">＋ Νέο μάθημα</button>
           <span class="sp"></span>
