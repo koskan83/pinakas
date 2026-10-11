@@ -14,7 +14,7 @@ import { STAMPS } from './stamps';
 import { compile, paramsOf } from './expr';
 import { buildPdf } from './pdf';
 import { AiTask, MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage } from './ai';
-import { axesRange, itemBounds, uid } from './model';
+import { axesRange, itemBounds, uid, wrapText } from './model';
 import { PEN_ICON, PenKind, mountUi } from './ui';
 
 /** Βασικά χρώματα ανά φόντο· ίδια θέση = αντίστοιχο χρώμα στο άλλο φόντο. */
@@ -737,6 +737,18 @@ aiMenu.addEventListener('click', (e) => {
   }
 });
 
+const AI_NOTE_COLORS = { ok: ['#059669', '#34d399'], bad: ['#dc2626', '#f87171'], info: ['#2563eb', '#7dd3fc'] };
+/**
+ * Γράφει την απάντηση του AI κάτω από την περιοχή: σε μέγεθος που διαβάζεται στο τρέχον zoom
+ * και σπασμένη σε γραμμές, ώστε να μην απλώνεται έξω από την οθόνη.
+ */
+function aiNote(box: { x0: number; y0: number; x1: number; y1: number }, text: string, tone: keyof typeof AI_NOTE_COLORS): void {
+  const k = board.page.view.k;
+  const size = Math.max(22, Math.min(160, 26 / k));
+  const maxW = Math.min(Math.max(box.x1 - box.x0, 560 / k), (window.innerWidth - 60) / k);
+  board.addItem({ kind: 'text', id: uid(), x: box.x0, y: box.y1 + 20 / k, text: wrapText(text, size, maxW), size, color: AI_NOTE_COLORS[tone][isDark(board.doc.bg) ? 1 : 0] });
+}
+
 let aiBusy = 0;
 /** Στέλνει τα στοιχεία για αναγνώριση και τα αντικαθιστά με κείμενο ή τυπωμένο τύπο. */
 async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
@@ -766,21 +778,23 @@ async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
     if (kind === 'check') {
       // η κρίση μπαίνει κάτω από τη λύση του μαθητή: πράσινη αν είναι σωστή, κόκκινη αν έχει λάθος
       const ok = out.startsWith('✓');
-      board.addItem({ kind: 'text', id: uid(), x: box.x0, y: box.y1 + 24, text: out, size: 30, color: ok ? '#059669' : '#dc2626' });
+      aiNote(box, out, ok ? 'ok' : 'bad');
       toast(ok ? 'Δεν βρέθηκε λάθος. Ρίξε κι εσύ μια ματιά.' : 'Βρέθηκε πιθανό λάθος. Έλεγξέ το πριν το πεις στον μαθητή.', 5000);
       return;
     }
     if (kind === 'solve') {
       if (/^TEXT\b/.test(out)) {
         // ερώτηση θεωρίας ή πολλαπλής επιλογής: η απάντηση είναι σκέτο κείμενο
-        board.addItem({ kind: 'text', id: uid(), x: box.x0, y: box.y1 + 24, text: out.replace(/^TEXT\s*/, ''), size: 30, color: '#2563eb' });
+        aiNote(box, out.replace(/^TEXT\s*/, ''), 'info');
         toast('Η απάντηση μπήκε κάτω από την ερώτηση. Έλεγξέ την πριν τη δείξεις.', 5000);
         return;
       }
       // η λύση μπαίνει κάτω από την άσκηση, χωρίς να πειράξει το χειρόγραφο
       const lines = out.split('\\\\').length;
-      const pic = await texToImage(out, board.ink(color), Math.max(26, Math.min(60, bh * 0.4)));
-      board.addItem({ kind: 'image', id: uid(), x: box.x0, y: box.y1 + 24, w: pic.w, h: pic.h, src: pic.src });
+      // το μέγεθος ακολουθεί το zoom, για να διαβάζεται και σε σμικρυμένη σελίδα
+      const zk = board.page.view.k;
+      const pic = await texToImage(out, board.ink(color), Math.max(26, Math.min(160, Math.max(Math.min(bh * 0.4, 60), 30 / zk))));
+      board.addItem({ kind: 'image', id: uid(), x: box.x0, y: box.y1 + 20 / zk, w: pic.w, h: pic.h, src: pic.src });
       toast(lines > 1 ? 'Η λύση μπήκε κάτω από την άσκηση. Έλεγξέ την πριν τη δείξεις.' : 'Η απάντηση μπήκε κάτω από την άσκηση. Έλεγξέ την.', 5000);
       return;
     }

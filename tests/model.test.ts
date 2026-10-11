@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AngleItem, Item, Pt, Shape, Stroke, angleDegrees, cloneItem, erasePartial, hitItem, itemBounds, newDoc, pointInPolygon,
-  recognizeShape, rotateItem, scaleItem, translateItem, trianglePts, unrot,
-} from '../src/model';
+  recognizeShape, rotateItem, scaleItem, translateItem, trianglePts, unrot, wrapText } from '../src/model';
 
 const rect = (o: Partial<Shape> = {}): Shape => ({ kind: 'shape', id: 'r', shape: 'rect', x0: 0, y0: 0, x1: 200, y1: 100, color: '#111111', width: 4, ...o });
 const line = (o: Partial<Shape> = {}): Shape => ({ kind: 'shape', id: 'l', shape: 'line', x0: 0, y0: 0, x1: 100, y1: 0, color: '#111111', width: 4, ...o });
@@ -182,5 +181,21 @@ describe('μετρημένη γωνία (τόξο)', () => {
   it('η γόμα τμημάτων τη σβήνει ολόκληρη', () => {
     expect(erasePartial(a, 20, 20, 8)).toEqual([]);
     expect(erasePartial(a, 90, 0, 8)).toBeNull();
+  });
+});
+
+describe('wrapText', () => {
+  // κάθε χαρακτήρας «πιάνει» 10 μονάδες
+  const m = (t: string): number => t.length * 10;
+  it('σπάει μια μακριά γραμμή σε γραμμές που χωράνε', () => {
+    const out = wrapText('ένα δύο τρία τέσσερα πέντε', 20, 100, m);
+    expect(out.split('\n').every((l) => m(l) <= 100)).toBe(true);
+    expect(out.replace(/\n/g, ' ')).toBe('ένα δύο τρία τέσσερα πέντε');
+  });
+  it('κρατά τις αλλαγές γραμμής που υπάρχουν ήδη', () => {
+    expect(wrapText('α β\nγ', 20, 1000, m)).toBe('α β\nγ');
+  });
+  it('μια λέξη μεγαλύτερη από το πλάτος μένει ολόκληρη σε δική της γραμμή', () => {
+    expect(wrapText('μικρή τεράστιαλέξηχωρίςκενά τέλος', 20, 80, m)).toBe('μικρή\nτεράστιαλέξηχωρίςκενά\nτέλος');
   });
 });

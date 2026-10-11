@@ -264,6 +264,32 @@ export function textFont(size: number): string {
   return `${size}px system-ui, "Segoe UI", Roboto, sans-serif`;
 }
 
+/**
+ * Σπάει το κείμενο σε γραμμές που χωράνε σε πλάτος `maxW` (μονάδες πίνακα) με το δοσμένο μέγεθος γραμμάτων.
+ * `measure`: πλάτος μιας γραμμής· αν λείπει, μετριέται με τη γραμματοσειρά του πίνακα.
+ */
+export function wrapText(text: string, size: number, maxW: number, measure?: (s: string) => number): string {
+  if (!measure) {
+    if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d')!;
+    const c = measureCtx;
+    c.font = textFont(size);
+    measure = (t) => c.measureText(t).width;
+  }
+  const out: string[] = [];
+  for (const para of text.split('\n')) {
+    let line = '';
+    for (const word of para.split(/\s+/).filter(Boolean)) {
+      const next = line ? `${line} ${word}` : word;
+      if (line && measure(next) > maxW) {
+        out.push(line);
+        line = word;
+      } else line = next;
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
 export function textLines(t: TextItem): string[] {
   return t.text.split('\n');
 }
