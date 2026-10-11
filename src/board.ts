@@ -1,7 +1,7 @@
 import {
-  AngleItem, AxesAn, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TextItem, Tool, TrigItem, View,
+  AngleItem, AxesAn, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TableStyle, TextItem, Tool, TrigItem, View,
   angleDegrees, angleEnds, axesRange, cloneItem, distToSeg, erasePartial, hitItem, inLasso, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, pointInPolygon, reboxShape,
-  recognizeShape, rotateItem, roundAngle, scaleItem, textFont, textLines, translateItem, trianglePts, uid, unrot,
+  recognizeShape, rotateItem, roundAngle, scaleItem, tableLines, textFont, textLines, translateItem, trianglePts, uid, unrot,
 } from './model';
 import { Fn, Params, compileCached, keyPoints } from './expr';
 import { Asymptotes, asymptotes, integrate, lineEq, nf, oneSided, riemann, slope } from './analysis';
@@ -554,6 +554,16 @@ export class Board {
     this.addAndSelect({ kind: 'stamp', id: uid(), name, x: cx - d.w / 2, y: cy - d.h / 2, w: d.w, h: d.h, color: this.color, width: 3 });
   }
 
+  /** Κενός πίνακας (πλέγμα, ορίζουσα ή μήτρα) στο κέντρο της οθόνης· γράφεις μέσα στα κελιά με το στυλό. */
+  addTable(r: number, c: number, style: TableStyle): void {
+    const [cx, cy] = this.center();
+    const k = this.page.view.k;
+    // κελιά 2,4 × 1,8 cm, μικρότερα αν ο πίνακας δεν χωρά στην οθόνη
+    const f = Math.min(1, (this.W * 0.85) / k / (c * 96), (Math.max(this.H - this.bottomInset, 100) * 0.8) / k / (r * 72));
+    const w = c * 96 * f, h = r * 72 * f;
+    this.addAndSelect({ kind: 'shape', id: uid(), shape: 'table', x0: cx - w / 2, y0: cy - h / 2, x1: cx + w / 2, y1: cy + h / 2, color: this.color, width: 3, grid: { r, c, style } });
+  }
+
   addTrig(): void {
     const [cx, cy] = this.center();
     this.addAndSelect({ kind: 'trig', id: uid(), x: cx, y: cy, r: 4 * CM, a: Math.PI / 6, color: this.color });
@@ -712,7 +722,7 @@ export class Board {
         const [x, y] = this.toScreen((ab.x0 + ab.x1) / 2, ab.y0);
         return { id: it.id, shape: 'angle', meas: it.meas ?? {}, x, y };
       }
-      if (it.kind !== 'shape' || it.dash) continue;
+      if (it.kind !== 'shape' || it.dash || it.shape === 'table') continue;
       const [wx, wy] = unrot(it, px, py);
       const b = { x0: Math.min(it.x0, it.x1), y0: Math.min(it.y0, it.y1), x1: Math.max(it.x0, it.x1), y1: Math.max(it.y0, it.y1) };
       let hit = hitItem(it, px, py, r);
@@ -1199,6 +1209,11 @@ export class Board {
       const t = trianglePts(s);
       t.forEach((q, i) => (i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])));
       c.closePath();
+    } else if (s.shape === 'table') {
+      for (const [p, q] of tableLines(s)) {
+        c.moveTo(p[0], p[1]);
+        c.lineTo(q[0], q[1]);
+      }
     } else if (s.shape === 'rect') {
       c.rect(Math.min(s.x0, s.x1), Math.min(s.y0, s.y1), Math.abs(s.x1 - s.x0), Math.abs(s.y1 - s.y0));
     } else if (s.shape === 'ellipse') {
@@ -2439,8 +2454,9 @@ export class Board {
     let changed = false;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      // εικόνες, άξονες, τριγωνομετρικός κύκλος και σχήματα φυσικής σβήνονται μόνο με τον κάδο
-      if (it.kind === 'image' || it.kind === 'axes' || it.kind === 'trig' || it.kind === 'stamp') continue;
+      // εικόνες, άξονες, τριγωνομετρικός κύκλος, σχήματα φυσικής και πίνακες σβήνονται μόνο με τον κάδο
+      // (ο πίνακας ειδικά για να σβήνεις ό,τι έγραψες στα κελιά χωρίς να χαλάς τις γραμμές του)
+      if (it.kind === 'image' || it.kind === 'axes' || it.kind === 'trig' || it.kind === 'stamp' || (it.kind === 'shape' && it.shape === 'table')) continue;
       // πρώτα οι μετρήσεις: η γόμα πάνω σε ένα μήκος ή μια γωνία σβήνει την ένδειξη, όχι το σχήμα
       const bare = eraseMeasures(it, x, y, r);
       if (bare) {

@@ -21,7 +21,10 @@ export interface Pic {
   rot?: number;
 }
 
-export type ShapeKind = 'line' | 'arrow' | 'rect' | 'ellipse' | 'triangle' | 'rhombus' | 'para';
+export type ShapeKind = 'line' | 'arrow' | 'rect' | 'ellipse' | 'triangle' | 'rhombus' | 'para' | 'table';
+
+/** Μορφή πίνακα: πλέγμα με όλες τις γραμμές, ορίζουσα (δύο κατακόρυφες), ή μήτρα (αγκύλες). */
+export type TableStyle = 'grid' | 'det' | 'matrix';
 
 /** Σχήματα που ορίζονται από τις κορυφές τους (τρίγωνο, ρόμβος, παραλληλόγραμμο). */
 export function isPoly(shape: ShapeKind): boolean {
@@ -56,6 +59,27 @@ export interface Shape {
   link?: { a: string; b: string; role: 'sum' | 'sideA' | 'sideB' };
   /** Ποιες μετρήσεις φαίνονται πάνω στο σχήμα (εργαλείο «Μετρήσεις»). */
   meas?: MeasOpts;
+  /** Πίνακας (shape 'table'): γραμμές, στήλες και μορφή. Τα κελιά είναι κενά, γράφεις μέσα με το στυλό. */
+  grid?: { r: number; c: number; style: TableStyle };
+}
+
+/** Τα ευθύγραμμα τμήματα που ζωγραφίζουν έναν πίνακα, χωρίς την περιστροφή του. */
+export function tableLines(s: Shape): [Pt, Pt][] {
+  const x0 = Math.min(s.x0, s.x1), x1 = Math.max(s.x0, s.x1), y0 = Math.min(s.y0, s.y1), y1 = Math.max(s.y0, s.y1);
+  const g = s.grid ?? { r: 2, c: 2, style: 'grid' as TableStyle };
+  const out: [Pt, Pt][] = [];
+  if (g.style === 'grid') {
+    for (let i = 0; i <= g.r; i++) out.push([[x0, y0 + ((y1 - y0) * i) / g.r], [x1, y0 + ((y1 - y0) * i) / g.r]]);
+    for (let j = 0; j <= g.c; j++) out.push([[x0 + ((x1 - x0) * j) / g.c, y0], [x0 + ((x1 - x0) * j) / g.c, y1]]);
+    return out;
+  }
+  out.push([[x0, y0], [x0, y1]], [[x1, y0], [x1, y1]]);
+  if (g.style === 'matrix') {
+    // αγκύλες: μικρά «ποδαράκια» πάνω και κάτω, προς τα μέσα
+    const t = Math.min(16, (x1 - x0) * 0.12);
+    out.push([[x0, y0], [x0 + t, y0]], [[x0, y1], [x0 + t, y1]], [[x1, y0], [x1 - t, y0]], [[x1, y1], [x1 - t, y1]]);
+  }
+  return out;
 }
 
 export interface MeasOpts {
@@ -404,6 +428,7 @@ export function hitItem(it: Item, px: number, py: number, r: number): boolean {
         return false;
       }
       if (it.shape === 'line' || it.shape === 'arrow') return distToSeg(x, y, [x0, y0], [x1, y1]) <= rr;
+      if (it.shape === 'table') return tableLines(it).some(([p, q]) => distToSeg(x, y, p, q) <= rr);
       if (it.shape === 'rect') {
         const c: Pt[] = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
         for (let i = 0; i < 4; i++) if (distToSeg(x, y, c[i], c[(i + 1) % 4]) <= rr) return true;
@@ -703,6 +728,7 @@ function shapePolylines(s: Shape): Pt[][] {
     return [[[x0, y0], [x1, y1]], densify(head, 2)];
   }
   if (s.shape === 'rect') return [densify([[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]], 3)];
+  if (s.shape === 'table') return tableLines(s).map(([p, q]) => densify([p, q], 3));
   if (isPoly(s.shape)) {
     const t = trianglePts(s);
     return [densify([...t, t[0]], 3)];
@@ -720,7 +746,7 @@ function shapePolylines(s: Shape): Pt[][] {
  * Επιστρέφει τα κομμάτια που απομένουν, ή null αν το στοιχείο δεν αγγίχτηκε.
  */
 export function erasePartial(it: Item, x: number, y: number, r: number): Item[] | null {
-  if (it.kind === 'image' || it.kind === 'axes' || it.kind === 'trig' || it.kind === 'stamp') return null;
+  if (it.kind === 'image' || it.kind === 'axes' || it.kind === 'trig' || it.kind === 'stamp' || (it.kind === 'shape' && it.shape === 'table')) return null;
   if (it.kind === 'text' || it.kind === 'angle') return hitItem(it, x, y, r) ? [] : null;
   const b = itemBounds(it);
   if (x < b.x0 - r || x > b.x1 + r || y < b.y0 - r || y > b.y1 + r) return null;

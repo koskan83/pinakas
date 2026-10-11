@@ -385,3 +385,12 @@ body.dark #libHead .lg.onLight { display: block; }
 #ppGrid canvas { position: static; display: block; max-width: 100%; max-height: 170px; border-radius: 6px; background: #fff; touch-action: auto; }
 #ppGrid span { position: absolute; left: 0; right: 0; bottom: 5px; text-align: center; font-weight: 600; }
 #ppGrid button.on span::after { content: ' ✓'; color: var(--ok); }
+
+/* επιλογή γραμμών × στηλών για πίνακα, ορίζουσα, μήτρα */
+#tableMenu { min-width: 0; gap: 8px; padding: 12px; }
+#tblGrid { display: grid; grid-template-columns: repeat(6, 46px); gap: 5px; justify-content: center; }
+#tblGrid button { width: 46px; height: 40px; padding: 0; border-radius: 7px; background: var(--bar-2); border: 2px solid transparent; }
+#tblGrid button.on { background: var(--accent); }
+#tableMenu .hint { max-width: 320px; text-align: center; padding: 0; margin: 0 auto; }
+#tblStyles { justify-content: center; }
+#tableMenu #tblStyles button.on { background: var(--accent); color: #fff; }

@@ -1,6 +1,6 @@
 import './style.css';
 import { Board, EraserMode, SizedTool } from './board';
-import { AxesAn, AxesMode, Background, Doc, Item, MeasOpts, ShapeKind, TextItem, Tool, isDark, isPoly, newDoc } from './model';
+import { AxesAn, AxesMode, Background, Doc, Item, MeasOpts, ShapeKind, TableStyle, TextItem, Tool, isDark, isPoly, newDoc } from './model';
 import { blobToPic, captureScreen, clipboardImage, openDocx, openPdf } from './importers';
 import { kvGet, kvSet } from './storage';
 import { Lessons } from './lessons';
@@ -72,6 +72,7 @@ const I = {
   triangle: P('M12 4l9 16H3z'),
   rhombus: P('M12 3l8 9-8 9-8-9z'),
   para: P('M8 6h13l-5 12H3z'),
+  table: IC('<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 12h18M9 5v14M15 5v14"/>'),
   angle: P('M20 20H4L15 5M11 20a7 7 0 0 0-2.800-5.600'),
   axFull: P('M3 12h18M12 21V3M18.5 9.5L21 12l-2.5 2.5M9.5 5.5L12 3l2.5 2.5'),
   axQ1: P('M5 19h16M5 19V3M18.5 16.5L21 19l-2.5 2.5M2.5 5.500L5 3l2.5 2.5'),
@@ -226,6 +227,15 @@ app.insertAdjacentHTML(
   </div>
 
   <div id="stampMenu" class="popup hidden"><div id="stampGrid"></div></div>
+  <div id="tableMenu" class="popup hidden">
+    <div class="bgRow" id="tblStyles">
+      <button data-tbl="grid" class="pill">Πίνακας</button>
+      <button data-tbl="det" class="pill">Ορίζουσα | |</button>
+      <button data-tbl="matrix" class="pill">Μήτρα [ ]</button>
+    </div>
+    <div id="tblGrid"></div>
+    <div class="hint" id="tblHint"></div>
+  </div>
 
   <div id="tplMenu" class="popup hidden">
     <div id="tplList"></div>
@@ -244,6 +254,7 @@ app.insertAdjacentHTML(
       ${tile('data-shape="rhombus"', I.rhombus, 'Ρόμβος')}
       ${tile('data-shape="para"', I.para, 'Παραλ/μο', 'Παραλληλόγραμμο')}
       ${tile('data-shape="angle"', I.angle, 'Γωνία', 'Γωνία με μοίρες')}
+      ${tile('data-ins="table"', I.table, 'Πίνακας…', 'Πίνακας, ορίζουσα ή μήτρα: διαλέγεις γραμμές και στήλες')}
     </div>
     <div class="gHead">Άξονες και συναρτήσεις</div>
     <div class="tiles">
@@ -1492,6 +1503,7 @@ gadgetMenu.addEventListener('click', (e) => {
       board.setTool('shape');
     } else if (ax) board.addAxes(ax as AxesMode);
     else if (ins === 'trig') board.addTrig();
+    else if (ins === 'table') openTableMenu();
     else {
       stampMenu.classList.remove('hidden');
       placeNear(stampMenu, $('gadgetBtn'));
@@ -1566,6 +1578,45 @@ for (const [name, d] of Object.entries(STAMPS)) {
   b.append(cv, document.createTextNode(d.label));
   $('stampGrid').append(b);
 }
+// ---------- πίνακας / ορίζουσα / μήτρα ----------
+const tableMenu = $('tableMenu');
+const TBL_MAX = 6;
+let tblStyle: TableStyle = 'grid';
+/** Οι γραμμές και οι στήλες που δείχνει τώρα το πλέγμα επιλογής (κάτω από το δάχτυλο ή η τελευταία επιλογή). */
+let tblPick = { r: 3, c: 3 };
+$('tblGrid').innerHTML = Array.from({ length: TBL_MAX * TBL_MAX }, (_, i) => `<button data-r="${Math.floor(i / TBL_MAX) + 1}" data-c="${(i % TBL_MAX) + 1}"></button>`).join('');
+function paintTableMenu(): void {
+  tableMenu.querySelectorAll<HTMLElement>('[data-tbl]').forEach((b) => b.classList.toggle('on', b.dataset.tbl === tblStyle));
+  tableMenu.querySelectorAll<HTMLElement>('#tblGrid button').forEach((b) => b.classList.toggle('on', +b.dataset.r! <= tblPick.r && +b.dataset.c! <= tblPick.c));
+  $('tblHint').textContent = `Πάτα το κελί που θες: τώρα ${tblPick.r} × ${tblPick.c} (γραμμές × στήλες)`;
+}
+function openTableMenu(): void {
+  paintTableMenu();
+  tableMenu.classList.remove('hidden');
+  placeNear(tableMenu, $('gadgetBtn'));
+}
+tableMenu.addEventListener('pointerover', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>('#tblGrid button');
+  if (!b || e.pointerType !== 'mouse') return;
+  tblPick = { r: +b.dataset.r!, c: +b.dataset.c! };
+  paintTableMenu();
+});
+tableMenu.addEventListener('click', (e) => {
+  const t = e.target as HTMLElement;
+  const st = t.closest<HTMLElement>('[data-tbl]')?.dataset.tbl as TableStyle | undefined;
+  if (st) {
+    tblStyle = st;
+    paintTableMenu();
+    return;
+  }
+  const b = t.closest<HTMLElement>('#tblGrid button');
+  if (!b) return;
+  tblPick = { r: +b.dataset.r!, c: +b.dataset.c! };
+  closePopups();
+  board.addTable(tblPick.r, tblPick.c, tblStyle);
+  refreshUi();
+});
+
 stampMenu.addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-stamp]');
   if (!b) return;
