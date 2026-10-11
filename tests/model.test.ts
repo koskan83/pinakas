@@ -114,6 +114,47 @@ describe('αναγνώριση σχήματος από χειρόγραφο', ()
     if (r?.t === 'shape') expect(r.shape).toBe('ellipse');
     else expect(r).not.toBeNull();
   });
+  /** Κλειστό περίγραμμα από κορυφές, με λίγο «τρέμουλο» σαν του χεριού. */
+  const outline = (v: Pt[], wob = 2): Pt[] => {
+    const out: Pt[] = [];
+    v.forEach((a, i) => {
+      const b = v[(i + 1) % v.length];
+      for (let k = 0; k < 20; k++) out.push([a[0] + ((b[0] - a[0]) * k) / 20 + Math.sin(i * 7 + k) * wob, a[1] + ((b[1] - a[1]) * k) / 20 + Math.cos(i * 5 + k * 2) * wob]);
+    });
+    out.push([v[0][0] + 3, v[0][1] - 2]);
+    return out;
+  };
+  const kind = (v: Pt[]): string | undefined => {
+    const r = recognizeShape(outline(v));
+    return r?.t === 'shape' ? r.shape : r?.t;
+  };
+  it('ρόμβος: ίσες πλευρές και κάθετες διαγώνιες', () => {
+    const r = recognizeShape(outline([[200, 100], [320, 205], [195, 300], [80, 198]]));
+    expect(r?.t === 'shape' && r.shape).toBe('rhombus');
+    if (r?.t !== 'shape' || !r.pts) return;
+    const p = r.pts;
+    const L = p.map((a, i) => Math.hypot(p[(i + 1) % 4][0] - a[0], p[(i + 1) % 4][1] - a[1]));
+    expect(Math.max(...L) - Math.min(...L)).toBeLessThan(1e-6);
+    // η κατακόρυφη διαγώνιος «κούμπωσε» ακριβώς
+    expect(Math.min(Math.abs(p[0][0] - p[2][0]), Math.abs(p[1][0] - p[3][0]))).toBeLessThan(1e-6);
+  });
+  it('παραλληλόγραμμο: απέναντι πλευρές ίσες, η βάση οριζόντια', () => {
+    const r = recognizeShape(outline([[150, 100], [420, 104], [360, 250], [92, 247]]));
+    expect(r?.t === 'shape' && r.shape).toBe('para');
+    if (r?.t !== 'shape' || !r.pts) return;
+    const p = r.pts;
+    expect(Math.hypot(p[1][0] - p[0][0] - (p[2][0] - p[3][0]), p[1][1] - p[0][1] - (p[2][1] - p[3][1]))).toBeLessThan(1e-6);
+    expect(p.some((a, i) => Math.abs(a[1] - p[(i + 1) % 4][1]) < 1e-6)).toBe(true);
+  });
+  it('τα παλιά σχήματα μένουν όπως ήταν', () => {
+    expect(kind([[100, 100], [400, 104], [397, 250], [103, 247]])).toBe('rect');
+    expect(kind([[100, 100], [250, 97], [252, 251], [98, 248]])).toBe('rect');
+    expect(kind([[250, 80], [420, 300], [90, 310]])).toBe('triangle');
+    expect(kind([[250, 80], [300, 300], [90, 200]])).toBe('triangle');
+    const circle: Pt[] = Array.from({ length: 73 }, (_, i) => [300 + 100 * Math.cos((i * 5 * Math.PI) / 180), 300 + 70 * Math.sin((i * 5 * Math.PI) / 180)] as Pt);
+    const c = recognizeShape(circle);
+    expect(c?.t === 'shape' && c.shape).toBe('ellipse');
+  });
   it('λίγα σημεία δεν αναγνωρίζονται', () => {
     expect(recognizeShape([[0, 0], [1, 1]])).toBeNull();
   });

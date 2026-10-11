@@ -62,3 +62,21 @@ describe('γόμα πάνω σε μετρήσεις', () => {
     expect(eraseMeasures({ ...tri, meas: undefined }, 200, 318, 10)).toBeNull();
   });
 });
+
+describe('ρόμβος και παραλληλόγραμμο', () => {
+  const para: Shape = { kind: 'shape', id: 'p', shape: 'para', x0: 0, y0: 0, x1: 400, y1: 200, color: '#111111', width: 3 };
+  const rh: Shape = { kind: 'shape', id: 'h', shape: 'rhombus', x0: 0, y0: 0, x1: 300, y1: 200, color: '#111111', width: 3 };
+  it('τέσσερις πλευρές και γωνίες με άθροισμα 360', () => {
+    expect(measureSides(para)).toHaveLength(4);
+    for (const s of [para, rh]) {
+      const a = measureAngles(s);
+      expect(a).toHaveLength(4);
+      expect(a.reduce((t, x) => t + x.deg, 0)).toBe(360);
+      expect(a[0].deg).toBe(a[2].deg);
+    }
+  });
+  it('ο ρόμβος έχει ίσες πλευρές', () => {
+    const L = measureSides(rh).map((m) => m.len);
+    expect(Math.max(...L) - Math.min(...L)).toBeLessThan(1e-9);
+  });
+});

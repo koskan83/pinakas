@@ -21,7 +21,12 @@ export interface Pic {
   rot?: number;
 }
 
-export type ShapeKind = 'line' | 'arrow' | 'rect' | 'ellipse' | 'triangle';
+export type ShapeKind = 'line' | 'arrow' | 'rect' | 'ellipse' | 'triangle' | 'rhombus' | 'para';
+
+/** Σχήματα που ορίζονται από τις κορυφές τους (τρίγωνο, ρόμβος, παραλληλόγραμμο). */
+export function isPoly(shape: ShapeKind): boolean {
+  return shape === 'triangle' || shape === 'rhombus' || shape === 'para';
+}
 
 export interface Shape {
   kind: 'shape';
@@ -299,7 +304,7 @@ export function rotateItem(it: Item, cx: number, cy: number, ang: number): Item 
         const [x0, y0] = R(it.x0, it.y0), [x1, y1] = R(it.x1, it.y1);
         return { ...it, x0, y0, x1, y1 };
       }
-      if (it.shape === 'triangle') {
+      if (isPoly(it.shape)) {
         const pts = trianglePts(it).map(([x, y]) => R(x, y));
         const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
         return { ...it, pts, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
@@ -393,9 +398,9 @@ export function hitItem(it: Item, px: number, py: number, r: number): boolean {
     case 'shape': {
       const rr = r + it.width / 2;
       const { x0, y0, x1, y1 } = it;
-      if (it.shape === 'triangle') {
+      if (isPoly(it.shape)) {
         const c = trianglePts(it);
-        for (let i = 0; i < 3; i++) if (distToSeg(x, y, c[i], c[(i + 1) % 3]) <= rr) return true;
+        for (let i = 0; i < c.length; i++) if (distToSeg(x, y, c[i], c[(i + 1) % c.length]) <= rr) return true;
         return false;
       }
       if (it.shape === 'line' || it.shape === 'arrow') return distToSeg(x, y, [x0, y0], [x1, y1]) <= rr;
@@ -460,9 +465,20 @@ export function axesRange(a: AxesItem): { xmin: number; xmax: number; ymin: numb
   };
 }
 
-/** Κορυφές τριγώνου· αν δεν έχουν οριστεί, ισοσκελές μέσα στο ορθογώνιο. */
+/**
+ * Κορυφές τριγώνου, ρόμβου ή παραλληλογράμμου. Αν δεν έχουν οριστεί, βγαίνουν από το περιβάλλον ορθογώνιο:
+ * ισοσκελές τρίγωνο, ρόμβος με τις κορυφές στα μέσα των πλευρών, παραλληλόγραμμο γερμένο κατά το 1/4 του πλάτους.
+ */
 export function trianglePts(s: Shape): Pt[] {
-  return s.pts ?? [[(s.x0 + s.x1) / 2, s.y0], [s.x0, s.y1], [s.x1, s.y1]];
+  if (s.pts) return s.pts;
+  const { x0, y0, x1, y1 } = s;
+  const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+  if (s.shape === 'rhombus') return [[mx, y0], [x1, my], [mx, y1], [x0, my]];
+  if (s.shape === 'para') {
+    const sk = (x1 - x0) * 0.25;
+    return [[x0 + sk, y0], [x1, y0], [x1 - sk, y1], [x0, y1]];
+  }
+  return [[mx, y0], [x0, y1], [x1, y1]];
 }
 
 /** Αλλάζει το περιβάλλον ορθογώνιο ενός σχήματος, μεταφέροντας αναλογικά και τις κορυφές του. */
@@ -548,8 +564,15 @@ export function recognizeShape(pts: Pt[]): Recognized | null {
   const abLen = Math.max(Math.hypot(B[0] - A[0], B[1] - A[1]), 1e-6);
   const C = far((p) => Math.abs((B[0] - A[0]) * (A[1] - p[1]) - (A[0] - p[0]) * (B[1] - A[1])) / abLen);
 
-  let rectD = 0, ellD = 0, triD = 0;
+  // τετράπλευρο: A και C τα άκρα μιας διαγωνίου, B και D τα πιο μακρινά σημεία εκατέρωθεν της
+  const Cq = far((p) => Math.hypot(p[0] - A[0], p[1] - A[1]));
+  const side = (p: Pt): number => ((Cq[0] - A[0]) * (p[1] - A[1]) - (Cq[1] - A[1]) * (p[0] - A[0])) / Math.max(Math.hypot(Cq[0] - A[0], Cq[1] - A[1]), 1e-6);
+  const Bq = far((p) => side(p)), Dq = far((p) => -side(p));
+  const quad = parallelogramFrom(A, Bq, Cq, Dq, side(Bq), -side(Dq));
+
+  let rectD = 0, ellD = 0, triD = 0, quadD = 0;
   for (const [x, y] of pts) {
+    if (quad) quadD += Math.min(...quad.pts.map((q, i) => distToSeg(x, y, q, quad.pts[(i + 1) % 4])));
     rectD += Math.min(Math.abs(x - x0), Math.abs(x - x1), Math.abs(y - y0), Math.abs(y - y1));
     ellD += Math.abs(Math.hypot((x - cx) / (w / 2), (y - cy) / (h / 2)) - 1) * (m / 2);
     triD += Math.min(distToSeg(x, y, A, B), distToSeg(x, y, B, C), distToSeg(x, y, C, A));
@@ -559,8 +582,54 @@ export function recognizeShape(pts: Pt[]): Recognized | null {
     [ellD / n / m / 0.06, { t: 'shape', shape: 'ellipse', x0, y0, x1, y1 }],
     [triD / n / m / 0.05, { t: 'shape', shape: 'triangle', x0, y0, x1, y1, pts: [A, B, C] }],
   ];
+  if (quad) {
+    const xs = quad.pts.map((q) => q[0]), ys = quad.pts.map((q) => q[1]);
+    cand.push([quadD / n / m / 0.06, { t: 'shape', shape: quad.shape, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys), pts: quad.pts }]);
+  }
   cand.sort((p, q) => p[0] - q[0]);
   return cand[0][0] < 1 ? cand[0][1] : null;
+}
+
+/**
+ * Από τέσσερις πρόχειρες κορυφές (A, C αντικριστές) φτιάχνει ακριβές παραλληλόγραμμο ή ρόμβο.
+ * null αν δεν μοιάζει με παραλληλόγραμμο, ή αν είναι ουσιαστικά όρθιο ορθογώνιο (αυτό το πιάνει το «ορθογώνιο»).
+ */
+function parallelogramFrom(A: Pt, B: Pt, C: Pt, D: Pt, hB: number, hD: number): { shape: ShapeKind; pts: Pt[] } | null {
+  const diag = Math.hypot(C[0] - A[0], C[1] - A[1]);
+  if (diag < 8 || hB < diag * 0.12 || hD < diag * 0.12) return null;
+  // απέναντι πλευρές σχεδόν ίσες και παράλληλες
+  const ab: Pt = [B[0] - A[0], B[1] - A[1]], dc: Pt = [C[0] - D[0], C[1] - D[1]];
+  const avg = (Math.hypot(ab[0], ab[1]) + Math.hypot(dc[0], dc[1]) + Math.hypot(C[0] - B[0], C[1] - B[1]) + Math.hypot(D[0] - A[0], D[1] - A[1])) / 4;
+  if (Math.hypot(ab[0] - dc[0], ab[1] - dc[1]) > avg * 0.3) return null;
+  const c: Pt = [(A[0] + B[0] + C[0] + D[0]) / 4, (A[1] + B[1] + C[1] + D[1]) / 4];
+  let d1: Pt = [(C[0] - A[0]) / 2, (C[1] - A[1]) / 2], d2: Pt = [(D[0] - B[0]) / 2, (D[1] - B[1]) / 2];
+  const l1 = Math.hypot(d1[0], d1[1]), l2 = Math.hypot(d2[0], d2[1]);
+  /** Διάνυσμα που «κουμπώνει» σε οριζόντιο ή κατακόρυφο όταν απέχει λίγες μοίρες. */
+  const snap = (v: Pt): Pt => {
+    const l = Math.hypot(v[0], v[1]);
+    if (Math.abs(v[1]) < l * 0.14) return [Math.sign(v[0]) * l, 0];
+    if (Math.abs(v[0]) < l * 0.14) return [0, Math.sign(v[1]) * l];
+    return v;
+  };
+  const axis = (v: Pt): boolean => v[0] === 0 || v[1] === 0;
+  const s1 = snap([d1[0] - d2[0], d1[1] - d2[1]]), s2 = snap([d1[0] + d2[0], d1[1] + d2[1]]);
+  const n1 = Math.hypot(s1[0], s1[1]), n2 = Math.hypot(s2[0], s2[1]);
+  const perpDiag = Math.abs(d1[0] * d2[0] + d1[1] * d2[1]) / (l1 * l2) < 0.22;
+  let shape: ShapeKind = 'para';
+  if (perpDiag && Math.abs(n1 - n2) < Math.max(n1, n2) * 0.25) {
+    // ρόμβος: ίσες πλευρές, διαγώνιες ακριβώς κάθετες
+    shape = 'rhombus';
+    d1 = snap(d1);
+    const sgn = d1[0] * d2[1] - d1[1] * d2[0] >= 0 ? 1 : -1;
+    d2 = [(-d1[1] / Math.hypot(d1[0], d1[1])) * l2 * sgn, (d1[0] / Math.hypot(d1[0], d1[1])) * l2 * sgn];
+    // ρόμβος με οριζόντιες και κατακόρυφες πλευρές είναι τετράγωνο: το αφήνουμε στο «ορθογώνιο»
+    if (axis(s1) && axis(s2)) return null;
+  } else {
+    if (axis(s1) && axis(s2)) return null;
+    d1 = [(s1[0] + s2[0]) / 2, (s1[1] + s2[1]) / 2];
+    d2 = [(s2[0] - s1[0]) / 2, (s2[1] - s1[1]) / 2];
+  }
+  return { shape, pts: [[c[0] - d1[0], c[1] - d1[1]], [c[0] - d2[0], c[1] - d2[1]], [c[0] + d1[0], c[1] + d1[1]], [c[0] + d2[0], c[1] + d2[1]]] };
 }
 
 // ---------- μερικό σβήσιμο ----------
@@ -634,9 +703,9 @@ function shapePolylines(s: Shape): Pt[][] {
     return [[[x0, y0], [x1, y1]], densify(head, 2)];
   }
   if (s.shape === 'rect') return [densify([[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]], 3)];
-  if (s.shape === 'triangle') {
+  if (isPoly(s.shape)) {
     const t = trianglePts(s);
-    return [densify([t[0], t[1], t[2], t[0]], 3)];
+    return [densify([...t, t[0]], 3)];
   }
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   const a = Math.max(Math.abs(x1 - x0) / 2, 0.5), b = Math.max(Math.abs(y1 - y0) / 2, 0.5);

@@ -1,6 +1,6 @@
 import {
   AngleItem, AxesAn, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TextItem, Tool, TrigItem, View,
-  angleDegrees, angleEnds, axesRange, cloneItem, distToSeg, erasePartial, hitItem, inLasso, isDark, itemBounds, itemRot, newDoc, newPage, pointInPolygon, reboxShape,
+  angleDegrees, angleEnds, axesRange, cloneItem, distToSeg, erasePartial, hitItem, inLasso, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, pointInPolygon, reboxShape,
   recognizeShape, rotateItem, roundAngle, scaleItem, textFont, textLines, translateItem, trianglePts, uid, unrot,
 } from './model';
 import { Fn, Params, compileCached, keyPoints } from './expr';
@@ -71,28 +71,30 @@ export function measureSides(s: Shape): MSide[] {
     const ctr: Pt = [(x0 + x1) / 2, (y0 + y1) / 2];
     side(0, [x0, y0], [x1, y0], ctr);
     side(1, [x0, y0], [x0, y1], ctr);
-  } else if (s.shape === 'triangle') {
+  } else if (isPoly(s.shape)) {
     const t = trianglePts(s);
-    for (let i = 0; i < 3; i++) side(i, t[i], t[(i + 1) % 3], t[(i + 2) % 3]);
+    const g: Pt = [t.reduce((a, p) => a + p[0], 0) / t.length, t.reduce((a, p) => a + p[1], 0) / t.length];
+    for (let i = 0; i < t.length; i++) side(i, t[i], t[(i + 1) % t.length], g);
   }
   return out;
 }
 
-/** Οι γωνίες ενός τριγώνου σε ακέραιες μοίρες με άθροισμα ακριβώς 180, και η θέση της ετικέτας καθεμιάς. */
+/** Οι γωνίες τριγώνου, ρόμβου ή παραλληλογράμμου σε ακέραιες μοίρες με άθροισμα ακριβώς 180 (ή 360), και η θέση της ετικέτας καθεμιάς. */
 export function measureAngles(s: Shape): { i: number; deg: number; pos: Pt }[] {
-  if (s.shape !== 'triangle' || s.dash) return [];
+  if (!isPoly(s.shape) || s.dash) return [];
   const t = trianglePts(s);
-  const g: Pt = [(t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3];
+  const n = t.length;
+  const g: Pt = [t.reduce((a, p) => a + p[0], 0) / n, t.reduce((a, p) => a + p[1], 0) / n];
   const raw = t.map((p, i) => {
-    const q = t[(i + 1) % 3], o = t[(i + 2) % 3];
+    const q = t[(i + 1) % n], o = t[(i + n - 1) % n];
     let d = Math.abs(Math.atan2(q[1] - p[1], q[0] - p[0]) - Math.atan2(o[1] - p[1], o[0] - p[0])) % (2 * Math.PI);
     if (d > Math.PI) d = 2 * Math.PI - d;
     return (d * 180) / Math.PI;
   });
-  // στρογγύλεμα «μεγαλύτερου υπολοίπου»: αλλιώς τρεις στρογγυλεμένες γωνίες μπορεί να δώσουν 179 ή 181
+  // στρογγύλεμα «μεγαλύτερου υπολοίπου»: αλλιώς οι στρογγυλεμένες γωνίες μπορεί να δώσουν 179 ή 181
   const deg = raw.map(Math.floor);
-  const order = [0, 1, 2].sort((a, b) => raw[b] - deg[b] - (raw[a] - deg[a]));
-  const need = Math.min(3, 180 - (deg[0] + deg[1] + deg[2]));
+  const order = raw.map((_, i) => i).sort((a, b) => raw[b] - deg[b] - (raw[a] - deg[a]));
+  const need = Math.max(0, Math.min(n, (n - 2) * 180 - deg.reduce((a, v) => a + v, 0)));
   for (let k = 0; k < need; k++) deg[order[k]]++;
   return t.map((p, i) => {
     const gl = Math.max(Math.hypot(g[0] - p[0], g[1] - p[1]), 1);
@@ -116,7 +118,7 @@ export function eraseMeasures(it: Item, x: number, y: number, r: number): Item |
     if (o.len && measureSides(it).some((q) => near(q.pos))) m.len = false;
     const { x0, y0, x1, y1 } = it;
     let ctr: Pt = [(x0 + x1) / 2, (y0 + y1) / 2];
-    if (o.ang && it.shape === 'triangle' && measureAngles(it).some((q) => near(q.pos))) m.ang = false;
+    if (o.ang && isPoly(it.shape) && measureAngles(it).some((q) => near(q.pos))) m.ang = false;
     if (o.ang && it.shape === 'rect') {
       const hit = ([[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as Pt[]).some((p) => {
         const gl = Math.max(Math.hypot(ctr[0] - p[0], ctr[1] - p[1]), 1);
@@ -125,9 +127,9 @@ export function eraseMeasures(it: Item, x: number, y: number, r: number): Item |
       });
       if (hit) m.ang = false;
     }
-    if (it.shape === 'triangle') {
+    if (isPoly(it.shape)) {
       const t = trianglePts(it);
-      ctr = [(t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3];
+      ctr = [t.reduce((a, p) => a + p[0], 0) / t.length, t.reduce((a, p) => a + p[1], 0) / t.length];
     }
     // οι γραμμές στο κέντρο (r/a/b της έλλειψης, Ε, Π) με τη σειρά που ζωγραφίζονται
     const mid: (keyof MeasOpts)[] = [];
@@ -609,7 +611,7 @@ export class Board {
         out.push([[it.x, it.y], p1], [[it.x, it.y], p2]);
       } else if (it.kind === 'shape') {
         if (it.shape === 'line' || it.shape === 'arrow') out.push([[it.x0, it.y0], [it.x1, it.y1]]);
-        else if (it.shape === 'triangle') ring(trianglePts(it));
+        else if (isPoly(it.shape)) ring(trianglePts(it));
         else if (it.shape === 'rect') {
           const mx = (it.x0 + it.x1) / 2, my = (it.y0 + it.y1) / 2, cs = Math.cos(it.rot ?? 0), sn = Math.sin(it.rot ?? 0);
           ring(([[it.x0, it.y0], [it.x1, it.y0], [it.x1, it.y1], [it.x0, it.y1]] as Pt[]).map(([x, y]) => [mx + (x - mx) * cs - (y - my) * sn, my + (x - mx) * sn + (y - my) * cs]));
@@ -715,7 +717,7 @@ export class Board {
       const b = { x0: Math.min(it.x0, it.x1), y0: Math.min(it.y0, it.y1), x1: Math.max(it.x0, it.x1), y1: Math.max(it.y0, it.y1) };
       let hit = hitItem(it, px, py, r);
       if (!hit && it.shape === 'rect') hit = wx >= b.x0 && wx <= b.x1 && wy >= b.y0 && wy <= b.y1;
-      if (!hit && it.shape === 'triangle') hit = pointInPolygon(wx, wy, trianglePts(it));
+      if (!hit && isPoly(it.shape)) hit = pointInPolygon(wx, wy, trianglePts(it));
       if (!hit && it.shape === 'ellipse') {
         const a = Math.max((b.x1 - b.x0) / 2, 0.5), h = Math.max((b.y1 - b.y0) / 2, 0.5);
         hit = Math.hypot((wx - (b.x0 + b.x1) / 2) / a, (wy - (b.y0 + b.y1) / 2) / h) <= 1;
@@ -774,8 +776,25 @@ export class Board {
       // γωνία τριγώνου: η κορυφή και η μία πλευρά μένουν, η άλλη πλευρά στρέφεται γύρω από την κορυφή
       const i = sideIndex - ANGLE_KEY;
       const num = /^(\d+([.,]\d+)?)\s*°?$/.exec(v);
-      if (before.shape !== 'triangle') return;
-      if (num) {
+      if (!isPoly(before.shape)) return;
+      if (num && before.shape !== 'triangle') {
+        // ρόμβος ή παραλληλόγραμμο: οι πλευρές κρατούν το μήκος τους, αλλάζει η κλίση (και μαζί οι άλλες τρεις γωνίες)
+        const want = (parseFloat(num[1].replace(',', '.')) * Math.PI) / 180;
+        if (!(want > 0.02 && want < Math.PI - 0.02)) return;
+        const pts = trianglePts(before).map((q): Pt => [q[0], q[1]]);
+        const p = pts[i], q = pts[(i + 1) % 4], o = pts[(i + 3) % 4];
+        const aq = Math.atan2(q[1] - p[1], q[0] - p[0]);
+        let d = Math.atan2(o[1] - p[1], o[0] - p[0]) - aq;
+        while (d > Math.PI) d -= 2 * Math.PI;
+        while (d < -Math.PI) d += 2 * Math.PI;
+        const na = aq + (d < 0 ? -want : want);
+        const lo = Math.hypot(o[0] - p[0], o[1] - p[1]);
+        const no: Pt = [p[0] + lo * Math.cos(na), p[1] + lo * Math.sin(na)];
+        pts[(i + 3) % 4] = no;
+        pts[(i + 2) % 4] = [q[0] + no[0] - p[0], q[1] + no[1] - p[1]];
+        const xs = pts.map((c) => c[0]), ys = pts.map((c) => c[1]);
+        after = { ...after, pts, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+      } else if (num) {
         const want = (parseFloat(num[1].replace(',', '.')) * Math.PI) / 180;
         if (!(want > 0.02 && want < Math.PI - 0.02)) return;
         const pts = trianglePts(before).map((q): Pt => [q[0], q[1]]);
@@ -805,7 +824,19 @@ export class Board {
       const b: Pt = [m.a[0] + (m.b[0] - m.a[0]) * f, m.a[1] + (m.b[1] - m.a[1]) * f];
       if (before.shape === 'line' || before.shape === 'arrow') after = { ...after, x1: b[0], y1: b[1] };
       else if (before.shape === 'rect') after = sideIndex === 0 ? { ...after, x1: b[0] } : { ...after, y1: b[1] };
-      else {
+      else if (before.shape === 'rhombus') {
+        // ρόμβος: όλες οι πλευρές ίσες, άρα μεγαλώνει ολόκληρος γύρω από την κορυφή a
+        const pts = trianglePts(before).map((q): Pt => [m.a[0] + (q[0] - m.a[0]) * f, m.a[1] + (q[1] - m.a[1]) * f]);
+        const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+        after = { ...after, pts, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+      } else if (before.shape === 'para') {
+        // παραλληλόγραμμο: μαζί με την πλευρά αλλάζει και η απέναντί της
+        const pts = trianglePts(before).map((q): Pt => [q[0], q[1]]);
+        const dx = b[0] - m.b[0], dy = b[1] - m.b[1];
+        for (const k of [(sideIndex + 1) % 4, (sideIndex + 2) % 4]) pts[k] = [pts[k][0] + dx, pts[k][1] + dy];
+        const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+        after = { ...after, pts, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+      } else {
         const pts = trianglePts(before).map((q): Pt => [q[0], q[1]]);
         pts[(sideIndex + 1) % 3] = b;
         const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
@@ -1164,11 +1195,9 @@ export class Board {
     c.globalAlpha = s.hl ? 0.35 : 1;
     if (s.dash) c.setLineDash([10, 9]);
     c.beginPath();
-    if (s.shape === 'triangle') {
+    if (isPoly(s.shape)) {
       const t = trianglePts(s);
-      c.moveTo(t[0][0], t[0][1]);
-      c.lineTo(t[1][0], t[1][1]);
-      c.lineTo(t[2][0], t[2][1]);
+      t.forEach((q, i) => (i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])));
       c.closePath();
     } else if (s.shape === 'rect') {
       c.rect(Math.min(s.x0, s.x1), Math.min(s.y0, s.y1), Math.abs(s.x1 - s.x0), Math.abs(s.y1 - s.y0));
@@ -1771,13 +1800,15 @@ export class Board {
       if (o.area) mid.push(`Ε = ${fmt((Math.PI * a * b) / CM / CM)}`);
       // περίμετρος έλλειψης: προσέγγιση του Ramanujan (ακριβής για κύκλο)
       if (o.per) mid.push(`Π = ${fmt((Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)))) / CM)}`);
-    } else if (s.shape === 'triangle') {
+    } else if (isPoly(s.shape)) {
       const t = trianglePts(s);
-      ctr = [(t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3];
-      const area = Math.abs((t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1])) / 2;
+      const n = t.length;
+      ctr = [t.reduce((a, p) => a + p[0], 0) / n, t.reduce((a, p) => a + p[1], 0) / n];
+      // εμβαδόν πολυγώνου από τις κορυφές του
+      const area = Math.abs(t.reduce((a, p, i) => a + p[0] * t[(i + 1) % n][1] - t[(i + 1) % n][0] * p[1], 0)) / 2;
       if (o.ang) for (const m of measureAngles(s)) c.fillText(s.labels?.[ANGLE_KEY + m.i] ?? `${m.deg}°`, m.pos[0], m.pos[1]);
       if (scaled && o.area) mid.push(`Ε = ${fmt(area / CM / CM)}`);
-      if (scaled && o.per) mid.push(`Π = ${fmt((len(t[0], t[1]) + len(t[1], t[2]) + len(t[2], t[0])) / CM)}`);
+      if (scaled && o.per) mid.push(`Π = ${fmt(t.reduce((a, p, i) => a + len(p, t[(i + 1) % n]), 0) / CM)}`);
     }
     mid.forEach((text, i) => c.fillText(text, ctr[0], ctr[1] + (i - (mid.length - 1) / 2) * 24));
     c.restore();
@@ -2089,7 +2120,7 @@ export class Board {
     if (it.kind === 'stroke') return it.pts.length > 1 ? [[it.pts[0][0], it.pts[0][1]], [it.pts[it.pts.length - 1][0], it.pts[it.pts.length - 1][1]]] : [];
     if (it.kind === 'angle') return [[it.x, it.y], ...angleEnds(it)];
     if (it.kind === 'shape' && (it.shape === 'line' || it.shape === 'arrow')) return [[it.x0, it.y0], [it.x1, it.y1]];
-    if (it.kind === 'shape' && it.shape === 'triangle') return trianglePts(it);
+    if (it.kind === 'shape' && isPoly(it.shape)) return trianglePts(it);
     const rot = itemRot(it);
     const b = it.kind === 'shape' ? it : itemBounds(rot ? ({ ...it, rot: 0 } as Item) : it);
     const mx = (b.x0 + b.x1) / 2, my = (b.y0 + b.y1) / 2, cs = Math.cos(rot), sn = Math.sin(rot);

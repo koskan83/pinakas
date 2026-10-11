@@ -1,6 +1,6 @@
 import './style.css';
 import { Board, EraserMode, SizedTool } from './board';
-import { AxesAn, AxesMode, Background, Doc, Item, MeasOpts, ShapeKind, TextItem, Tool, isDark, newDoc } from './model';
+import { AxesAn, AxesMode, Background, Doc, Item, MeasOpts, ShapeKind, TextItem, Tool, isDark, isPoly, newDoc } from './model';
 import { blobToPic, captureScreen, clipboardImage, openDocx, openPdf } from './importers';
 import { kvGet, kvSet } from './storage';
 import { Lessons } from './lessons';
@@ -70,6 +70,8 @@ const I = {
   rect: IC('<rect x="3" y="6" width="18" height="12" rx="1"/>'),
   ellipse: IC('<ellipse cx="12" cy="12" rx="9" ry="6.5"/>'),
   triangle: P('M12 4l9 16H3z'),
+  rhombus: P('M12 3l8 9-8 9-8-9z'),
+  para: P('M8 6h13l-5 12H3z'),
   angle: P('M20 20H4L15 5M11 20a7 7 0 0 0-2.800-5.600'),
   axFull: P('M3 12h18M12 21V3M18.5 9.5L21 12l-2.5 2.5M9.5 5.5L12 3l2.5 2.5'),
   axQ1: P('M5 19h16M5 19V3M18.5 16.5L21 19l-2.5 2.5M2.5 5.500L5 3l2.5 2.5'),
@@ -154,6 +156,8 @@ app.insertAdjacentHTML(
         <button data-shape="rect"><span>▭</span>Ορθογώνιο</button>
         <button data-shape="ellipse"><span>◯</span>Έλλειψη</button>
         <button data-shape="triangle"><span>△</span>Τρίγωνο</button>
+        <button data-shape="rhombus"><span>◇</span>Ρόμβος</button>
+        <button data-shape="para"><span>▱</span>Παραλληλόγραμμο</button>
         <button data-shape="angle"><span>∠</span>Γωνία με μοίρες</button>
       </div>
       <div class="group" id="eraserOpts">
@@ -237,6 +241,8 @@ app.insertAdjacentHTML(
       ${tile('data-shape="rect"', I.rect, 'Ορθογώνιο')}
       ${tile('data-shape="ellipse"', I.ellipse, 'Κύκλος', 'Κύκλος ή έλλειψη')}
       ${tile('data-shape="triangle"', I.triangle, 'Τρίγωνο')}
+      ${tile('data-shape="rhombus"', I.rhombus, 'Ρόμβος')}
+      ${tile('data-shape="para"', I.para, 'Παραλ/μο', 'Παραλληλόγραμμο')}
       ${tile('data-shape="angle"', I.angle, 'Γωνία', 'Γωνία με μοίρες')}
     </div>
     <div class="gHead">Άξονες και συναρτήσεις</div>
@@ -939,7 +945,7 @@ function renderMeasOpts(): void {
   }
   // ευθεία, βέλος και γωνία έχουν μόνο μήκη
   const line = sh.kind === 'angle' || sh.shape === 'line' || sh.shape === 'arrow';
-  const avail: Record<string, boolean> = { len: true, ang: sh.kind === 'shape' && (sh.shape === 'rect' || sh.shape === 'triangle'), area: !line, per: !line };
+  const avail: Record<string, boolean> = { len: true, ang: sh.kind === 'shape' && (sh.shape === 'rect' || isPoly(sh.shape)), area: !line, per: !line };
   measOpts.querySelectorAll<HTMLButtonElement>('[data-meas]').forEach((b) => {
     const k = b.dataset.meas as keyof MeasOpts;
     b.classList.toggle('on', !!sh.meas?.[k]);
