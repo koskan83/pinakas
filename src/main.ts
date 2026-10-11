@@ -82,6 +82,7 @@ const I = {
   physics: IC('<path d="M2 12h2l1.500-4 2.500 8 2.500-8 2.500 8 1.500-4h1.500"/><rect x="16" y="8" width="6" height="8" rx="1"/>'),
   timer: IC('<circle cx="12" cy="13.500" r="7.500"/><path d="M12 13.500V9.500M9.500 3h5M12 3v3"/>'),
   curtain: IC('<rect x="3" y="4" width="18" height="16" rx="1.500"/><path d="M3 12h18M7 12v8M12 12v8M17 12v8"/>'),
+  curtainTop: IC('<rect x="3" y="4" width="18" height="16" rx="1.500"/><path d="M3 12h18M7 12V4M12 12V4M17 12V4"/>'),
   spot: IC('<circle cx="12" cy="12" r="5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>'),
   play: P('M8 5l11 7-11 7z'),
   send: P('M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM18 14h2M14 18v2'),
@@ -260,7 +261,8 @@ app.insertAdjacentHTML(
     <div class="gHead">Παρουσίαση</div>
     <div class="tiles">
       ${tile('data-gadget="timer"', I.timer, 'Χρονόμετρο')}
-      ${tile('data-view="curtain"', I.curtain, 'Κουρτίνα')}
+      ${tile('data-view="curtainTop"', I.curtainTop, 'Κουρτ. πάνω', 'Κουρτίνα από πάνω (γράφεις και πάνω της)')}
+      ${tile('data-view="curtain"', I.curtain, 'Κουρτ. κάτω', 'Κουρτίνα από κάτω (γράφεις και πάνω της)')}
       ${tile('data-view="spot"', I.spot, 'Προβολέας')}
       ${tile('data-view="replay"', I.play, 'Αναπαραγωγή', 'Αναπαραγωγή της σελίδας')}
     </div>
@@ -361,7 +363,8 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 /** Ξαναστήνει τη γραμμή εργαλείων και τη δεύτερη σειρά της. */
 let layoutBar = (): void => {};
 const timer = new Timer(app);
-const curtain = new Curtain(app);
+const curtainTop = new Curtain(app, 'top');
+const curtain = new Curtain(app, 'bottom');
 const spot = new Spotlight(app);
 const board = new Board($('base') as HTMLCanvasElement, $('live') as HTMLCanvasElement);
 if (isOverlay) {
@@ -1210,7 +1213,7 @@ function refreshUi(): void {
     const g = b.dataset.gadget!;
     b.classList.toggle('on', g === 'timer' ? timer.visible : board.gadgets.has(g as GadgetKind));
   });
-  const viewOn: Record<string, boolean> = { curtain: curtain.visible, spot: spot.visible, replay: board.replaying };
+  const viewOn: Record<string, boolean> = { curtain: curtain.visible, curtainTop: curtainTop.visible, spot: spot.visible, replay: board.replaying };
   document.querySelectorAll<HTMLElement>('[data-view]').forEach((b) => b.classList.toggle('on', viewOn[b.dataset.view!]));
   document.querySelectorAll<HTMLElement>('.bgSw').forEach((b) => b.classList.toggle('on', b.dataset.act === `bg-${board.doc.bg}`));
   document.body.classList.toggle('dark', isDark(board.doc.bg));
@@ -1220,7 +1223,8 @@ function refreshUi(): void {
   layoutBar();
 }
 board.onUi = refreshUi;
-curtain.onChange = refreshUi;
+curtain.onChange = curtainTop.onChange = refreshUi;
+curtain.ink = curtainTop.ink = () => ({ tool: board.tool, color: board.color, width: board.width, eraser: board.sizes.eraser });
 spot.onChange = refreshUi;
 
 $('replayBar').addEventListener('click', (e) => {
@@ -1488,7 +1492,9 @@ gadgetMenu.addEventListener('click', (e) => {
   const view = t.closest<HTMLElement>('[data-view]')?.dataset.view;
   if (view) {
     closePopups();
-    if (view === 'curtain') curtain.toggle();
+    // η καθεμιά ανοίγει αφήνοντας ορατό ένα κομμάτι του πίνακα, και δίπλα στην άλλη αν είναι ήδη ανοιχτή
+    if (view === 'curtain') curtain.toggle(curtainTop.visible ? Math.min(0.9, curtainTop.edge + 0.3) : 0.3);
+    else if (view === 'curtainTop') curtainTop.toggle(curtain.visible ? Math.max(0.1, curtain.edge - 0.3) : 0.3);
     else if (view === 'spot') spot.toggle();
     else if (board.replaying) board.stopReplay();
     else if (board.page.items.length === 0) toast('Η σελίδα είναι κενή');

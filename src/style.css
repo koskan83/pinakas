@@ -246,17 +246,22 @@ body.inking #toolbar { pointer-events: none; }
 #replayBar span { margin-right: 8px; font-weight: 600; }
 #replayBar button { width: 48px; height: 44px; border-radius: 10px; font-size: 20px; background: var(--bar-2); }
 
-#curtain {
-  position: fixed; left: 0; right: 0; top: 30%; bottom: 0; z-index: 9; background: #1f2937;
+.curtain {
+  position: fixed; left: 0; right: 0; z-index: 9; background: #1f2937; overflow: hidden;
   background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.04) 0 18px, transparent 18px 36px);
 }
-#curtain .chandle {
-  position: absolute; left: 0; right: 0; top: 0; height: 46px; display: flex; align-items: center; justify-content: center; gap: 10px;
-  background: #374151; color: var(--fg); cursor: ns-resize; touch-action: none; font-size: 16px;
+.curtain.top { top: 0; }
+.curtain.bottom { bottom: 0; }
+.curtain canvas { position: absolute; left: 0; width: 100%; height: calc(100% - 46px); touch-action: none; cursor: crosshair; }
+.curtain.top canvas { top: 0; }
+.curtain.bottom canvas { top: 46px; }
+.curtain .chandle {
+  position: absolute; left: 0; right: 0; height: 46px; display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: #374151; color: #f1f5f9; cursor: ns-resize; touch-action: none; font-size: 16px;
 }
-#curtain .chandle button { width: 44px; height: 38px; border-radius: 9px; font-size: 19px; background: rgba(255,255,255,.1); }
-#curtain.horiz .chandle { right: auto; bottom: 0; width: 46px; height: auto; flex-direction: column; cursor: ew-resize; }
-#curtain.horiz .chandle span { writing-mode: vertical-rl; }
+.curtain.top .chandle { bottom: 0; }
+.curtain.bottom .chandle { top: 0; }
+.curtain .chandle button { width: 44px; height: 38px; border-radius: 9px; font-size: 19px; background: rgba(255,255,255,.1); color: inherit; }
 
 #spot { position: fixed; inset: 0; z-index: 9; touch-action: none; cursor: move; }
 #spot .sctl { position: absolute; display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--bar); color: var(--fg); }
