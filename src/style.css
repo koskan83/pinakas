@@ -244,3 +244,8 @@ html.overlay, html.overlay body { background: transparent; }
 .aiRow button { flex: 1; text-align: center; background: var(--bar-2); }
 .aiRow #aiSave { background: #059669; }
 #aiMenu .hint { max-width: none; }
+
+#measMenu { width: 300px; }
+#measKeys { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; padding: 2px 8px 4px; }
+#measKeys button { padding: 11px 0; text-align: center; background: var(--bar-2); font-size: 17px; }
+#measKeys button.num { background: #374151; font-weight: 600; }

@@ -38,6 +38,8 @@ export interface Shape {
   angleWith?: string;
   /** Διακεκομμένη γραμμή. */
   dash?: boolean;
+  /** Ετικέτες πλευρών που έγραψε ο χρήστης στη θέση της μέτρησης (αριθμός πλευράς → κείμενο). */
+  labels?: Record<number, string>;
 }
 
 export interface TextItem {

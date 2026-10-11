@@ -22,6 +22,39 @@ function fmt(n: number): string {
   return n.toLocaleString('el', { maximumFractionDigits: 1 });
 }
 
+/** Μια πλευρά σχήματος που μετριέται: τα άκρα της, το μήκος της και η θέση της ετικέτας. */
+interface MSide {
+  i: number;
+  a: Pt;
+  b: Pt;
+  len: number;
+  pos: Pt;
+}
+function measureSides(s: Shape): MSide[] {
+  const out: MSide[] = [];
+  /** Ετικέτα στο μέσο του τμήματος ab, από την πλευρά που δεν είναι το σημείο `away`. */
+  const side = (i: number, a: Pt, b: Pt, away?: Pt): void => {
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 30) return;
+    const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+    let nx = -(b[1] - a[1]) / len, ny = (b[0] - a[0]) / len;
+    if (away ? (away[0] - mx) * nx + (away[1] - my) * ny > 0 : ny > 0) { nx = -nx; ny = -ny; }
+    out.push({ i, a, b, len, pos: [mx + nx * 18, my + ny * 18] });
+  };
+  const { x0, y0, x1, y1 } = s;
+  if (s.dash) return out;
+  if (s.shape === 'line' || s.shape === 'arrow') side(0, [x0, y0], [x1, y1]);
+  else if (s.shape === 'rect') {
+    const ctr: Pt = [(x0 + x1) / 2, (y0 + y1) / 2];
+    side(0, [x0, y0], [x1, y0], ctr);
+    side(1, [x0, y0], [x0, y1], ctr);
+  } else if (s.shape === 'triangle') {
+    const t = trianglePts(s);
+    for (let i = 0; i < 3; i++) side(i, t[i], t[(i + 1) % 3], t[(i + 2) % 3]);
+  }
+  return out;
+}
+
 interface PState {
   id: number;
   type: string;
@@ -409,6 +442,59 @@ export class Board {
     if (!before) return;
     const after = { ...before, ...patch } as AxesItem;
     this.page.items[this.page.items.indexOf(before)] = after;
+    this.push({ t: 'mod', p: this.cur, before, after });
+    this.redraw();
+  }
+
+  /** Η μέτρηση πλευράς που βρίσκεται κάτω από το σημείο της οθόνης, αν φαίνονται οι μετρήσεις. */
+  measureAt(sx: number, sy: number): { id: string; side: number; text: string; x: number; y: number } | null {
+    if (!this.showMeasures) return null;
+    const [wx, wy] = this.toWorld(sx, sy);
+    const k = this.page.view.k;
+    const items = this.page.items;
+    for (let n = items.length - 1; n >= 0; n--) {
+      const it = items[n];
+      if (it.kind !== 'shape') continue;
+      for (const m of measureSides(it)) {
+        if (Math.abs(wx - m.pos[0]) < Math.max(34, 26 / k) && Math.abs(wy - m.pos[1]) < Math.max(18, 20 / k)) {
+          const [x, y] = this.toScreen(m.pos[0], m.pos[1]);
+          return { id: it.id, side: m.i, text: it.labels?.[m.i] ?? fmt(m.len / CM), x, y };
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Ορίζει τη μέτρηση μιας πλευράς: σκέτος αριθμός αλλάζει το μήκος της (σε cm),
+   * οτιδήποτε άλλο γίνεται ετικέτα, και το κενό επαναφέρει την πραγματική μέτρηση.
+   */
+  setMeasure(id: string, sideIndex: number, value: string): void {
+    const i = this.page.items.findIndex((x) => x.id === id);
+    const before = this.page.items[i];
+    if (!before || before.kind !== 'shape') return;
+    const m = measureSides(before).find((x) => x.i === sideIndex);
+    if (!m) return;
+    const labels = { ...before.labels };
+    delete labels[sideIndex];
+    let after: Shape = { ...before, labels };
+    const v = value.trim();
+    if (/^\d+([.,]\d+)?$/.test(v)) {
+      const f = (parseFloat(v.replace(',', '.')) * CM) / m.len;
+      if (!(f > 0) || !Number.isFinite(f)) return;
+      // το άκρο a μένει στη θέση του, το b μετακινείται πάνω στην ίδια ευθεία
+      const b: Pt = [m.a[0] + (m.b[0] - m.a[0]) * f, m.a[1] + (m.b[1] - m.a[1]) * f];
+      if (before.shape === 'line' || before.shape === 'arrow') after = { ...after, x1: b[0], y1: b[1] };
+      else if (before.shape === 'rect') after = sideIndex === 0 ? { ...after, x1: b[0] } : { ...after, y1: b[1] };
+      else {
+        const pts = trianglePts(before).map((q): Pt => [q[0], q[1]]);
+        pts[(sideIndex + 1) % 3] = b;
+        const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+        after = { ...after, pts, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+      }
+    } else if (v) labels[sideIndex] = v.slice(0, 16);
+    if (Object.keys(labels).length === 0) delete after.labels;
+    this.page.items[i] = after;
     this.push({ t: 'mod', p: this.cur, before, after });
     this.redraw();
   }
@@ -995,24 +1081,16 @@ export class Board {
     c.textAlign = 'center';
     c.textBaseline = 'middle';
     const len = (a: Pt, b: Pt) => Math.hypot(b[0] - a[0], b[1] - a[1]);
-    /** Ετικέτα στο μέσο του τμήματος ab, από την πλευρά που δεν είναι το σημείο `away`. */
-    const side = (a: Pt, b: Pt, away?: Pt): void => {
-      const l = len(a, b);
-      if (l < 30) return;
-      const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
-      let nx = -(b[1] - a[1]) / l, ny = (b[0] - a[0]) / l;
-      if (away ? (away[0] - mx) * nx + (away[1] - my) * ny > 0 : ny > 0) { nx = -nx; ny = -ny; }
-      c.fillText(fmt(l / CM), mx + nx * 18, my + ny * 18);
-    };
+    for (const m of measureSides(s)) c.fillText(s.labels?.[m.i] ?? fmt(m.len / CM), m.pos[0], m.pos[1]);
+    // με δικές σου ετικέτες το σχήμα δεν είναι σε κλίμακα: το εμβαδόν δεν θα είχε νόημα
+    const scaled = !s.labels || Object.keys(s.labels).length === 0;
     const { x0, y0, x1, y1 } = s;
     if (s.shape === 'line' || s.shape === 'arrow') {
-      side([x0, y0], [x1, y1]);
+      /* μόνο το μήκος */
     } else if (s.shape === 'rect') {
       const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
       const ctr: Pt = [(x0 + x1) / 2, (y0 + y1) / 2];
-      side([x0, y0], [x1, y0], ctr);
-      side([x0, y0], [x0, y1], ctr);
-      if (w > 90 && h > 40) c.fillText(`Ε = ${fmt((w * h) / CM / CM)}`, ctr[0], ctr[1]);
+      if (scaled && w > 90 && h > 40) c.fillText(`Ε = ${fmt((w * h) / CM / CM)}`, ctr[0], ctr[1]);
     } else if (s.shape === 'ellipse') {
       const a = Math.abs(x1 - x0) / 2, b = Math.abs(y1 - y0) / 2;
       const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
@@ -1026,7 +1104,6 @@ export class Board {
       const area = Math.abs((t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1])) / 2;
       for (let i = 0; i < 3; i++) {
         const p = t[i], q = t[(i + 1) % 3], o = t[(i + 2) % 3];
-        side(p, q, o);
         // γωνία στην κορυφή p
         const u1 = Math.atan2(q[1] - p[1], q[0] - p[0]), u2 = Math.atan2(o[1] - p[1], o[0] - p[0]);
         let d = Math.abs(u1 - u2) % (2 * Math.PI);
@@ -1035,7 +1112,7 @@ export class Board {
         const off = Math.min(42, gl * 0.45);
         c.fillText(`${Math.round((d * 180) / Math.PI)}°`, p[0] + ((g[0] - p[0]) / gl) * off, p[1] + ((g[1] - p[1]) / gl) * off);
       }
-      if (area > 6000) c.fillText(`Ε = ${fmt(area / CM / CM)}`, g[0], g[1]);
+      if (scaled && area > 6000) c.fillText(`Ε = ${fmt(area / CM / CM)}`, g[0], g[1]);
     }
     c.restore();
   }

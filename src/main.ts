@@ -186,6 +186,11 @@ app.insertAdjacentHTML(
     <div id="colorGrid"></div>
     <label id="colorPick">🎨 Οποιοδήποτε χρώμα…<input id="colorInput" type="color" value="#2563eb" /></label>
   </div>
+  <div id="measMenu" class="popup hidden">
+    <div class="fnRow"><input id="measInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" /><button id="measOk">✓</button></div>
+    <div id="measKeys"></div>
+    <div class="hint">Αριθμός: η πλευρά γίνεται τόσα cm. Γράμμα ή μονάδα (α, 5 m): αλλάζει μόνο η ετικέτα. Κενό: η πραγματική μέτρηση.</div>
+  </div>
   <div id="labelMenu" class="popup hidden">
     <div id="labelGrid"></div>
     <button id="labelOther">⌨ Άλλο…</button>
@@ -725,6 +730,57 @@ $('fnClose').onclick = () => closePopups();
   head.addEventListener('pointerup', end);
   head.addEventListener('pointercancel', end);
 }
+
+// ---------- αλλαγή μέτρησης πλευράς ----------
+
+const measMenu = $('measMenu');
+const measInput = $('measInput') as HTMLInputElement;
+const MEAS_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', ',', '⌫', 'α', 'β', 'γ', 'x', 'm', 'cm'];
+$('measKeys').innerHTML = MEAS_KEYS.map((k) => `<button data-key="${k}"${/^[0-9,]$/.test(k) ? ' class="num"' : ''}>${k}</button>`).join('');
+let measTarget: { id: string; side: number } | null = null;
+/** Μόλις άνοιξε: το πρώτο πλήκτρο αντικαθιστά την παλιά τιμή (χωρίς να ανοίγει το πληκτρολόγιο της συσκευής). */
+let measFresh = false;
+measInput.addEventListener('pointerdown', () => { measFresh = false; });
+// με την Επιλογή, πάτημα πάνω σε μια μέτρηση ανοίγει την αλλαγή της (πριν το δει ο πίνακας)
+document.addEventListener(
+  'pointerdown',
+  (e) => {
+    if (e.target !== $('live') || board.tool !== 'select') return;
+    const hit = board.measureAt(e.clientX, e.clientY);
+    if (!hit) return;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    closePopups();
+    measTarget = { id: hit.id, side: hit.side };
+    measInput.value = hit.text;
+    measMenu.classList.remove('hidden');
+    const w = measMenu.offsetWidth, h = measMenu.offsetHeight;
+    measMenu.style.left = Math.max(8, Math.min(hit.x - w / 2, window.innerWidth - w - 8)) + 'px';
+    measMenu.style.top = (hit.y + 30 + h < window.innerHeight ? hit.y + 30 : Math.max(8, hit.y - h - 30)) + 'px';
+    measFresh = true;
+  },
+  true,
+);
+function applyMeasure(): void {
+  if (measTarget) board.setMeasure(measTarget.id, measTarget.side, measInput.value);
+  measTarget = null;
+  closePopups();
+}
+$('measOk').onclick = applyMeasure;
+measInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') applyMeasure();
+});
+$('measKeys').addEventListener('click', (e) => {
+  const key = (e.target as HTMLElement).closest<HTMLElement>('[data-key]')?.dataset.key;
+  if (!key) return;
+  if (measFresh) measInput.value = '';
+  measFresh = false;
+  const from = document.activeElement === measInput ? measInput.selectionStart ?? measInput.value.length : measInput.value.length;
+  const to = document.activeElement === measInput ? measInput.selectionEnd ?? from : from;
+  const cut = key === '⌫' ? (from === to ? Math.max(0, from - 1) : from) : from;
+  const ins = key === '⌫' ? '' : key === 'm' || key === 'cm' ? ` ${key}` : key;
+  measInput.value = measInput.value.slice(0, cut) + ins + measInput.value.slice(to);
+});
 
 // ---------- αναγνώριση γραφής ----------
 
