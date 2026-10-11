@@ -336,6 +336,7 @@ export class Board {
   private push(op: Op): void {
     this.undoStack.push(op);
     this.redoStack = [];
+    if (this.syncLinks()) this.redraw();
     this.onChange();
     this.onUi();
   }
@@ -386,6 +387,7 @@ export class Board {
     this.cur = op.p;
     this.selected = null;
     this.multi = [];
+    this.syncLinks();
     this.redraw();
     this.onChange();
     this.onUi();
@@ -690,44 +692,105 @@ export class Board {
     this.redraw();
   }
 
-  /**
-   * Αν είναι επιλεγμένα ακριβώς δύο βέλη ή ευθείες με κοινή κορυφή, τα επιστρέφει
-   * προσανατολισμένα ώστε να ξεκινούν και τα δύο από την κορυφή αυτή.
-   */
-  get resultantPair(): [Shape, Shape] | null {
-    if (this.multi.length !== 2) return null;
-    const [a, b] = this.multi.map((id) => this.page.items.find((x) => x.id === id));
-    const ok = (o: Item | undefined): o is Shape => !!o && o.kind === 'shape' && (o.shape === 'arrow' || o.shape === 'line');
+  /** Κοινή αρχή O και άκρα A, B των δύο πλευρών από τις οποίες βγαίνει μια συνισταμένη. */
+  private linkGeom(aId: string, bId: string): { o: Pt; a: Pt; b: Pt; color: string; width: number } | null {
+    const items = this.page.items;
+    const a = items.find((x) => x.id === aId), b = items.find((x) => x.id === bId);
+    if (a && a.kind === 'angle') {
+      const [p1, p2] = angleEnds(a);
+      return { o: [a.x, a.y], a: p1, b: p2, color: a.color, width: a.width };
+    }
+    const ok = (q: Item | undefined): q is Shape => !!q && q.kind === 'shape' && (q.shape === 'arrow' || q.shape === 'line');
     if (!ok(a) || !ok(b)) return null;
-    const flip = (o: Shape): Shape => ({ ...o, x0: o.x1, y0: o.y1, x1: o.x0, y1: o.y0 });
-    const near = (p: Shape, q: Shape): boolean => Math.hypot(p.x0 - q.x0, p.y0 - q.y0) < 16;
-    // ένα βέλος ξεκινά πάντα από την αρχή του· μια ευθεία μπορεί να «γυρίσει»
-    const as = a.shape === 'line' ? [a, flip(a)] : [a];
-    const bs = b.shape === 'line' ? [b, flip(b)] : [b];
-    for (const p of as) for (const q of bs) if (near(p, q)) return [p, { ...q, x1: q.x1 + p.x0 - q.x0, y1: q.y1 + p.y0 - q.y0, x0: p.x0, y0: p.y0 }];
-    return null;
+    // ένα βέλος ξεκινά πάντα από την αρχή του· μια ευθεία μπορεί να «γυρίσει», όποιο άκρο της είναι πιο κοντά στο άλλο
+    const ends = (q: Shape): [Pt, Pt][] => (q.shape === 'line' ? [[[q.x0, q.y0], [q.x1, q.y1]], [[q.x1, q.y1], [q.x0, q.y0]]] : [[[q.x0, q.y0], [q.x1, q.y1]]]);
+    let best: { d: number; p: [Pt, Pt]; q: [Pt, Pt] } | null = null;
+    for (const p of ends(a)) for (const q of ends(b)) {
+      const d = Math.hypot(p[0][0] - q[0][0], p[0][1] - q[0][1]);
+      if (!best || d < best.d) best = { d, p, q };
+    }
+    const { p, q } = best!;
+    // το δεύτερο μεταφέρεται παράλληλα ώστε να ξεκινά από την αρχή του πρώτου
+    return { o: p[0], a: p[1], b: [q[1][0] + p[0][0] - q[0][0], q[1][1] + p[0][1] - q[0][1]], color: a.color, width: a.width };
   }
 
-  /** Σχεδιάζει το παραλληλόγραμμο και τη συνισταμένη δύο βελών με κοινή αρχή. */
+  /**
+   * Από τι μπορεί να βγει συνισταμένη με την τωρινή επιλογή: μια γωνία, δύο βέλη/ευθείες με κοινή κορυφή,
+   * ή ένα βέλος/ευθεία που «κούμπωσε» στην αρχή άλλου. Επιστρέφει τα id των δύο πλευρών.
+   */
+  get resultantSource(): [string, string] | null {
+    const items = this.page.items;
+    const ok = (q: Item | undefined): q is Shape => !!q && q.kind === 'shape' && (q.shape === 'arrow' || q.shape === 'line') && !q.dash && !q.link;
+    if (this.multi.length === 2) {
+      const [a, b] = this.multi.map((id) => items.find((x) => x.id === id));
+      if (!ok(a) || !ok(b)) return null;
+      const pts = (q: Shape): Pt[] => (q.shape === 'line' ? [[q.x0, q.y0], [q.x1, q.y1]] : [[q.x0, q.y0]]);
+      const common = pts(a).some((p) => pts(b).some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 16));
+      return common ? [a.id, b.id] : null;
+    }
+    const sel = this.selected ? items.find((x) => x.id === this.selected) : undefined;
+    if (!sel) return null;
+    if (sel.kind === 'angle') return [sel.id, sel.id];
+    if (!ok(sel)) return null;
+    const mate = items.find((x) => x.id === sel.angleWith) ?? items.find((x) => ok(x) && x.angleWith === sel.id);
+    return ok(mate) ? [mate.id, sel.id] : null;
+  }
+
+  /** Σχεδιάζει το παραλληλόγραμμο και τη συνισταμένη· και τα τρία μένουν δεμένα με τις δύο πλευρές. */
   addResultant(): void {
-    const pair = this.resultantPair;
-    if (!pair) return;
-    const [a, b] = pair;
-    const rx = a.x1 + b.x1 - a.x0, ry = a.y1 + b.y1 - a.y0;
+    const src = this.resultantSource;
+    const g = src && this.linkGeom(src[0], src[1]);
+    if (!src || !g) return;
+    const [a, b] = src;
+    // υπάρχει ήδη συνισταμένη για αυτές τις πλευρές: απλώς την επιλέγουμε
+    const have = this.page.items.find((x) => x.kind === 'shape' && x.link?.role === 'sum' && [x.link.a, x.link.b].sort().join() === [a, b].sort().join());
+    if (have) {
+      this.selected = have.id;
+      this.multi = [];
+      this.redraw();
+      this.onUi();
+      return;
+    }
     const before = this.page.items.slice();
-    const side = (from: Shape): Shape => ({
-      kind: 'shape', id: uid(), shape: 'line', x0: from.x1, y0: from.y1, x1: rx, y1: ry,
-      color: a.color, width: Math.max(1.5, a.width / 2), dash: true,
+    const base = { kind: 'shape' as const, x0: 0, y0: 0, x1: 0, y1: 0 };
+    const side = (role: 'sideA' | 'sideB'): Shape => ({
+      ...base, id: uid(), shape: 'line', color: g.color, width: Math.max(1.5, g.width / 2), dash: true, link: { a, b, role },
     });
-    const color = a.color === '#e11d48' || a.color === '#fb7185' ? '#2563eb' : isDark(this.doc.bg) ? '#fb7185' : '#e11d48';
+    const color = g.color === '#e11d48' || g.color === '#fb7185' ? '#2563eb' : isDark(this.doc.bg) ? '#fb7185' : '#e11d48';
     const sum: Shape = {
-      kind: 'shape', id: uid(), shape: 'arrow', x0: a.x0, y0: a.y0, x1: rx, y1: ry, color, width: a.width, angleWith: a.id,
+      ...base, id: uid(), shape: 'arrow', color, width: g.width, link: { a, b, role: 'sum' },
+      angleWith: this.page.items.find((x) => x.id === a)?.kind === 'shape' ? a : undefined,
     };
-    this.page.items.push(side(a), side(b), sum);
+    this.page.items.push(side('sideA'), side('sideB'), sum);
     this.selected = sum.id;
     this.multi = [];
     this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
     this.redraw();
+  }
+
+  /**
+   * Φέρνει τις συνισταμένες και τα παραλληλόγραμμά τους στη θέση που ορίζουν οι πλευρές τους.
+   * Αν μια πλευρά έχει σβηστεί, η συνισταμένη μένει όπως είναι, ελεύθερη.
+   */
+  private syncLinks(): boolean {
+    const items = this.page.items;
+    let changed = false;
+    items.forEach((it, i) => {
+      if (it.kind !== 'shape' || !it.link) return;
+      const g = this.linkGeom(it.link.a, it.link.b);
+      if (!g) {
+        const { link: _drop, ...free } = it;
+        items[i] = free;
+        changed = true;
+        return;
+      }
+      const r: Pt = [g.a[0] + g.b[0] - g.o[0], g.a[1] + g.b[1] - g.o[1]];
+      const from = it.link.role === 'sum' ? g.o : it.link.role === 'sideA' ? g.a : g.b;
+      if (Math.hypot(it.x0 - from[0], it.y0 - from[1]) + Math.hypot(it.x1 - r[0], it.y1 - r[1]) < 1e-6) return;
+      items[i] = { ...it, x0: from[0], y0: from[1], x1: r[0], y1: r[1] };
+      changed = true;
+    });
+    return changed;
   }
 
   deleteSelected(): void {

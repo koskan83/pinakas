@@ -44,6 +44,11 @@ export interface Shape {
   rot?: number;
   /** Ετικέτες πλευρών που έγραψε ο χρήστης στη θέση της μέτρησης (αριθμός πλευράς → κείμενο). */
   labels?: Record<number, string>;
+  /**
+   * Συνισταμένη (sum) ή βοηθητική πλευρά του παραλληλογράμμου (sideA, sideB) που ακολουθεί τα δύο στοιχεία a και b:
+   * δύο βέλη/ευθείες, ή μία γωνία (τότε a === b).
+   */
+  link?: { a: string; b: string; role: 'sum' | 'sideA' | 'sideB' };
   /** Ποιες μετρήσεις φαίνονται πάνω στο σχήμα (εργαλείο «Μετρήσεις»). */
   meas?: MeasOpts;
 }
@@ -652,6 +657,11 @@ export function erasePartial(it: Item, x: number, y: number, r: number): Item[] 
 
 /** Αντίγραφο με νέο id. */
 export function cloneItem(it: Item): Item {
+  // το αντίγραφο μιας συνισταμένης είναι ελεύθερο βέλος, δεν ακολουθεί τις πλευρές της αρχικής
+  if (it.kind === 'shape' && it.link) {
+    const { link: _drop, ...free } = it;
+    return { ...free, id: uid() };
+  }
   return { ...it, id: uid() };
 }
 
