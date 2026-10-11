@@ -112,7 +112,6 @@ app.insertAdjacentHTML(
     <div class="group" id="tools">
       <button data-tool="select"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="9.5" rx="8.5" ry="5.8" stroke-dasharray="3.2 2.6"/><circle cx="7" cy="16" r="1.9"/><path d="M7 17.9c0 2 1 3.1 3.2 3.6"/></svg></span>Επιλογή (σύρε γύρω από πολλά για ομαδική επιλογή)</button>
       <button id="penBtn"><span>✏️</span>Γραφή</button>
-      <button data-tool="shape"><span>▭</span>Σχήματα</button>
       <button data-tool="text"><span>T</span>Κείμενο</button>
       <button data-tool="eraser"><span><svg viewBox="0 0 24 24"><g transform="rotate(-40 12 12)"><rect x="3" y="7.5" width="9" height="9" rx="1.5" fill="#fb7185"/><rect x="12" y="7.5" width="9" height="9" rx="1.5" fill="#60a5fa"/><rect x="11" y="7.5" width="2" height="9" fill="#f9fafb"/></g></svg></span>Γόμα</button>
       <button data-tool="hand"><span>✋</span>Μετακίνηση πίνακα</button>
@@ -141,14 +140,6 @@ app.insertAdjacentHTML(
     <button data-imp="shot">🖥 Στιγμιότυπο οθόνης</button>
     <button data-imp="paste">📋 Επικόλληση από το πρόχειρο</button>
     <hr />
-    <div class="bgRow">
-      <span>Άξονες</span>
-      <button data-axes="full" class="sq" title="4 τεταρτημόρια">╋</button>
-      <button data-axes="q1" class="sq" title="1ο τεταρτημόριο">┗</button>
-      <button data-axes="q14" class="sq" title="1ο και 4ο (x ≥ 0)">┣</button>
-    </div>
-    <button data-ins="trig">◔ Τριγωνομετρικός κύκλος</button>
-    <button data-ins="stamps">🧲 Σχήματα φυσικής…</button>
     <button data-ins="tpl">📄 Σελίδα από πρότυπο…</button>
   </div>
 
@@ -161,6 +152,24 @@ app.insertAdjacentHTML(
   </div>
 
   <div id="gadgetMenu" class="popup hidden">
+    <div class="bgRow">
+      <span>Σχήματα</span>
+      <button data-shape="line" class="sq" title="Ευθεία">╱</button>
+      <button data-shape="arrow" class="sq" title="Βέλος">➚</button>
+      <button data-shape="rect" class="sq" title="Ορθογώνιο">▭</button>
+      <button data-shape="ellipse" class="sq" title="Έλλειψη">◯</button>
+      <button data-shape="triangle" class="sq" title="Τρίγωνο">△</button>
+      <button data-shape="angle" class="sq" title="Γωνία με μοίρες">∠</button>
+    </div>
+    <div class="bgRow">
+      <span>Άξονες</span>
+      <button data-axes="full" class="sq" title="4 τεταρτημόρια">╋</button>
+      <button data-axes="q1" class="sq" title="1ο τεταρτημόριο">┗</button>
+      <button data-axes="q14" class="sq" title="1ο και 4ο (x ≥ 0)">┣</button>
+    </div>
+    <button data-ins="trig">◔ Τριγωνομετρικός κύκλος</button>
+    <button data-ins="stamps">🧲 Σχήματα φυσικής…</button>
+    <hr />
     <button data-gadget="ruler">📏 Χάρακας</button>
     <button data-gadget="protractor">◗ Μοιρογνωμόνιο</button>
     <button data-gadget="compass">⭕ Διαβήτης</button>
@@ -700,6 +709,7 @@ function refreshUi(): void {
   const show = (id: string, on: boolean): void => { $(id).classList.toggle('hidden', !on); };
   document.querySelectorAll<HTMLElement>('[data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === tool));
   $('penBtn').classList.toggle('on', isPenKind(tool));
+  $('gadgetBtn').classList.toggle('on', tool === 'shape');
   $('penBtn').querySelector('span')!.textContent = PEN_ICON[penKind];
   document.querySelectorAll<HTMLElement>('[data-pen]').forEach((b) => b.classList.toggle('on', b.dataset.pen === tool));
   document.querySelectorAll<HTMLElement>('[data-auto]').forEach((b) => b.classList.toggle('on', b.dataset.auto === autoKind));
@@ -813,7 +823,7 @@ function initToolbar(): void {
     bar.classList.toggle('sub-right', r.left + r.width / 2 < window.innerWidth / 2);
     // ...και στέκεται πάνω από (ή δίπλα σε) το εργαλείο που αφορά
     const sub = $('subbar');
-    const anchor = bar.querySelector<HTMLElement>('#tools button.on');
+    const anchor = bar.querySelector<HTMLElement>('#tools button.on, #gadgetBtn.on');
     sub.style.left = sub.style.right = sub.style.top = '';
     bar.classList.remove('sub-lift');
     if (anchor && !sub.classList.contains('hidden') && !st.folded) {
@@ -963,6 +973,23 @@ document.addEventListener('pointerdown', (e) => {
 
 gadgetMenu.addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
+  const shape = t.closest<HTMLElement>('[data-shape]')?.dataset.shape;
+  const ax = t.closest<HTMLElement>('[data-axes]')?.dataset.axes;
+  const ins = t.closest<HTMLElement>('[data-ins]')?.dataset.ins;
+  if (shape || ax || ins) {
+    closePopups();
+    if (shape) {
+      board.shapeKind = shape as ShapeKind | 'angle';
+      board.setTool('shape');
+    } else if (ax) board.addAxes(ax as AxesMode);
+    else if (ins === 'trig') board.addTrig();
+    else {
+      stampMenu.classList.remove('hidden');
+      placeNear(stampMenu, $('gadgetBtn'));
+    }
+    refreshUi();
+    return;
+  }
   const view = t.closest<HTMLElement>('[data-view]')?.dataset.view;
   if (view) {
     closePopups();
@@ -987,17 +1014,11 @@ gadgetMenu.addEventListener('click', (e) => {
 
 impMenu.addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
-  const ax = t.closest<HTMLElement>('[data-axes]');
   const ins = t.closest<HTMLElement>('[data-ins]')?.dataset.ins;
   const b = t.closest<HTMLElement>('[data-imp]');
-  if (!ax && !ins && !b) return;
+  if (!ins && !b) return;
   closePopups();
-  if (ax) board.addAxes(ax.dataset.axes as AxesMode);
-  else if (ins === 'trig') board.addTrig();
-  else if (ins === 'stamps') {
-    stampMenu.classList.remove('hidden');
-    placeNear(stampMenu, $('importBtn'));
-  } else if (ins === 'tpl') {
+  if (ins === 'tpl') {
     renderTemplates();
     tplMenu.classList.remove('hidden');
     placeNear(tplMenu, $('importBtn'));
