@@ -56,21 +56,6 @@ function meter(letter: string): StampDef['draw'] {
   };
 }
 
-function lens(converging: boolean): StampDef['draw'] {
-  return (c, w, h) => {
-    const cx = w / 2;
-    c.save();
-    c.setLineDash([8, 6]);
-    c.lineWidth *= 0.6;
-    path(c, [[0, h / 2], [w, h / 2]]);
-    c.restore();
-    path(c, [[cx, 6], [cx, h - 6]]);
-    const a = 12 * (converging ? 1 : -1);
-    path(c, [[cx - 10, 6 + a], [cx, 6], [cx + 10, 6 + a]]);
-    path(c, [[cx - 10, h - 6 - a], [cx, h - 6], [cx + 10, h - 6 - a]]);
-  };
-}
-
 export const STAMPS: Record<string, StampDef> = {
   incline: {
     label: 'Κεκλιμένο επίπεδο', w: 320, h: 180,
@@ -97,7 +82,7 @@ export const STAMPS: Record<string, StampDef> = {
     },
   },
   spring: {
-    label: 'Ελατήριο με σώμα', w: 340, h: 100,
+    label: 'Οριζόντιο ελατήριο', w: 340, h: 100,
     draw(c, w, h) {
       path(c, [[10, 0], [10, h]]);
       hatch(c, 10, 6, 10, h - 6, 6, -10, 10);
@@ -105,6 +90,45 @@ export const STAMPS: Record<string, StampDef> = {
       path(c, [[10, h * 0.55], [30, h * 0.55], ...zigzag(30, w * 0.62, h * 0.55, h * 0.2, 14).slice(1), [w * 0.68, h * 0.55]]);
       c.strokeRect(w * 0.68, h * 0.2, w * 0.24, h * 0.8 - 1);
       label(c, 'm', w * 0.8, h * 0.6, h * 0.3);
+    },
+  },
+  springV: {
+    label: 'Κατακόρυφο ελατήριο', w: 150, h: 330,
+    draw(c, w, h) {
+      const cx = w / 2, top = 2, y0 = h * 0.08, y1 = h * 0.68, amp = w * 0.16, n = 14;
+      path(c, [[w * 0.1, top], [w * 0.9, top]]);
+      hatch(c, w * 0.15, top, w * 0.85, top, 6, 8, -8);
+      const pts = [[cx, top], [cx, y0]];
+      for (let i = 0; i < n; i++) pts.push([cx + (i % 2 ? amp : -amp), y0 + ((y1 - y0) * (i + 0.5)) / n]);
+      pts.push([cx, y1], [cx, h * 0.74]);
+      path(c, pts);
+      c.strokeRect(cx - w * 0.3, h * 0.74, w * 0.6, h * 0.26 - 1);
+      label(c, 'm', cx, h * 0.87, h * 0.1);
+    },
+  },
+  springIncline: {
+    label: 'Ελατήριο σε κεκλιμένο', w: 380, h: 240,
+    draw(c, w, h) {
+      const rise = h * 0.72;
+      path(c, [[0, h], [w, h], [w, h - rise], [0, h]], true);
+      const ang = Math.atan2(rise, -w);
+      const L = Math.hypot(w, rise);
+      const bh = h * 0.2, bw = L * 0.17, s0 = L * 0.06, s1 = L * 0.5;
+      c.save();
+      // x κατά μήκος του επιπέδου προς τα κάτω, y κάθετα προς τα έξω
+      c.translate(w, h - rise);
+      c.rotate(ang);
+      path(c, [[0, 0], [0, bh * 1.25]]);
+      path(c, [[0, bh / 2], [s0, bh / 2], ...zigzag(s0, s1, bh / 2, bh * 0.32, 12).slice(1), [s1 + L * 0.04, bh / 2]]);
+      c.strokeRect(s1 + L * 0.04, 0, bw, bh);
+      c.restore();
+      // το γράμμα μένει όρθιο: υπολογίζουμε τη θέση του έξω από την περιστροφή
+      const mx = s1 + L * 0.04 + bw / 2, my = bh / 2;
+      label(c, 'm', w + mx * Math.cos(ang) - my * Math.sin(ang), h - rise + mx * Math.sin(ang) + my * Math.cos(ang), bh * 0.6);
+      c.beginPath();
+      c.arc(0, h, w * 0.15, -Math.atan2(rise, w), 0);
+      c.stroke();
+      label(c, 'φ', w * 0.2, h - h * 0.07, h * 0.12);
     },
   },
   pulley: {
@@ -204,6 +228,4 @@ export const STAMPS: Record<string, StampDef> = {
   },
   ammeter: { label: 'Αμπερόμετρο', w: 160, h: 80, draw: meter('A') },
   voltmeter: { label: 'Βολτόμετρο', w: 160, h: 80, draw: meter('V') },
-  lensConv: { label: 'Συγκλίνων φακός', w: 360, h: 240, draw: lens(true) },
-  lensDiv: { label: 'Αποκλίνων φακός', w: 360, h: 240, draw: lens(false) },
 };
