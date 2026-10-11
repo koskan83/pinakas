@@ -492,13 +492,22 @@ export class Board {
     this.redraw();
   }
 
-  /** Δύο βέλη με κοινή αρχή, αν το επιλεγμένο είναι ένα από αυτά. */
+  /**
+   * Αν είναι επιλεγμένα ακριβώς δύο βέλη ή ευθείες με κοινή κορυφή, τα επιστρέφει
+   * προσανατολισμένα ώστε να ξεκινούν και τα δύο από την κορυφή αυτή.
+   */
   get resultantPair(): [Shape, Shape] | null {
-    const a = this.selected ? this.page.items.find((x) => x.id === this.selected) : undefined;
-    if (!a || a.kind !== 'shape' || a.shape !== 'arrow') return null;
-    const b = this.page.items.find((o): o is Shape =>
-      o.id !== a.id && o.kind === 'shape' && o.shape === 'arrow' && Math.hypot(o.x0 - a.x0, o.y0 - a.y0) < 1);
-    return b ? [a, b] : null;
+    if (this.multi.length !== 2) return null;
+    const [a, b] = this.multi.map((id) => this.page.items.find((x) => x.id === id));
+    const ok = (o: Item | undefined): o is Shape => !!o && o.kind === 'shape' && (o.shape === 'arrow' || o.shape === 'line');
+    if (!ok(a) || !ok(b)) return null;
+    const flip = (o: Shape): Shape => ({ ...o, x0: o.x1, y0: o.y1, x1: o.x0, y1: o.y0 });
+    const near = (p: Shape, q: Shape): boolean => Math.hypot(p.x0 - q.x0, p.y0 - q.y0) < 16;
+    // ένα βέλος ξεκινά πάντα από την αρχή του· μια ευθεία μπορεί να «γυρίσει»
+    const as = a.shape === 'line' ? [a, flip(a)] : [a];
+    const bs = b.shape === 'line' ? [b, flip(b)] : [b];
+    for (const p of as) for (const q of bs) if (near(p, q)) return [p, { ...q, x1: q.x1 + p.x0 - q.x0, y1: q.y1 + p.y0 - q.y0, x0: p.x0, y0: p.y0 }];
+    return null;
   }
 
   /** Σχεδιάζει το παραλληλόγραμμο και τη συνισταμένη δύο βελών με κοινή αρχή. */
@@ -518,6 +527,7 @@ export class Board {
     };
     this.page.items.push(side(a), side(b), sum);
     this.selected = sum.id;
+    this.multi = [];
     this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
     this.redraw();
   }
