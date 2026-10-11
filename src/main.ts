@@ -1,7 +1,7 @@
 import './style.css';
 import { Board, EraserMode, SizedTool } from './board';
 import { AxesAn, AxesMode, Background, Doc, Item, MeasOpts, ShapeKind, TextItem, Tool, isDark, newDoc } from './model';
-import { blobToPic, captureScreen, clipboardImage, pdfToPages } from './importers';
+import { blobToPic, captureScreen, clipboardImage, openPdf } from './importers';
 import { kvGet, kvSet } from './storage';
 import { Lessons } from './lessons';
 import { driveBuiltIn, driveClientId, driveConnect, setDriveClientId, uploadToDrive } from './drive';
@@ -99,7 +99,7 @@ app.insertAdjacentHTML(
     ${mi('data-act="lib"', I.lib, 'Μαθήματα…')}
     ${mi('data-act="open"', I.folder, 'Άνοιγμα αρχείου ως νέο μάθημα…')}
     ${mi('data-act="save"', I.save, 'Αποθήκευση του μαθήματος σε αρχείο')}
-    ${mi('data-act="pdf"', I.doc, 'Εξαγωγή όλων των σελίδων σε PDF')}
+    ${mi('data-act="pdf"', I.doc, 'Εξαγωγή σε PDF…')}
     ${mi('data-act="png"', I.image, 'Εξαγωγή σελίδας σε PNG')}
     ${mi('data-act="send"', I.send, 'Αποστολή στους μαθητές (QR)…')}
     <hr />
@@ -325,6 +325,14 @@ app.insertAdjacentHTML(
     </div>
     <div class="aiRow"><button id="sendIdEdit">Αλλαγή Client ID</button><button id="sendClose">Κλείσιμο</button></div>
   </div>
+  <div id="pagePick" class="hidden">
+    <div id="ppBox">
+      <b id="ppTitle"></b>
+      <div id="ppQuick"><button id="ppAll">Όλες</button><button id="ppNone">Καμία</button><button id="ppCur">Μόνο αυτή που βλέπω</button></div>
+      <div id="ppGrid"></div>
+      <div id="ppActs"><button id="ppCancel">Άκυρο</button><button id="ppOk"></button></div>
+    </div>
+  </div>
   <div id="qrBig" class="hidden"><img src="./logo.svg" alt="" /><canvas width="1200" height="1200"></canvas><div></div></div>
 
   <div id="replayBar" class="hidden">
@@ -404,10 +412,19 @@ async function importFiles(files: File[]): Promise<void> {
   for (const f of files) {
     try {
       if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
-        toast(`Εισαγωγή PDF… 0%`, 0);
-        const pages = await pdfToPages(f, (d, n) => toast(`Εισαγωγή PDF… σελίδα ${Math.min(d + 1, n)} από ${n}`, 0));
-        board.appendPages(pages);
-        toast(`Προστέθηκαν ${pages.length} σελίδες από το PDF`);
+        toast(`Ανοίγει το PDF…`, 0);
+        const pdf = await openPdf(f);
+        try {
+          toast('', 1);
+          // με πάνω από μία σελίδα ρωτάμε ποιες θα μπουν
+          const list = pdf.n > 1 ? await pickPages(`Εισαγωγή από «${f.name}»`, 'Εισαγωγή', pdf.n, (i, w) => pdf.thumb(i, w)) : [0];
+          if (!list) continue;
+          const pages = await pdf.pages(list, (d, n) => toast(`Εισαγωγή PDF… σελίδα ${Math.min(d + 1, n)} από ${n}`, 0));
+          board.appendPages(pages);
+          toast(pages.length === 1 ? 'Προστέθηκε 1 σελίδα από το PDF' : `Προστέθηκαν ${pages.length} σελίδες από το PDF`);
+        } finally {
+          pdf.close();
+        }
       } else if (f.type.startsWith('image/')) {
         const pic = await blobToPic(f);
         board.addPicture(pic.src, pic.w, pic.h);
@@ -1619,7 +1636,8 @@ menu.addEventListener('click', async (e) => {
     openSend();
   } else if (act === 'pdf') {
     try {
-      download(await lessonPdf(), `${fileName(lessons?.current?.name ?? 'mathima')}_${stamp()}.pdf`);
+      const pdf = await lessonPdf();
+      if (pdf) download(pdf, `${fileName(lessons?.current?.name ?? 'mathima')}_${stamp()}.pdf`);
     } catch (err) {
       console.error(err);
       toast('Η εξαγωγή σε PDF απέτυχε', 5000);
@@ -1787,11 +1805,72 @@ function loadLogo(): Promise<HTMLImageElement | null> {
   return logoImg;
 }
 
-async function lessonPdf(): Promise<Blob> {
+/** Το PDF του μαθήματος· με πάνω από μία σελίδα ρωτά ποιες θα μπουν. null αν ο χρήστης ακύρωσε. */
+async function lessonPdf(): Promise<Blob | null> {
+  const total = board.doc.pages.length;
+  const only = total > 1 ? await pickPages('Ποιες σελίδες θα μπουν στο PDF;', 'Εξαγωγή', total, (i, w) => board.pageThumb(i, w), board.cur) : undefined;
+  if (only === null) return null;
   const mark = pdfLogo ? await loadLogo() : null;
-  const pages = await board.exportJpegPages((d, n) => toast(`Ετοιμάζεται το PDF… σελίδα ${d + 1} από ${n}`, 0), mark ?? undefined);
-  toast(`Το PDF είναι έτοιμο (${pages.length} σελίδες)`);
+  const pages = await board.exportJpegPages((d, n) => toast(`Ετοιμάζεται το PDF… σελίδα ${d + 1} από ${n}`, 0), mark ?? undefined, only);
+  toast(pages.length === 1 ? 'Το PDF είναι έτοιμο (1 σελίδα)' : `Το PDF είναι έτοιμο (${pages.length} σελίδες)`);
   return buildPdf(pages);
+}
+
+/**
+ * Παράθυρο επιλογής σελίδων με μικρογραφίες: πατάς μια σελίδα για να μπει ή να βγει.
+ * Επιστρέφει τους αριθμούς (από 0) με τη σειρά τους, ή null αν ακυρώθηκε. `current`: η τρέχουσα σελίδα, για το κουμπί «Μόνο αυτή».
+ */
+function pickPages(title: string, okText: string, n: number, thumb: (i: number, w: number) => Promise<HTMLCanvasElement>, current?: number): Promise<number[] | null> {
+  return new Promise((resolve) => {
+    closePopups();
+    const el = $('pagePick');
+    const grid = $('ppGrid');
+    const ok = $('ppOk') as HTMLButtonElement;
+    const on = new Set<number>(Array.from({ length: n }, (_, i) => i));
+    let alive = true;
+    $('ppTitle').textContent = title;
+    $('ppCur').classList.toggle('hidden', current === undefined);
+    grid.innerHTML = '';
+    const cells: HTMLElement[] = [];
+    for (let i = 0; i < n; i++) {
+      const b = document.createElement('button');
+      b.innerHTML = `<i></i><span>${i + 1}</span>`;
+      b.onclick = () => { if (on.has(i)) on.delete(i); else on.add(i); paint(); };
+      grid.append(b);
+      cells.push(b);
+    }
+    const paint = (): void => {
+      cells.forEach((b, i) => b.classList.toggle('on', on.has(i)));
+      ok.disabled = on.size === 0;
+      ok.textContent = on.size === n ? `${okText}: όλες (${n})` : on.size === 1 ? `${okText}: 1 σελίδα` : `${okText}: ${on.size} σελίδες`;
+    };
+    const set = (list: number[]): void => { on.clear(); list.forEach((i) => on.add(i)); paint(); };
+    const done = (r: number[] | null): void => {
+      alive = false;
+      el.classList.add('hidden');
+      grid.innerHTML = '';
+      resolve(r);
+    };
+    $('ppAll').onclick = () => set(cells.map((_, i) => i));
+    $('ppNone').onclick = () => set([]);
+    $('ppCur').onclick = () => set([current ?? 0]);
+    $('ppCancel').onclick = () => done(null);
+    ok.onclick = () => done([...on].sort((a, b) => a - b));
+    paint();
+    el.classList.remove('hidden');
+    if (current !== undefined) cells[current]?.scrollIntoView({ block: 'center' });
+    // οι μικρογραφίες γεμίζουν μία μία, χωρίς να καθυστερούν το παράθυρο
+    void (async () => {
+      for (let i = 0; i < n && alive; i++) {
+        try {
+          const cv = await thumb(i, 200);
+          if (alive) cells[i].querySelector('i')!.replaceWith(cv);
+        } catch {
+          /* μένει μόνο ο αριθμός */
+        }
+      }
+    })();
+  });
 }
 
 function drawQr(cv: HTMLCanvasElement, text: string): void {
@@ -1838,6 +1917,7 @@ $('sendDrive').onclick = async () => {
     // η σύνδεση πρώτα, όσο «μετράει» ακόμα το πάτημα: αλλιώς ο browser μπλοκάρει το παράθυρο της Google
     await driveConnect();
     const pdf = await lessonPdf();
+    if (!pdf) return;
     toast('Ανεβαίνει στο Google Drive…', 0);
     const up = await uploadToDrive(pdf, name);
     sendUrl = up.url;
@@ -1856,7 +1936,9 @@ $('sendDrive').onclick = async () => {
 $('sendShare').onclick = async () => {
   try {
     const name = `${fileName(lessons?.current?.name ?? 'mathima')}_${stamp()}.pdf`;
-    const file = new File([await lessonPdf()], name, { type: 'application/pdf' });
+    const pdf = await lessonPdf();
+    if (!pdf) return;
+    const file = new File([pdf], name, { type: 'application/pdf' });
     // σε Android το φύλλο κοινοποίησης έχει και το Drive· αλλού απλώς κατεβαίνει
     if (!isNative && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: name });
     else download(file, name);

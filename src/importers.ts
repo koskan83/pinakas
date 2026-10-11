@@ -23,21 +23,27 @@ export async function blobToPic(blob: Blob): Promise<PicData> {
   return { src: cv.toDataURL(jpeg ? 'image/jpeg' : 'image/png', 0.9), w, h };
 }
 
-/** Κάθε σελίδα του PDF γίνεται μία σελίδα του πίνακα με την εικόνα της. */
-export async function pdfToPages(file: File, onProgress: (done: number, total: number) => void): Promise<Page[]> {
+/** Ανοιγμένο PDF: πόσες σελίδες έχει, μικρογραφίες για να διαλέξεις, και μετατροπή όσων θέλεις σε σελίδες του πίνακα. */
+export interface OpenPdf {
+  n: number;
+  /** Μικρογραφία της σελίδας i (από 0), πλάτους w. */
+  thumb(i: number, w: number): Promise<HTMLCanvasElement>;
+  /** Οι σελίδες της λίστας (από 0) γίνονται σελίδες του πίνακα, καθεμιά με την εικόνα της. */
+  pages(list: number[], onProgress: (done: number, total: number) => void): Promise<Page[]>;
+  close(): void;
+}
+
+export async function openPdf(file: File): Promise<OpenPdf> {
   const pdfjs = await import('pdfjs-dist');
   const worker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
   pdfjs.GlobalWorkerOptions.workerSrc = worker;
 
   const data = new Uint8Array(await file.arrayBuffer());
   const pdf = await pdfjs.getDocument({ data }).promise;
-  const pages: Page[] = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    onProgress(i - 1, pdf.numPages);
-    const page = await pdf.getPage(i);
+  const render = async (i: number, scaleFor: (w: number, h: number) => number): Promise<HTMLCanvasElement> => {
+    const page = await pdf.getPage(i + 1);
     const v1 = page.getViewport({ scale: 1 });
-    const scale = Math.min(1800 / v1.width, 2600 / v1.height, 3);
-    const vp = page.getViewport({ scale });
+    const vp = page.getViewport({ scale: scaleFor(v1.width, v1.height) });
     const cv = document.createElement('canvas');
     cv.width = Math.round(vp.width);
     cv.height = Math.round(vp.height);
@@ -45,17 +51,29 @@ export async function pdfToPages(file: File, onProgress: (done: number, total: n
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, cv.width, cv.height);
     await page.render({ canvasContext: ctx, viewport: vp, canvas: cv }).promise;
-    const w = 1000;
-    const h = (1000 * cv.height) / cv.width;
-    pages.push({
-      view: { x: 0, y: 0, k: 1 },
-      items: [{ kind: 'image', id: uid(), x: 0, y: 0, w, h, src: cv.toDataURL('image/jpeg', 0.88) }],
-    });
     page.cleanup();
-  }
-  onProgress(pdf.numPages, pdf.numPages);
-  void pdf.cleanup();
-  return pages;
+    return cv;
+  };
+  return {
+    n: pdf.numPages,
+    thumb: (i, w) => render(i, (pw) => w / pw),
+    async pages(list, onProgress) {
+      const pages: Page[] = [];
+      for (let k = 0; k < list.length; k++) {
+        onProgress(k, list.length);
+        const cv = await render(list[k], (pw, ph) => Math.min(1800 / pw, 2600 / ph, 3));
+        const w = 1000;
+        const h = (1000 * cv.height) / cv.width;
+        pages.push({
+          view: { x: 0, y: 0, k: 1 },
+          items: [{ kind: 'image', id: uid(), x: 0, y: 0, w, h, src: cv.toDataURL('image/jpeg', 0.88) }],
+        });
+      }
+      onProgress(list.length, list.length);
+      return pages;
+    },
+    close: () => void pdf.cleanup(),
+  };
 }
 
 /** Στιγμιότυπο οθόνης/παραθύρου μέσω του προγράμματος περιήγησης. */

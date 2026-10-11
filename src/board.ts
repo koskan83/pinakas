@@ -2352,18 +2352,30 @@ export class Board {
     return out.toDataURL('image/jpeg', 0.7);
   }
 
+  /** Μικρογραφία της σελίδας pi, για την επιλογή σελίδων στην εξαγωγή. */
+  async pageThumb(pi: number, maxW: number): Promise<HTMLCanvasElement> {
+    const cv = await this.pageCanvas(pi, true);
+    const s = Math.min(1, maxW / cv.width);
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(cv.width * s));
+    out.height = Math.max(1, Math.round(cv.height * s));
+    out.getContext('2d')!.drawImage(cv, 0, 0, out.width, out.height);
+    return out;
+  }
+
   async exportPng(): Promise<Blob> {
     const cv = await this.pageCanvas(this.cur, false);
     return new Promise((res, rej) => cv.toBlob((b) => (b ? res(b) : rej(new Error('PNG'))), 'image/png'));
   }
 
-  /** Όλες οι σελίδες ως εικόνες JPEG, για το PDF. */
-  async exportJpegPages(onProgress: (done: number, total: number) => void, mark?: HTMLImageElement): Promise<{ jpeg: Uint8Array; w: number; h: number }[]> {
+  /** Οι σελίδες (όλες, ή μόνο όσες δίνει η λίστα `only`) ως εικόνες JPEG, για το PDF. */
+  async exportJpegPages(onProgress: (done: number, total: number) => void, mark?: HTMLImageElement, only?: number[]): Promise<{ jpeg: Uint8Array; w: number; h: number }[]> {
     const out: { jpeg: Uint8Array; w: number; h: number }[] = [];
-    const n = this.doc.pages.length;
+    const list = only ?? this.doc.pages.map((_, i) => i);
+    const n = list.length;
     for (let i = 0; i < n; i++) {
       onProgress(i, n);
-      const cv = await this.pageCanvas(i, true);
+      const cv = await this.pageCanvas(list[i], true);
       if (mark) {
         // λογότυπο στην κάτω δεξιά γωνία, μικρό σε σχέση με τη σελίδα
         const s = Math.max(40, Math.min(cv.width, cv.height) * 0.07);

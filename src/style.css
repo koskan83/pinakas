@@ -363,3 +363,20 @@ body.inking #zoomCtl { opacity: .25; pointer-events: none; }
 #libHead .lg.onLight, body.dark #libHead .lg.onDark { display: none; }
 body.dark #libHead .lg.onLight { display: block; }
 #qrBig img { width: 90px; height: 90px; }
+
+/* επιλογή σελίδων (εισαγωγή/εξαγωγή PDF) */
+#pagePick { position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 12px; }
+#ppBox { width: min(980px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 18px; background: var(--bar); color: var(--fg); box-shadow: 0 8px 28px rgba(0,0,0,.4); }
+#ppTitle { font-size: 19px; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ppQuick, #ppActs { display: flex; gap: 8px; flex-wrap: wrap; }
+#ppBox button { font: inherit; font-size: 17px; color: inherit; border: 0; cursor: pointer; }
+#ppQuick button, #ppActs button { padding: 13px 18px; border-radius: 12px; background: var(--bar-2); }
+#ppActs { justify-content: flex-end; }
+#ppActs #ppOk { background: var(--ok); color: #fff; font-weight: 600; min-width: 220px; }
+#ppActs #ppOk:disabled { opacity: .45; cursor: default; }
+#ppGrid { flex: 1; min-height: 120px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; padding: 4px; }
+#ppGrid button { position: relative; padding: 6px 6px 30px; border-radius: 12px; background: var(--bar-2); border: 3px solid transparent; opacity: .45; min-height: 110px; display: flex; align-items: center; justify-content: center; }
+#ppGrid button.on { opacity: 1; border-color: var(--ok); }
+#ppGrid canvas { position: static; display: block; max-width: 100%; max-height: 170px; border-radius: 6px; background: #fff; touch-action: auto; }
+#ppGrid span { position: absolute; left: 0; right: 0; bottom: 5px; text-align: center; font-weight: 600; }
+#ppGrid button.on span::after { content: ' ✓'; color: var(--ok); }
