@@ -1,7 +1,7 @@
 import './style.css';
 import { Board, EraserMode, SizedTool } from './board';
 import { AxesAn, AxesMode, Background, Doc, Item, MeasOpts, ShapeKind, TextItem, Tool, isDark, newDoc } from './model';
-import { blobToPic, captureScreen, clipboardImage, openPdf } from './importers';
+import { blobToPic, captureScreen, clipboardImage, openDocx, openPdf } from './importers';
 import { kvGet, kvSet } from './storage';
 import { Lessons } from './lessons';
 import { driveBuiltIn, driveClientId, driveConnect, setDriveClientId, uploadToDrive } from './drive';
@@ -214,7 +214,7 @@ app.insertAdjacentHTML(
   <div id="dockHint" class="hidden"></div>
 
   <div id="importMenu" class="popup hidden">
-    ${mi('data-imp="file"', I.folder, 'Εικόνα ή PDF από αρχείο…')}
+    ${mi('data-imp="file"', I.folder, 'Εικόνα, PDF ή Word από αρχείο…')}
     ${mi('data-imp="shot"', I.screen, 'Στιγμιότυπο οθόνης')}
     ${mi('data-imp="paste"', I.paste, 'Επικόλληση από το πρόχειρο')}
     <hr />
@@ -353,8 +353,8 @@ app.insertAdjacentHTML(
   </div>
   <div id="diag" class="hidden"></div>
   <div id="toast" class="hidden"></div>
-  <div id="drop" class="hidden">Άφησε το αρχείο εδώ (εικόνα ή PDF)</div>
-  <input id="fileImport" type="file" accept="image/*,application/pdf" multiple hidden />
+  <div id="drop" class="hidden">Άφησε το αρχείο εδώ (εικόνα, PDF ή Word)</div>
+  <input id="fileImport" type="file" accept="image/*,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden />
   <input id="fileOpen" type="file" accept=".json,application/json" hidden />
 `
 );
@@ -415,17 +415,21 @@ function stamp(): string {
 async function importFiles(files: File[]): Promise<void> {
   for (const f of files) {
     try {
-      if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
-        toast(`Ανοίγει το PDF…`, 0);
-        const pdf = await openPdf(f);
+      const word = /\.docx$/i.test(f.name) || f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      if (/\.(doc|odt|rtf)$/i.test(f.name)) {
+        toast('Αυτή η μορφή δεν ανοίγει. Αποθήκευσέ το από το Word ως .docx ή ως PDF.', 7000);
+      } else if (word || f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+        const kind = word ? 'Word' : 'PDF';
+        toast(`Ανοίγει το ${kind}…`, 0);
+        const pdf = await (word ? openDocx(f) : openPdf(f));
         try {
           toast('', 1);
           // με πάνω από μία σελίδα ρωτάμε ποιες θα μπουν
           const list = pdf.n > 1 ? await pickPages(`Εισαγωγή από «${f.name}»`, 'Εισαγωγή', pdf.n, (i, w) => pdf.thumb(i, w)) : [0];
           if (!list) continue;
-          const pages = await pdf.pages(list, (d, n) => toast(`Εισαγωγή PDF… σελίδα ${Math.min(d + 1, n)} από ${n}`, 0));
+          const pages = await pdf.pages(list, (d, n) => toast(`Εισαγωγή ${kind}… σελίδα ${Math.min(d + 1, n)} από ${n}`, 0));
           board.appendPages(pages);
-          toast(pages.length === 1 ? 'Προστέθηκε 1 σελίδα από το PDF' : `Προστέθηκαν ${pages.length} σελίδες από το PDF`);
+          toast(pages.length === 1 ? `Προστέθηκε 1 σελίδα από το ${kind}` : `Προστέθηκαν ${pages.length} σελίδες από το ${kind}`);
         } finally {
           pdf.close();
         }

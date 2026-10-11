@@ -76,6 +76,76 @@ export async function openPdf(file: File): Promise<OpenPdf> {
   };
 }
 
+/**
+ * Ανοίγει αρχείο Word (.docx) και το δίνει σαν PDF: σελίδες που γίνονται εικόνες.
+ * Το έγγραφο στήνεται κρυφά ως HTML και κάθε σελίδα του «φωτογραφίζεται» από τον ίδιο τον browser,
+ * ώστε να βγαίνουν σωστά ελληνικά, πίνακες, εικόνες και μαθηματικοί τύποι.
+ */
+export async function openDocx(file: File): Promise<OpenPdf> {
+  const docx = await import('docx-preview');
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;left:-100000px;top:0;width:1200px;visibility:hidden;pointer-events:none';
+  document.body.append(host);
+  const styles = document.createElement('div');
+  const body = document.createElement('div');
+  host.append(styles, body);
+  try {
+    await docx.renderAsync(file, body, styles, { breakPages: true, useBase64URL: true, experimental: true, ignoreLastRenderedPageBreak: false });
+  } catch (err) {
+    host.remove();
+    throw err;
+  }
+  const sections = [...body.querySelectorAll<HTMLElement>('section.docx')];
+  if (sections.length === 0) {
+    host.remove();
+    throw new Error('Το έγγραφο δεν έχει περιεχόμενο');
+  }
+  const ser = new XMLSerializer();
+  const css = [...styles.querySelectorAll('style')].map((st) => ser.serializeToString(st)).join('');
+  const render = async (i: number, scaleFor: (w: number, h: number) => number): Promise<HTMLCanvasElement> => {
+    const sec = sections[i];
+    const w = Math.ceil(sec.offsetWidth), h = Math.ceil(sec.offsetHeight);
+    const scale = scaleFor(w, h);
+    // SVG με το HTML της σελίδας μέσα: ο browser το ζωγραφίζει όπως θα το έδειχνε στην οθόνη
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(w * scale)}" height="${Math.round(h * scale)}" viewBox="0 0 ${w} ${h}">` +
+      `<foreignObject width="${w}" height="${h}"><div xmlns="http://www.w3.org/1999/xhtml" class="docx-wrapper" style="padding:0;margin:0;background:#fff;display:block">` +
+      css +
+      `<style>.docx-wrapper>section.docx{margin:0!important;box-shadow:none!important;background:#fff}</style>` +
+      ser.serializeToString(sec) +
+      `</div></foreignObject></svg>`;
+    const img = new Image();
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    await img.decode();
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(w * scale);
+    cv.height = Math.round(h * scale);
+    const ctx = cv.getContext('2d')!;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(img, 0, 0, cv.width, cv.height);
+    return cv;
+  };
+  return {
+    n: sections.length,
+    thumb: (i, w) => render(i, (pw) => w / pw),
+    async pages(list, onProgress) {
+      const pages: Page[] = [];
+      for (let k = 0; k < list.length; k++) {
+        onProgress(k, list.length);
+        const cv = await render(list[k], (pw, ph) => Math.min(1800 / pw, 2600 / ph, 3));
+        pages.push({
+          view: { x: 0, y: 0, k: 1 },
+          items: [{ kind: 'image', id: uid(), x: 0, y: 0, w: 1000, h: (1000 * cv.height) / cv.width, src: cv.toDataURL('image/jpeg', 0.9) }],
+        });
+      }
+      onProgress(list.length, list.length);
+      return pages;
+    },
+    close: () => host.remove(),
+  };
+}
+
 /** Στιγμιότυπο οθόνης/παραθύρου μέσω του προγράμματος περιήγησης. */
 export async function captureScreen(): Promise<PicData> {
   if (!navigator.mediaDevices?.getDisplayMedia) {
