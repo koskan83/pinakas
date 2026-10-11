@@ -127,7 +127,7 @@ app.insertAdjacentHTML(
     ${mi('data-act="labels"', I.tag, 'Ονόματα κάτω από τα εικονίδια')}
     ${mi('data-act="pdflogo"', I.doc, 'Λογότυπο στις σελίδες του PDF')}
     ${mi('data-act="diag"', I.target, 'Διάγνωση αφής/γραφίδας')}
-    ${mi('data-act="help"', I.doc, 'Οδηγίες χρήσης (PDF)')}
+    ${mi('data-act="help"', I.doc, 'Οδηγίες χρήσης')}
     ${mi('data-act="test"', I.check, 'Λίστα δοκιμής στην τάξη')}
   </div>
 
@@ -355,6 +355,18 @@ app.insertAdjacentHTML(
       <div id="ppQuick"><button id="ppAll">Όλες</button><button id="ppNone">Καμία</button><button id="ppCur">Μόνο αυτή που βλέπω</button></div>
       <div id="ppGrid"></div>
       <div id="ppActs"><button id="ppCancel">Άκυρο</button><button id="ppOk"></button></div>
+    </div>
+  </div>
+  <div id="welcome" class="hidden">
+    <div id="wBox">
+      <div id="wHead"><img class="onDark" src="./logo-light.svg" alt="" /><img class="onLight" src="./logo.svg" alt="" /><div><b>Καλώς ήρθες στο PrismaBoard</b><span>Τέσσερα πράγματα και ξεκινάς.</span></div></div>
+      <div id="wCards">
+        <div><i>${PENCIL_ICON}</i><b>Γράψε αμέσως</b><span>Το στυλό γράφει. Η παλάμη ή η γροθιά σβήνει. Δύο δάχτυλα μετακινούν και μεγεθύνουν.</span></div>
+        <div><i>${I.ruler}</i><b>Όργανα</b><span>Σχήματα που μετριούνται, άξονες και συναρτήσεις, χάρακας, διαβήτης, κουρτίνα.</span></div>
+        <div><i>${I.doc}</i><b>Δεν χάνεται τίποτα</b><span>Ό,τι γράφεις αποθηκεύεται μόνο του. Τα μαθήματά σου είναι στο όνομα πάνω αριστερά.</span></div>
+        <div><i>${I.send}</i><b>Στο τέλος, ένα QR</b><span>☰ → «Αποστολή στους μαθητές»: σκανάρουν και παίρνουν το μάθημα σε PDF.</span></div>
+      </div>
+      <div id="wActs"><button id="wHelp">Πλήρεις οδηγίες (PDF)</button><button id="wGo" class="go">Ξεκίνα</button></div>
     </div>
   </div>
   <div id="qrBig" class="hidden"><img src="./logo.svg" alt="" /><canvas width="1200" height="1200"></canvas><div></div></div>
@@ -1755,7 +1767,7 @@ menu.addEventListener('click', async (e) => {
   } else if (act === 'lib') {
     void lessons?.open();
   } else if (act === 'help') {
-    window.open('./odigies.pdf', '_blank');
+    openWelcome();
   } else if (act === 'test') {
     window.open('./dokimi.html', '_blank');
   } else if (act === 'open') {
@@ -2097,6 +2109,23 @@ $('sendBig').onclick = () => {
 };
 $('qrBig').onclick = () => $('qrBig').classList.add('hidden');
 
+// ---------- οθόνη πρώτης χρήσης ----------
+
+const WELCOME = 'grafida.welcome';
+function openWelcome(): void {
+  closePopups();
+  $('welcome').classList.remove('hidden');
+}
+function closeWelcome(): void {
+  $('welcome').classList.add('hidden');
+  try { localStorage.setItem(WELCOME, '1'); } catch { /* χωρίς αποθήκευση */ }
+}
+$('wGo').onclick = closeWelcome;
+$('wHelp').onclick = () => window.open('./odigies.pdf', '_blank');
+$('welcome').addEventListener('pointerdown', (e) => {
+  if (e.target === $('welcome')) closeWelcome();
+});
+
 // ---------- zoom και ονόματα εικονιδίων ----------
 
 $('zoomOut').onclick = () => board.zoomBy(1 / 1.25);
@@ -2130,6 +2159,10 @@ void (async () => {
   await lessons?.init().catch((err) => console.error(err));
   refreshUi();
   initToolbar();
+  // την πρώτη φορά σε κάθε συσκευή, μια σύντομη γνωριμία
+  let seen = true;
+  try { seen = localStorage.getItem(WELCOME) === '1'; } catch { /* χωρίς αποθήκευση: δεν ενοχλούμε */ }
+  if (!seen && !isOverlay) openWelcome();
 })();
 
 if (import.meta.env.PROD && !isNative && 'serviceWorker' in navigator) {
