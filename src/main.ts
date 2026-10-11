@@ -123,6 +123,7 @@ app.insertAdjacentHTML(
     ${mi('data-act="labels"', I.tag, 'Ονόματα κάτω από τα εικονίδια')}
     ${mi('data-act="pdflogo"', I.doc, 'Λογότυπο στις σελίδες του PDF')}
     ${mi('data-act="diag"', I.target, 'Διάγνωση αφής/γραφίδας')}
+    ${mi('data-act="help"', I.doc, 'Οδηγίες χρήσης (PDF)')}
     ${mi('data-act="test"', I.check, 'Λίστα δοκιμής στην τάξη')}
   </div>
 
@@ -1624,6 +1625,8 @@ menu.addEventListener('click', async (e) => {
     setLabels(!$('toolbar').classList.contains('labels'));
   } else if (act === 'lib') {
     void lessons?.open();
+  } else if (act === 'help') {
+    window.open('./odigies.pdf', '_blank');
   } else if (act === 'test') {
     window.open('./dokimi.html', '_blank');
   } else if (act === 'open') {
