@@ -2012,6 +2012,8 @@ $('sendDrive').onclick = async () => {
     $('sendOut').classList.remove('hidden');
     showSend();
     toast('Ανέβηκε');
+    // με την ευκαιρία της σύνδεσης, αντίγραφο ασφαλείας των μαθημάτων που άλλαξαν
+    void lessons?.cloudBackup(true);
   } catch (err) {
     console.error(err);
     toast(`Δεν ανέβηκε: ${err instanceof Error ? err.message : err}`, 8000);

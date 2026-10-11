@@ -93,16 +93,27 @@ async function api<T>(url: string, init: RequestInit, tk: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function folderId(tk: string): Promise<string> {
-  const q = `name='${FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+async function folderId(tk: string, name = FOLDER, parent?: string): Promise<string> {
+  const q = `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false${parent ? ` and '${parent}' in parents` : ''}`;
   const found = await api<{ files: { id: string }[] }>(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`, {}, tk);
   if (found.files[0]) return found.files[0].id;
   const made = await api<{ id: string }>('https://www.googleapis.com/drive/v3/files?fields=id', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name: FOLDER, mimeType: 'application/vnd.google-apps.folder' }),
+    body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', ...(parent ? { parents: [parent] } : {}) }),
   }, tk);
   return made.id;
+}
+
+/** Σώμα «multipart» για ανέβασμα: μεταδεδομένα και περιεχόμενο μαζί. */
+function multipart(meta: unknown, blob: Blob): { body: Blob; type: string } {
+  const b = `grafida${Math.random().toString(36).slice(2)}`;
+  const body = new Blob([
+    `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: ${blob.type || 'application/octet-stream'}\r\n\r\n`,
+    blob,
+    `\r\n--${b}--`,
+  ]);
+  return { body, type: `multipart/related; boundary=${b}` };
 }
 
 export interface Uploaded {
@@ -116,16 +127,11 @@ export interface Uploaded {
 export async function uploadToDrive(blob: Blob, name: string): Promise<Uploaded> {
   const tk = await getToken();
   const parent = await folderId(tk);
-  const b = `grafida${Math.random().toString(36).slice(2)}`;
-  const body = new Blob([
-    `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [parent] })}\r\n--${b}\r\nContent-Type: ${blob.type || 'application/octet-stream'}\r\n\r\n`,
-    blob,
-    `\r\n--${b}--`,
-  ]);
+  const mp = multipart({ name, parents: [parent] }, blob);
   const file = await api<{ id: string }>('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
     method: 'POST',
-    headers: { 'content-type': `multipart/related; boundary=${b}` },
-    body,
+    headers: { 'content-type': mp.type },
+    body: mp.body,
   }, tk);
   let shared = true;
   try {
@@ -138,4 +144,64 @@ export async function uploadToDrive(blob: Blob, name: string): Promise<Uploaded>
     shared = false;
   }
   return { url: `https://drive.google.com/file/d/${file.id}/view`, shared };
+}
+
+// ---------- αντίγραφα ασφαλείας μαθημάτων ----------
+// Κάθε μάθημα είναι ένα ιδιωτικό αρχείο στον υποφάκελο «Αντίγραφα μαθημάτων»· δεν μοιράζεται με κανέναν.
+
+const BACKUPS = 'Αντίγραφα μαθημάτων';
+
+/** Αν υπάρχει ήδη ζωντανή σύνδεση, ώστε να ανέβει κάτι χωρίς παράθυρο της Google. */
+export function driveReady(): boolean {
+  return !!token && Date.now() < token.until;
+}
+
+export interface RemoteLesson { fileId: string; id: string; name: string; updated: number }
+
+interface DriveFile { id: string; name: string; appProperties?: Record<string, string> }
+
+/** Τα αντίγραφα μαθημάτων που έχει ανεβάσει η εφαρμογή σε αυτόν τον λογαριασμό (από οποιαδήποτε συσκευή). */
+export async function listLessonBackups(): Promise<RemoteLesson[]> {
+  const tk = await getToken();
+  const q = "appProperties has { key='pbKind' and value='lesson' } and trashed=false";
+  const out: RemoteLesson[] = [];
+  let page = '';
+  do {
+    const r = await api<{ files: DriveFile[]; nextPageToken?: string }>(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=${encodeURIComponent('nextPageToken,files(id,name,appProperties)')}&pageSize=200${page ? `&pageToken=${encodeURIComponent(page)}` : ''}`, {}, tk);
+    for (const f of r.files) {
+      const id = f.appProperties?.pbLesson;
+      if (id) out.push({ fileId: f.id, id, name: f.name.replace(/\.json$/i, ''), updated: Number(f.appProperties?.pbUpdated) || 0 });
+    }
+    page = r.nextPageToken ?? '';
+  } while (page);
+  return out;
+}
+
+/** Ανεβάζει (ή ανανεώνει) το αντίγραφο ενός μαθήματος. `known`: το αρχείο του στο Drive, αν υπάρχει ήδη. */
+export async function backupLesson(id: string, name: string, updated: number, blob: Blob, known?: string): Promise<void> {
+  const tk = await getToken();
+  const meta = { name: `${name}.json`, appProperties: { pbKind: 'lesson', pbLesson: id, pbUpdated: String(updated) } };
+  if (known) {
+    const mp = multipart(meta, blob);
+    await api(`https://www.googleapis.com/upload/drive/v3/files/${known}?uploadType=multipart&fields=id`, { method: 'PATCH', headers: { 'content-type': mp.type }, body: mp.body }, tk);
+    return;
+  }
+  const parent = await folderId(tk, BACKUPS, await folderId(tk));
+  const mp = multipart({ ...meta, parents: [parent] }, blob);
+  await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'content-type': mp.type }, body: mp.body }, tk);
+}
+
+/** Κατεβάζει το περιεχόμενο ενός αντιγράφου. */
+export async function readBackup(fileId: string): Promise<string> {
+  const tk = await getToken();
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { authorization: `Bearer ${tk}` } });
+  if (!res.ok) throw new Error(`Σφάλμα ${res.status}`);
+  return res.text();
+}
+
+/** Στέλνει ένα αντίγραφο στον κάδο του Drive (όταν το μάθημα σβήστηκε από τη συσκευή). */
+export async function trashBackup(fileId: string): Promise<void> {
+  const tk = await getToken();
+  await api(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ trashed: true }) }, tk);
 }

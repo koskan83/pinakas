@@ -394,3 +394,11 @@ body.dark #libHead .lg.onLight { display: block; }
 #tableMenu .hint { max-width: 320px; text-align: center; padding: 0; margin: 0 auto; }
 #tblStyles { justify-content: center; }
 #tableMenu #tblStyles button.on { background: var(--accent); color: #fff; }
+
+#libSafe { display: flex; align-items: center; gap: 10px; padding: 10px 20px; border-bottom: 1px solid var(--bar-2); flex-wrap: wrap; font-size: 16px; }
+#libSafe.hidden { display: none; }
+#libSafe span { flex: 1; min-width: 240px; opacity: .8; }
+#libSafe.warn span { opacity: 1; color: #f59e0b; font-weight: 600; }
+#libSafe button { padding: 11px 16px; border-radius: 12px; background: var(--bar-2); font-size: 16px; }
+#libSafe button.go { background: var(--ok); color: #fff; font-weight: 600; }
+#lessonName.warn::after { content: ''; display: inline-block; width: 10px; height: 10px; margin-left: 8px; border-radius: 50%; background: #f59e0b; }
