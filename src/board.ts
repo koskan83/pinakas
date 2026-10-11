@@ -1,9 +1,10 @@
 import {
-  AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TextItem, Tool, TrigItem, View,
+  AngleItem, AxesAn, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TextItem, Tool, TrigItem, View,
   angleDegrees, angleEnds, axesRange, cloneItem, erasePartial, hitItem, inLasso, isDark, itemBounds, newDoc, newPage, pointInPolygon, reboxShape,
   recognizeShape, roundAngle, scaleItem, textFont, textLines, translateItem, trianglePts, uid,
 } from './model';
 import { Fn, Params, compileCached, keyPoints } from './expr';
+import { Asymptotes, asymptotes, integrate, lineEq, nf, oneSided, riemann, slope } from './analysis';
 import { STAMPS, SpringState } from './stamps';
 import { CM, GadgetDrag, GadgetKind, Gadgets } from './gadgets';
 
@@ -991,6 +992,7 @@ export class Board {
         }
         c.stroke();
       }
+      const info = a.an ? this.drawAnalysis(c, a, fns, prm) : [];
       c.restore();
       const lf = Math.max(11, Math.min(20, u * 0.45));
       c.font = `italic 600 ${lf}px system-ui, "Segoe UI", Roboto, sans-serif`;
@@ -1013,6 +1015,13 @@ export class Board {
           c.fillText(`(${num(k.x)}, ${num(k.y)})`, X(k.x) + 7, Y(k.y) - 5);
         }
       }
+      // αποτελέσματα ανάλυσης, κάτω από τα ονόματα των συναρτήσεων
+      c.font = `600 ${lf * 0.9}px system-ui, "Segoe UI", Roboto, sans-serif`;
+      c.textBaseline = 'top';
+      info.forEach(([text, col], i) => {
+        c.fillStyle = col;
+        c.fillText(text, X(xmax + 1.1), Y(ymax) + (fns.length + 0.6 + i) * lf * 1.4);
+      });
       c.fillStyle = this.ink(a.color);
     }
 
@@ -1058,6 +1067,240 @@ export class Board {
     c.textBaseline = 'middle';
     c.fillText(a.ly ?? 'y', a.x - t - 6, Y(ymax + ext) + 4);
     c.restore();
+  }
+
+  /** Οι δύο πρώτες ορατές συναρτήσεις των αξόνων (σε αυτές δουλεύουν ολοκλήρωμα, όριο, εφαπτομένη) με τις παραμέτρους τους. */
+  private axesFn(a: AxesItem): { f?: (x: number) => number; g?: (x: number) => number } {
+    const prm: Params = { ...a.params, ...(a.id === this.selected ? this.paramPreview : null) };
+    const ok = (a.fns ?? []).filter((d) => !d.hidden).map((d) => compileCached(d.expr)).filter((d): d is Fn => !!d);
+    return { f: ok[0] && ((x) => ok[0](x, prm)), g: ok[1] && ((x) => ok[1](x, prm)) };
+  }
+
+  /** Λαβές των εργαλείων ανάλυσης: άκρα ολοκλήρωσης και x0 πάνω στον άξονα x, τα υπόλοιπα πάνω στην καμπύλη. */
+  private axesHandles(a: AxesItem): { k: string; p: Pt }[] {
+    const an = a.an;
+    const { f } = this.axesFn(a);
+    if (!an || !f) return [];
+    const { ymin, ymax } = axesRange(a);
+    const X = (v: number) => a.x + v * a.unit;
+    const on = (x: number): Pt => {
+      const y = f(x);
+      return [X(x), a.y - (Number.isFinite(y) ? Math.max(ymin, Math.min(ymax, y)) : 0) * a.unit];
+    };
+    const out: { k: string; p: Pt }[] = [];
+    if (an.lim) out.push({ k: 'lim.x', p: on(an.lim.x) }, { k: 'lim.x0', p: [X(an.lim.x0), a.y] });
+    if (an.tan) {
+      out.push({ k: 'tan.x', p: on(an.tan.x) });
+      if (an.tan.h) out.push({ k: 'tan.h', p: on(an.tan.x + an.tan.h) });
+    }
+    if (an.int) out.push({ k: 'int.a', p: [X(an.int.a), a.y] }, { k: 'int.b', p: [X(an.int.b), a.y] });
+    return out;
+  }
+
+  /** Μετακίνηση μιας λαβής ανάλυσης στη θέση x (σε μονάδες των αξόνων). */
+  private moveAxesHandle(o: AxesItem, key: string, xw: number): AxesItem {
+    const { xmin, xmax } = axesRange(o);
+    const an: AxesAn = { ...o.an };
+    let x = Math.max(xmin, Math.min(xmax, xw));
+    // βήμα 0,05 και «κούμπωμα» στους ακέραιους· το σημείο του ορίου κινείται πιο λεπτά, για να πλησιάζει το x0
+    const snap = (v: number): number => (Math.abs(v - Math.round(v)) < 0.08 ? Math.round(v) : Math.round(v * 20) / 20);
+    if (key === 'lim.x' && an.lim) {
+      x = Math.round(x * 100) / 100;
+      an.lim = { ...an.lim, x: Math.abs(x - an.lim.x0) < 0.012 ? an.lim.x0 : x };
+    } else if (key === 'lim.x0' && an.lim) an.lim = { ...an.lim, x0: snap(x) };
+    else if (key === 'tan.x' && an.tan) an.tan = { ...an.tan, x: snap(x) };
+    else if (key === 'tan.h' && an.tan) {
+      const h = Math.round((x - an.tan.x) * 20) / 20;
+      an.tan = { ...an.tan, h: Math.abs(h) < 0.05 ? (x < an.tan.x ? -0.05 : 0.05) : h };
+    } else if (key === 'int.a' && an.int) an.int = { ...an.int, a: snap(x) };
+    else if (key === 'int.b' && an.int) an.int = { ...an.int, b: snap(x) };
+    return { ...o, an };
+  }
+
+  private asymCache = new Map<string, Asymptotes>();
+
+  /**
+   * Σχεδιάζει μέσα στο πλαίσιο των αξόνων τα εργαλεία ανάλυσης (ολοκλήρωμα, Riemann, όριο, εφαπτομένη, ασύμπτωτες)
+   * και επιστρέφει τις γραμμές κειμένου με τα αποτελέσματα.
+   */
+  private drawAnalysis(c: CanvasRenderingContext2D, a: AxesItem, fns: FnDef[], prm: Params): [string, string][] {
+    const an = a.an!;
+    const { xmin, xmax, ymin, ymax } = axesRange(a);
+    const u = a.unit;
+    const X = (v: number) => a.x + v * u;
+    const Y = (v: number) => a.y - Math.max(-1e5, Math.min(1e5, v)) * u;
+    const dark = isDark(this.doc.bg);
+    const ink = this.ink(a.color);
+    const ok = fns.map((d) => ({ d, fn: compileCached(d.expr) })).filter((o): o is { d: FnDef; fn: Fn } => !!o.fn);
+    const info: [string, string][] = [];
+    if (!ok.length) return info;
+    const f = (x: number): number => ok[0].fn(x, prm);
+    const fcol = this.ink(ok[0].d.color);
+    const dot = (x: number, y: number, col: string, hollow = false): void => {
+      c.beginPath();
+      c.arc(X(x), Y(y), Math.max(5, u * 0.11), 0, Math.PI * 2);
+      c.fillStyle = hollow ? (dark ? '#14201b' : '#ffffff') : col;
+      c.strokeStyle = col;
+      c.lineWidth = 2.5;
+      c.setLineDash([]);
+      c.fill();
+      c.stroke();
+    };
+    const lineThrough = (x: number, y: number, m: number): void => {
+      c.beginPath();
+      c.moveTo(X(xmin), Y(y + m * (xmin - x)));
+      c.lineTo(X(xmax), Y(y + m * (xmax - x)));
+      c.stroke();
+    };
+    c.save();
+
+    if (an.asym) {
+      c.lineWidth = 1.8;
+      c.setLineDash([9, 7]);
+      const fs = Math.max(10, Math.min(16, u * 0.36));
+      c.font = `600 ${fs}px system-ui, "Segoe UI", Roboto, sans-serif`;
+      for (const o of ok) {
+        const key = `${o.d.expr}|${JSON.stringify(prm)}|${xmin}|${xmax}`;
+        let as = this.asymCache.get(key);
+        if (!as) {
+          if (this.asymCache.size > 200) this.asymCache.clear();
+          as = asymptotes((x) => o.fn(x, prm), xmin, xmax);
+          this.asymCache.set(key, as);
+        }
+        c.strokeStyle = c.fillStyle = this.ink(o.d.color);
+        c.textBaseline = 'top';
+        for (const x of as.vx) {
+          c.beginPath();
+          c.moveTo(X(x), Y(ymin));
+          c.lineTo(X(x), Y(ymax));
+          c.stroke();
+          c.textAlign = 'left';
+          c.fillText(`x = ${nf(x)}`, X(x) + 5, Y(ymax) + 4);
+        }
+        for (const l of as.lines) {
+          lineThrough(0, l.b, l.m);
+          // η ετικέτα μπαίνει στο δεξί (ή αριστερό) άκρο όπου η ευθεία είναι μέσα στο πλαίσιο
+          const right = l.m * xmax + l.b <= ymax && l.m * xmax + l.b >= ymin;
+          const lx = right ? xmax : xmin;
+          c.textAlign = right ? 'right' : 'left';
+          c.textBaseline = 'bottom';
+          c.fillText(lineEq(l.m, l.b), X(lx) + (right ? -5 : 5), Y(l.m * lx + l.b) - 4);
+        }
+      }
+      c.setLineDash([]);
+    }
+
+    if (an.int) {
+      const lo = Math.min(an.int.a, an.int.b), hi = Math.max(an.int.a, an.int.b);
+      const g = an.int.between && ok[1] ? (x: number): number => ok[1].fn(x, prm) : null;
+      const base = (x: number): number => (g ? g(x) : 0);
+      const d = (x: number): number => f(x) - base(x);
+      // το κομμάτι κάτω από τον άξονα σε άλλο χρώμα από τη συνάρτηση
+      const reds = ['#fb7185', '#e11d48'];
+      const neg = reds.includes(fcol) ? (dark ? '#7dd3fc' : '#2563eb') : reds[dark ? 0 : 1];
+      const fin = (v: number): number => (Number.isFinite(v) ? v : 0);
+      if (an.int.n) {
+        const n = an.int.n, w = (hi - lo) / n;
+        c.lineWidth = 1.5;
+        for (let i = 0; i < n; i++) {
+          const x = lo + i * w, h = fin(d(x)), b0 = fin(base(x));
+          c.fillStyle = c.strokeStyle = h >= 0 ? fcol : neg;
+          c.globalAlpha = 0.22;
+          c.fillRect(X(x), Y(b0 + h), w * u, Y(b0) - Y(b0 + h));
+          c.globalAlpha = 0.9;
+          c.strokeRect(X(x), Y(b0 + h), w * u, Y(b0) - Y(b0 + h));
+        }
+      } else {
+        const n = 240;
+        for (const sign of [1, -1]) {
+          c.beginPath();
+          for (let i = 0; i <= n; i++) {
+            const x = lo + ((hi - lo) * i) / n, b0 = fin(base(x)), h = fin(d(x));
+            c.lineTo(X(x), Y(b0 + (h * sign > 0 ? h : 0)));
+          }
+          for (let i = n; i >= 0; i--) {
+            const x = lo + ((hi - lo) * i) / n;
+            c.lineTo(X(x), Y(fin(base(x))));
+          }
+          c.closePath();
+          c.fillStyle = sign > 0 ? fcol : neg;
+          c.globalAlpha = 0.25;
+          c.fill();
+        }
+      }
+      c.globalAlpha = 1;
+      c.strokeStyle = ink;
+      c.lineWidth = 1.5;
+      c.beginPath();
+      for (const x of [an.int.a, an.int.b]) {
+        c.moveTo(X(x), Y(fin(base(x))));
+        c.lineTo(X(x), Y(fin(f(x))));
+      }
+      c.stroke();
+      const what = g ? '(f − g)' : 'f(x)';
+      const val = integrate(d, an.int.a, an.int.b);
+      info.push([`∫ ${what}dx από ${nf(an.int.a)} έως ${nf(an.int.b)} = ${nf(val)}`, ink]);
+      info.push([`Εμβαδόν Ε = ${nf(integrate((x) => Math.abs(d(x)), lo, hi))} τ.μ.`, ink]);
+      if (an.int.n) info.push([`Άθροισμα Riemann, ν = ${an.int.n}: Sν = ${nf(riemann(d, an.int.a, an.int.b, an.int.n))}`, ink]);
+    }
+
+    if (an.tan) {
+      const x = an.tan.x, y = f(x);
+      const tc = dark ? '#fbbf24' : '#d97706';
+      const sc = dark ? '#c4b5fd' : '#7c3aed';
+      if (Number.isFinite(y)) {
+        if (an.tan.h) {
+          const y2 = f(x + an.tan.h);
+          if (Number.isFinite(y2)) {
+            const ms = (y2 - y) / an.tan.h;
+            c.strokeStyle = sc;
+            c.lineWidth = 2;
+            lineThrough(x, y, ms);
+            dot(x + an.tan.h, y2, sc);
+            info.push([`Τέμνουσα (h = ${nf(an.tan.h)}): λ = ${nf(ms)}`, sc]);
+          }
+        }
+        const m = slope(f, x);
+        if (Number.isFinite(m)) {
+          c.strokeStyle = tc;
+          c.lineWidth = 2.5;
+          lineThrough(x, y, m);
+          info.push([`f′(${nf(x)}) = ${nf(m)}`, tc], [`Εφαπτομένη: ${lineEq(m, y - m * x)}`, tc]);
+        } else info.push([`f′(${nf(x)}): δεν υπάρχει`, tc]);
+        dot(x, y, tc);
+      } else info.push([`f(${nf(x)}): δεν ορίζεται`, tc]);
+    }
+
+    if (an.lim) {
+      const { x0, x } = an.lim;
+      const y = f(x);
+      c.strokeStyle = ink;
+      c.lineWidth = 1.5;
+      c.setLineDash([6, 6]);
+      c.beginPath();
+      c.moveTo(X(x0), Y(ymin));
+      c.lineTo(X(x0), Y(ymax));
+      if (Number.isFinite(y)) {
+        c.moveTo(X(x), Y(0));
+        c.lineTo(X(x), Y(y));
+        c.lineTo(X(0), Y(y));
+      }
+      c.stroke();
+      c.setLineDash([]);
+      const l = oneSided(f, x0, -1), r = oneSided(f, x0, 1);
+      const at = f(x0);
+      for (const v of new Set([l, r])) {
+        if (v !== null && Number.isFinite(v) && !(Number.isFinite(at) && Math.abs(at - v) < 1e-6)) dot(x0, v, fcol, true);
+      }
+      if (Number.isFinite(at)) dot(x0, at, fcol);
+      if (Number.isFinite(y)) dot(x, y, ink);
+      const txt = (v: number | null): string => (v === null ? 'δεν υπάρχει' : nf(v));
+      info.push([`x = ${nf(x)}   f(x) = ${Number.isFinite(y) ? (+y.toFixed(3) || 0).toLocaleString('el', { maximumFractionDigits: 3 }).replace('-', '−') : 'δεν ορίζεται'}`, ink]);
+      if (l !== null && l === r) info.push([`lim f(x) = ${nf(l)}  όταν x → ${nf(x0)}`, ink]);
+      else info.push([`x → ${nf(x0)}⁻ :  lim f(x) = ${txt(l)}`, ink], [`x → ${nf(x0)}⁺ :  lim f(x) = ${txt(r)}`, ink]);
+    }
+    c.restore();
+    return info;
   }
 
   private drawStamp(c: CanvasRenderingContext2D, s: StampItem): void {
@@ -1401,10 +1644,18 @@ export class Board {
         c.arc(b.x1, b.y1, 12 / k, 0, Math.PI * 2);
         c.fill();
       }
+      // στους άξονες οι λαβές είναι πολλές και κοντά: μικρότερες, με λευκό περίγραμμα
+      const hr = (selItem.kind === 'axes' ? 8 : 12) / k;
       for (const p of this.pointHandles(selItem)) {
         c.beginPath();
-        c.arc(p[0], p[1], 12 / k, 0, Math.PI * 2);
+        c.arc(p[0], p[1], hr, 0, Math.PI * 2);
         c.fill();
+        if (selItem.kind === 'axes') {
+          c.setLineDash([]);
+          c.strokeStyle = '#ffffff';
+          c.lineWidth = 2 / k;
+          c.stroke();
+        }
       }
       c.restore();
     }
@@ -1472,6 +1723,7 @@ export class Board {
   private pointHandles(it: Item): Pt[] {
     if (it.kind === 'angle') return angleEnds(it);
     if (it.kind === 'trig') return [trigPoint(it)];
+    if (it.kind === 'axes') return this.axesHandles(it).map((h) => h.p);
     return [];
   }
 
@@ -2128,6 +2380,9 @@ export class Board {
             fx ? o.x0 : o.x0 + dx, fy ? o.y0 : o.y0 + dy,
             fx ? o.x1 + dx : o.x1, fy ? o.y1 + dy : o.y1,
           );
+        } else if (o.kind === 'axes' && ps.handle) {
+          const key = this.axesHandles(o)[ps.handle - 1]?.k;
+          if (key) ps.preview = this.moveAxesHandle(o, key, (wx - o.x) / o.unit);
         } else if (o.kind === 'axes') {
           const b = itemBounds(o);
           const f = Math.max(0.3, (b.x1 - b.x0 + dx) / (b.x1 - b.x0));

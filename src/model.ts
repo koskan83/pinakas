@@ -97,6 +97,19 @@ export interface AxesItem {
   params?: Record<string, number>;
   /** Εμφάνιση ριζών, ακροτάτων και σημείων τομής. */
   points?: boolean;
+  /** Εργαλεία ανάλυσης πάνω στην πρώτη ορατή συνάρτηση. */
+  an?: AxesAn;
+}
+
+export interface AxesAn {
+  /** Ορισμένο ολοκλήρωμα από a έως b· between: χωρίο ανάμεσα στις δύο πρώτες συναρτήσεις· n: ορθογώνια Riemann. */
+  int?: { a: number; b: number; between?: boolean; n?: number };
+  /** Όριο στο x0, με σημείο που κινείται πάνω στην καμπύλη στη θέση x. */
+  lim?: { x0: number; x: number };
+  /** Εφαπτομένη στο x· με h, και η τέμνουσα από το x στο x + h. */
+  tan?: { x: number; h?: number };
+  /** Ασύμπτωτες όλων των ορατών συναρτήσεων. */
+  asym?: boolean;
 }
 
 export interface FnDef {

@@ -1,6 +1,6 @@
 import './style.css';
 import { Board, EraserMode, SizedTool } from './board';
-import { AxesMode, Background, Doc, Item, MeasOpts, ShapeKind, TextItem, Tool, isDark, newDoc } from './model';
+import { AxesAn, AxesMode, Background, Doc, Item, MeasOpts, ShapeKind, TextItem, Tool, isDark, newDoc } from './model';
 import { blobToPic, captureScreen, clipboardImage, pdfToPages } from './importers';
 import { kvGet, kvSet, loadDoc, saveDoc } from './storage';
 import { Timer } from './timer';
@@ -11,7 +11,7 @@ import { STAMPS } from './stamps';
 import { compile, paramsOf } from './expr';
 import { buildPdf } from './pdf';
 import { MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage } from './ai';
-import { itemBounds, uid } from './model';
+import { axesRange, itemBounds, uid } from './model';
 
 /** Βασικά χρώματα ανά φόντο· ίδια θέση = αντίστοιχο χρώμα στο άλλο φόντο. */
 const PALETTE = {
@@ -109,6 +109,11 @@ app.insertAdjacentHTML(
         <button data-axis="x"><span>x</span>Όνομα οριζόντιου άξονα</button>
         <button data-axis="y"><span>y</span>Όνομα κατακόρυφου άξονα</button>
         <button id="fnBtn"><span class="txt">f(x)</span>Γραφική παράσταση συνάρτησης</button>
+        <button data-an="int"><span class="txt">∫</span>Ορισμένο ολοκλήρωμα ως εμβαδόν (δεύτερο πάτημα: χωρίο ανάμεσα σε δύο συναρτήσεις)</button>
+        <button data-an="sum"><span class="txt">Σ</span>Αθροίσματα Riemann: κάθε πάτημα διπλασιάζει τα ορθογώνια (4, 8, 16, 32)</button>
+        <button data-an="lim"><span class="txt">lim</span>Όριο σε σημείο: σύρε το σημείο πάνω στην καμπύλη προς το x₀</button>
+        <button data-an="tan"><span class="txt">f′</span>Εφαπτομένη και παράγωγος (δεύτερο πάτημα: και η τέμνουσα)</button>
+        <button data-an="asym"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v18M3 17h18" stroke-dasharray="2.5 3"/><path d="M11 4c.5 7 3 10.500 10 11"/></svg></span>Ασύμπτωτες</button>
       </div>
       <div class="group" id="springOpts">
         <button id="spMarks"><span class="txt">ΘΦΜ</span>Εμφάνιση θέσης φυσικού μήκους, θέσης ισορροπίας και ±A</button>
@@ -526,6 +531,11 @@ $('axesOpts').addEventListener('click', (e) => {
     renderFns();
     return;
   }
+  const anKey = t.closest<HTMLElement>('[data-an]')?.dataset.an;
+  if (anKey) {
+    toggleAnalysis(anKey);
+    return;
+  }
   const b = t.closest<HTMLElement>('[data-axis]');
   if (!b) return;
   const same = !labelMenu.classList.contains('hidden') && labelAxis === b.dataset.axis;
@@ -535,6 +545,38 @@ $('axesOpts').addEventListener('click', (e) => {
   labelMenu.classList.remove('hidden');
   placeNear(labelMenu, b);
 });
+/** Ανάβει, αλλάζει μορφή ή σβήνει ένα εργαλείο ανάλυσης στους επιλεγμένους άξονες. */
+function toggleAnalysis(key: string): void {
+  const ax = board.selectedAxes;
+  if (!ax) return;
+  closePopups();
+  const shown = (ax.fns ?? []).filter((f) => !f.hidden).length;
+  if (!shown) {
+    toast('Γράψε πρώτα μια συνάρτηση με το f(x)');
+    return;
+  }
+  const r = axesRange(ax);
+  const inX = (v: number): number => Math.max(r.xmin, Math.min(r.xmax, v));
+  const an: AxesAn = { ...ax.an };
+  const newInt = { a: inX(1), b: inX(3) };
+  if (key === 'int') {
+    if (!an.int) an.int = newInt;
+    else if (!an.int.between && shown >= 2) an.int = { ...an.int, between: true };
+    else delete an.int;
+  } else if (key === 'sum') {
+    const n = an.int?.n;
+    const next = !n ? 4 : n >= 32 ? undefined : n * 2;
+    an.int = { ...(an.int ?? newInt), n: next };
+  } else if (key === 'lim') {
+    if (an.lim) delete an.lim;
+    else an.lim = { x0: inX(0), x: inX(1.5) };
+  } else if (key === 'tan') {
+    if (!an.tan) an.tan = { x: inX(1) };
+    else if (!an.tan.h) an.tan = { ...an.tan, h: 1 };
+    else delete an.tan;
+  } else if (key === 'asym') an.asym = !an.asym;
+  board.updateAxes({ an });
+}
 $('labelMenu').addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
   let label = t.closest<HTMLElement>('[data-label]')?.dataset.label;
@@ -1027,6 +1069,9 @@ function refreshUi(): void {
   ($('spStop') as HTMLButtonElement).disabled = !board.springMoving;
   show('widths', tool === 'pen' || tool === 'highlighter' || tool === 'shape' || tool === 'text' || tool === 'eraser');
   show('subbar', [...$('subbar').children].some((g) => !g.classList.contains('hidden')));
+  const anOn: Record<string, boolean> = { int: !!ax?.an?.int, sum: !!ax?.an?.int?.n, lim: !!ax?.an?.lim, tan: !!ax?.an?.tan, asym: !!ax?.an?.asym };
+  document.querySelectorAll<HTMLElement>('[data-an]').forEach((b) => b.classList.toggle('on', anOn[b.dataset.an!]));
+  $('axesOpts').querySelector('[data-an=sum] span')!.textContent = ax?.an?.int?.n ? `Σ${ax.an.int.n}` : 'Σ';
   $('axesOpts').querySelector('[data-axis=x] span')!.textContent = ax?.lx ?? 'x';
   $('axesOpts').querySelector('[data-axis=y] span')!.textContent = ax?.ly ?? 'y';
   if (!ax && !fnMenu.classList.contains('hidden')) {
