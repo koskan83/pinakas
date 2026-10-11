@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "mathjax": "^3.2.2",
-    "pdfjs-dist": "^6.4.299"
+    "pdfjs-dist": "^6.4.299",
+    "qrcode-generator": "^2.0.4"
   }
 }

@@ -4,6 +4,8 @@ import { AxesAn, AxesMode, Background, Doc, Item, MeasOpts, ShapeKind, TextItem,
 import { blobToPic, captureScreen, clipboardImage, pdfToPages } from './importers';
 import { kvGet, kvSet } from './storage';
 import { Lessons } from './lessons';
+import { driveClientId, driveConnect, setDriveClientId, uploadToDrive } from './drive';
+import qrcode from 'qrcode-generator';
 import { Timer } from './timer';
 import { GadgetKind } from './gadgets';
 import { closeOverlay, isNative, isOverlay, nativeSave, nativeScreenshot, openOverlay } from './native';
@@ -82,6 +84,7 @@ const I = {
   curtain: IC('<rect x="3" y="4" width="18" height="16" rx="1.500"/><path d="M3 12h18M7 12v8M12 12v8M17 12v8"/>'),
   spot: IC('<circle cx="12" cy="12" r="5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>'),
   play: P('M8 5l11 7-11 7z'),
+  send: P('M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM18 14h2M14 18v2'),
   plus: P('M12 5v14M5 12h14'),
   minus: P('M5 12h14'),
 };
@@ -98,6 +101,7 @@ app.insertAdjacentHTML(
     ${mi('data-act="save"', I.save, 'Αποθήκευση του μαθήματος σε αρχείο')}
     ${mi('data-act="pdf"', I.doc, 'Εξαγωγή όλων των σελίδων σε PDF')}
     ${mi('data-act="png"', I.image, 'Εξαγωγή σελίδας σε PNG')}
+    ${mi('data-act="send"', I.send, 'Αποστολή στους μαθητές (QR)…')}
     <hr />
     <div class="bgRow">
       <span>Φόντο</span>
@@ -300,6 +304,27 @@ app.insertAdjacentHTML(
     <div class="aiRow"><button id="aiSave">✓ Αποθήκευση</button><button id="aiForget">Διαγραφή κλειδιού</button></div>
     <div class="hint" id="aiHint"></div>
   </div>
+
+  <div id="sendMenu" class="popup hidden">
+    <b>Αποστολή στους μαθητές</b>
+    <div id="sendSetup">
+      <div class="hint">Για να ανεβαίνει το μάθημα στο Google Drive και να βγαίνει QR, χρειάζεται μία φορά το «Client ID» από το Google Cloud του λογαριασμού σου. Μέχρι τότε μπορείς να κοινοποιείς το PDF με το κουμπί πιο κάτω.</div>
+      <label class="field">Client ID<input id="sendId" type="text" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com" /></label>
+      <div class="aiRow"><button id="sendIdSave" class="go">Αποθήκευση</button></div>
+    </div>
+    <div class="aiRow" id="sendActs">
+      <button id="sendDrive" class="go">Ανέβασμα στο Drive και QR</button>
+      <button id="sendShare">Κοινοποίηση του PDF</button>
+    </div>
+    <div id="sendOut" class="hidden">
+      <canvas id="sendQr" width="560" height="560"></canvas>
+      <div id="sendUrl"></div>
+      <div class="aiRow"><button id="sendCopy">Αντιγραφή συνδέσμου</button><button id="sendBig">Μεγάλο QR</button></div>
+      <div class="hint" id="sendNote"></div>
+    </div>
+    <div class="aiRow"><button id="sendIdEdit">Αλλαγή Client ID</button><button id="sendClose">Κλείσιμο</button></div>
+  </div>
+  <div id="qrBig" class="hidden"><canvas width="1200" height="1200"></canvas><div></div></div>
 
   <div id="replayBar" class="hidden">
     <span>Αναπαραγωγή</span>
@@ -1587,11 +1612,11 @@ menu.addEventListener('click', async (e) => {
     download(new Blob([JSON.stringify(board.doc)], { type: 'application/json' }), `${fileName(lessons?.current?.name ?? 'pinakas')}_${stamp()}.json`);
   } else if (act === 'png') {
     download(await board.exportPng(), `selida_${board.cur + 1}_${stamp()}.png`);
+  } else if (act === 'send') {
+    openSend();
   } else if (act === 'pdf') {
     try {
-      const pages = await board.exportJpegPages((d, n) => toast(`Εξαγωγή PDF… σελίδα ${d + 1} από ${n}`, 0));
-      toast(`Το PDF είναι έτοιμο (${pages.length} σελίδες)`);
-      download(buildPdf(pages), `mathima_${stamp()}.pdf`);
+      download(await lessonPdf(), `${fileName(lessons?.current?.name ?? 'mathima')}_${stamp()}.pdf`);
     } catch (err) {
       console.error(err);
       toast('Η εξαγωγή σε PDF απέτυχε', 5000);
@@ -1733,6 +1758,95 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ---------- αυτόματη αποθήκευση ----------
+
+// ---------- αποστολή στους μαθητές ----------
+
+async function lessonPdf(): Promise<Blob> {
+  const pages = await board.exportJpegPages((d, n) => toast(`Ετοιμάζεται το PDF… σελίδα ${d + 1} από ${n}`, 0));
+  toast(`Το PDF είναι έτοιμο (${pages.length} σελίδες)`);
+  return buildPdf(pages);
+}
+
+function drawQr(cv: HTMLCanvasElement, text: string): void {
+  const qr = qrcode(0, 'M');
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount();
+  const c = cv.getContext('2d')!;
+  const cell = Math.floor(cv.width / (n + 8));
+  const off = Math.floor((cv.width - cell * n) / 2);
+  c.fillStyle = '#ffffff';
+  c.fillRect(0, 0, cv.width, cv.height);
+  c.fillStyle = '#000000';
+  for (let r = 0; r < n; r++) for (let q = 0; q < n; q++) if (qr.isDark(r, q)) c.fillRect(off + q * cell, off + r * cell, cell, cell);
+}
+
+const sendMenu = $('sendMenu');
+let sendUrl = '';
+function renderSend(editId = false): void {
+  const has = !!driveClientId();
+  $('sendSetup').classList.toggle('hidden', has && !editId);
+  $('sendDrive').classList.toggle('hidden', !has);
+  $('sendIdEdit').classList.toggle('hidden', !has || editId);
+  ($('sendId') as HTMLInputElement).value = driveClientId();
+}
+function openSend(): void {
+  closePopups();
+  $('sendOut').classList.add('hidden');
+  renderSend();
+  sendMenu.classList.remove('hidden');
+  sendMenu.style.left = Math.max(8, (window.innerWidth - sendMenu.offsetWidth) / 2) + 'px';
+  sendMenu.style.top = Math.max(8, (window.innerHeight - sendMenu.offsetHeight) / 3) + 'px';
+}
+$('sendClose').onclick = () => closePopups();
+$('sendIdEdit').onclick = () => renderSend(true);
+$('sendIdSave').onclick = () => {
+  setDriveClientId(($('sendId') as HTMLInputElement).value.trim());
+  renderSend();
+};
+$('sendDrive').onclick = async () => {
+  const name = `${fileName(lessons?.current?.name ?? 'mathima')}_${stamp()}.pdf`;
+  try {
+    // η σύνδεση πρώτα, όσο «μετράει» ακόμα το πάτημα: αλλιώς ο browser μπλοκάρει το παράθυρο της Google
+    await driveConnect();
+    const pdf = await lessonPdf();
+    toast('Ανεβαίνει στο Google Drive…', 0);
+    const up = await uploadToDrive(pdf, name);
+    sendUrl = up.url;
+    drawQr($('sendQr') as HTMLCanvasElement, up.url);
+    $('sendUrl').textContent = up.url;
+    $('sendNote').textContent = up.shared
+      ? 'Το αρχείο είναι στον φάκελο «Γραφίδα» του Drive. Όποιος έχει τον σύνδεσμο ή το QR μπορεί να το δει.'
+      : 'Το αρχείο ανέβηκε στον φάκελο «Γραφίδα», αλλά ο λογαριασμός δεν επιτρέπει κοινή χρήση με σύνδεσμο. Άνοιξέ το στο Drive και μοίρασέ το από εκεί.';
+    $('sendOut').classList.remove('hidden');
+    toast('Ανέβηκε');
+  } catch (err) {
+    console.error(err);
+    toast(`Δεν ανέβηκε: ${err instanceof Error ? err.message : err}`, 8000);
+  }
+};
+$('sendShare').onclick = async () => {
+  try {
+    const name = `${fileName(lessons?.current?.name ?? 'mathima')}_${stamp()}.pdf`;
+    const file = new File([await lessonPdf()], name, { type: 'application/pdf' });
+    // σε Android το φύλλο κοινοποίησης έχει και το Drive· αλλού απλώς κατεβαίνει
+    if (!isNative && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: name });
+    else download(file, name);
+  } catch (err) {
+    if ((err as Error)?.name !== 'AbortError') toast('Η κοινοποίηση απέτυχε', 5000);
+  }
+};
+$('sendCopy').onclick = () => {
+  navigator.clipboard?.writeText(sendUrl).then(() => toast('Ο σύνδεσμος αντιγράφηκε'), () => toast('Δεν έγινε αντιγραφή', 4000));
+};
+$('sendBig').onclick = () => {
+  const big = $('qrBig');
+  drawQr(big.querySelector('canvas')!, sendUrl);
+  big.querySelector('div')!.textContent = 'Σκανάρετε για τις σημειώσεις του μαθήματος · πάτημα για κλείσιμο';
+  big.classList.remove('hidden');
+  closePopups();
+};
+$('qrBig').onclick = () => $('qrBig').classList.add('hidden');
 
 // ---------- zoom και ονόματα εικονιδίων ----------
 
