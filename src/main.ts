@@ -93,20 +93,20 @@ app.insertAdjacentHTML(
       </div>
       <div class="group" id="eraserOpts">
         <button data-eraser="partial"><span>◌</span>Σβήνει μόνο ό,τι είναι μέσα στον κύκλο</button>
-        <button data-eraser="stroke"><span>〰</span>Σβήνει ολόκληρη τη γραμμή</button>
+        <button data-eraser="stroke"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14c3-7 5 5 8-1s5 5 10-3"/><path d="M5 5l14 14" stroke="#f87171"/></svg></span>Σβήνει ολόκληρη τη γραμμή</button>
         <button id="eraseAll"><span>🧹</span>Σβήσιμο όλων</button>
       </div>
       <div class="group" id="selOpts">
         <button id="del"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></span>Διαγραφή επιλογής</button>
-        <button id="dup"><span>⧉</span>Αντίγραφο επιλογής</button>
-        <button id="sumBtn"><span>Σ</span>Συνισταμένη των δύο βελών</button>
+        <button id="dup"><span class="txt">×2</span>Αντίγραφο επιλογής</button>
+        <button id="sumBtn"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l5-12M4 20l11-3"/><path d="M4 20L20 5" stroke="#60a5fa"/><path d="M14 5h6v6" stroke="#60a5fa"/></svg></span>Συνισταμένη των δύο βελών</button>
         <button data-rec="text" class="rec"><span>Aα</span>Αναγνώριση της επιλογής ως κείμενο</button>
         <button data-rec="math" class="rec"><span>√x</span>Αναγνώριση της επιλογής ως τύπο</button>
       </div>
       <div class="group" id="axesOpts">
         <button data-axis="x"><span>x</span>Όνομα οριζόντιου άξονα</button>
         <button data-axis="y"><span>y</span>Όνομα κατακόρυφου άξονα</button>
-        <button id="fnBtn"><span>ƒ</span>Γραφική παράσταση συνάρτησης</button>
+        <button id="fnBtn"><span class="txt">f(x)</span>Γραφική παράσταση συνάρτησης</button>
       </div>
       <div class="group" id="widths"></div>
     </div>
@@ -164,9 +164,9 @@ app.insertAdjacentHTML(
     </div>
     <div class="bgRow">
       <span>Άξονες</span>
-      <button data-axes="full" class="sq" title="4 τεταρτημόρια">╋</button>
-      <button data-axes="q1" class="sq" title="1ο τεταρτημόριο">┗</button>
-      <button data-axes="q14" class="sq" title="1ο και 4ο (x ≥ 0)">┣</button>
+      <button data-axes="full" class="sq" title="4 τεταρτημόρια"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M12 21V3M18.5 9.5L21 12l-2.5 2.5M9.5 5.5L12 3l2.5 2.5"/></svg></button>
+      <button data-axes="q1" class="sq" title="1ο τεταρτημόριο"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19h16M5 19V3M18.5 16.5L21 19l-2.5 2.5M2.5 5.500L5 3l2.5 2.5"/></svg></button>
+      <button data-axes="q14" class="sq" title="1ο και 4ο (x ≥ 0)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h16M5 21V3M18.5 9.5L21 12l-2.5 2.5M2.5 5.500L5 3l2.5 2.5"/></svg></button>
     </div>
     <button data-ins="trig">◔ Τριγωνομετρικός κύκλος</button>
     <button data-ins="stamps">🧲 Σχήματα φυσικής…</button>
