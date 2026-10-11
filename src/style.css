@@ -184,17 +184,29 @@ body.inking #toolbar { pointer-events: none; }
 .tplItem button:first-child { flex: 1; }
 .tplItem button[data-tpldel] { padding: 14px; opacity: .7; }
 
-#fnMenu { min-width: 340px; }
-.fnItem { display: flex; align-items: center; gap: 10px; padding: 4px 6px 4px 12px; font-size: 18px; font-style: italic; }
-.fnItem i { width: 18px; height: 4px; border-radius: 2px; }
-.fnItem span { flex: 1; }
-.fnItem button { padding: 8px 12px; font-style: normal; opacity: .7; }
+#fnMenu { width: 404px; }
+#fnHead { display: flex; align-items: center; gap: 8px; padding: 2px 4px 6px 10px; cursor: move; touch-action: none; }
+#fnHead b { flex: 1; font-size: 17px; }
+#fnHead #fnClose { padding: 8px 12px; opacity: .7; }
+#fnList { max-height: 190px; overflow-y: auto; }
+.fnItem { display: flex; align-items: center; gap: 10px; padding: 2px 6px; font-size: 19px; font-style: italic; border-radius: 10px; }
+.fnItem.ed { background: var(--bar-2); }
+.fnItem .vis { width: 26px; height: 26px; padding: 0; border-radius: 50%; background: var(--c); border: 3px solid var(--c); flex: none; }
+.fnItem.off .vis { background: transparent; }
+.fnItem.off span { opacity: .45; }
+.fnItem span { flex: 1; padding: 8px 0; cursor: text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fnItem button[data-fndel] { padding: 8px 12px; font-style: normal; opacity: .7; }
+.fnPar { display: flex; align-items: center; gap: 10px; padding: 2px 10px; }
+.fnPar b { flex: 0 0 86px; font-size: 17px; font-style: italic; }
+.fnPar input { flex: 1; height: 34px; accent-color: #3b82f6; touch-action: none; }
 .fnRow { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 18px; font-style: italic; }
 .fnRow input { flex: 1; min-width: 0; font: 20px ui-monospace, Menlo, Consolas, monospace; padding: 9px 10px; border-radius: 9px; border: 0;
   outline: 2px solid var(--accent); user-select: text; -webkit-user-select: text; }
 .fnRow button { background: #059669; padding: 10px 16px; font-style: normal; }
-#fnKeys { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 8px 4px; max-width: 340px; }
-#fnKeys button { padding: 9px 12px; background: var(--bar-2); font-size: 16px; }
+#fnKeys { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 2px 8px 6px; }
+#fnKeys button { padding: 11px 0; text-align: center; background: var(--bar-2); font-size: 17px; }
+#fnKeys button.num { background: #374151; font-weight: 600; }
+#fnMenu #fnErr { min-height: 18px; padding: 0 12px; max-width: none; }
 
 #replayBar {
   position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 22; display: flex; align-items: center; gap: 4px;

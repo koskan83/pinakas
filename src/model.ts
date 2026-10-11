@@ -81,7 +81,17 @@ export interface AxesItem {
   lx?: string;
   ly?: string;
   /** Συναρτήσεις που σχεδιάζονται πάνω στους άξονες. */
-  fns?: { expr: string; color: string }[];
+  fns?: FnDef[];
+  /** Τιμές των παραμέτρων (a, b, …) που ρυθμίζονται με δρομείς. */
+  params?: Record<string, number>;
+  /** Εμφάνιση ριζών, ακροτάτων και σημείων τομής. */
+  points?: boolean;
+}
+
+export interface FnDef {
+  expr: string;
+  color: string;
+  hidden?: boolean;
 }
 
 /** Έτοιμο σχήμα φυσικής (βλ. stamps.ts). */

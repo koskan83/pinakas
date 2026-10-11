@@ -8,10 +8,10 @@ import { GadgetKind } from './gadgets';
 import { closeOverlay, isNative, isOverlay, nativeSave, nativeScreenshot, openOverlay } from './native';
 import { Curtain, Spotlight } from './overlays';
 import { STAMPS } from './stamps';
-import { compile } from './expr';
+import { compile, paramsOf } from './expr';
 import { buildPdf } from './pdf';
 import { MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage } from './ai';
-import { uid } from './model';
+import { itemBounds, uid } from './model';
 
 /** Βασικά χρώματα ανά φόντο· ίδια θέση = αντίστοιχο χρώμα στο άλλο φόντο. */
 const PALETTE = {
@@ -191,10 +191,12 @@ app.insertAdjacentHTML(
     <button id="labelOther">⌨ Άλλο…</button>
   </div>
   <div id="fnMenu" class="popup hidden">
+    <div id="fnHead"><b>⠿ Συναρτήσεις</b><button id="fnPts" class="pill" title="Ρίζες, ακρότατα και σημεία τομής">• Σημεία</button><button id="fnClose" title="Κλείσιμο">✕</button></div>
     <div id="fnList"></div>
-    <div class="fnRow"><span>f(x) =</span><input id="fnInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="x²-3x+2" /><button id="fnAdd">✓</button></div>
-    <div id="fnKeys"></div>
+    <div id="fnParams"></div>
+    <div class="fnRow"><span>f(x) =</span><input id="fnInput" type="text" inputmode="none" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="x²-3x+2" /><button id="fnAdd">✓</button></div>
     <div id="fnErr" class="hint"></div>
+    <div id="fnKeys"></div>
   </div>
 
   <div id="aiMenu" class="popup hidden">
@@ -517,16 +519,96 @@ $('labelMenu').addEventListener('click', (e) => {
 });
 
 const fnInput = $('fnInput') as HTMLInputElement;
-const FN_KEYS = ['x', 'x²', '^', '√', '(', ')', '/', 'π', 'ημ(', 'συν(', 'εφ(', '|', 'ln('];
-$('fnKeys').innerHTML = FN_KEYS.map((k) => `<button data-key="${k}">${k}</button>`).join('');
+const FN_KEYS = [
+  '7', '8', '9', '÷', 'x', 'x²', '^', '√',
+  '4', '5', '6', '×', '(', ')', '|', 'π',
+  '1', '2', '3', '−', 'ημ(', 'συν(', 'εφ(', 'ln(',
+  '0', ',', '+', 'e', 'a', 'b', '⌫', 'C',
+];
+const FN_INSERT: Record<string, string> = { 'x²': '²', '÷': '/', '×': '·', '−': '-' };
+$('fnKeys').innerHTML = FN_KEYS.map((k) => `<button data-key="${k}"${/^[0-9,]$/.test(k) ? ' class="num"' : ''}>${k}</button>`).join('');
 const esc = (t: string): string => t.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
+/** Ποια συνάρτηση της λίστας διορθώνεται (null = γράφεται καινούργια). */
+let fnEdit: number | null = null;
+/** Ο χρήστης έσυρε το πλαίσιο: δεν το ξανατοποθετούμε μόνοι μας. */
+let fnMoved = false;
+let fnParamKey = '';
+
+function nextFnColor(): string {
+  const pal = palette();
+  return pal[1 + ((board.selectedAxes?.fns?.length ?? 0) % (pal.length - 1))];
+}
+/** Βάζει το πλαίσιο δίπλα στους άξονες, ώστε η καμπύλη να φαίνεται όσο γράφεις. */
+function placeFnMenu(): void {
+  const ax = board.selectedAxes;
+  if (fnMoved || !ax || fnMenu.classList.contains('hidden')) return;
+  const b = itemBounds(ax);
+  const [l, t] = board.toScreen(b.x0, b.y0);
+  const [r, bt] = board.toScreen(b.x1, b.y1);
+  const w = fnMenu.offsetWidth, h = fnMenu.offsetHeight;
+  const roomR = window.innerWidth - r, roomL = l;
+  fnMenu.style.left = (roomR >= roomL ? Math.min(r + 12, window.innerWidth - w - 8) : Math.max(8, l - w - 12)) + 'px';
+  fnMenu.style.top = Math.max(8, Math.min((t + bt) / 2 - h / 2, window.innerHeight - h - 8)) + 'px';
+}
+function renderFnParams(): void {
+  const ax = board.selectedAxes;
+  const exprs = [...(ax?.fns ?? []).map((f) => f.expr), fnInput.value];
+  const names = [...new Set(exprs.flatMap(paramsOf))];
+  const val = (n: string): number => board.paramPreview?.[n] ?? ax?.params?.[n] ?? 1;
+  const box = $('fnParams');
+  if (names.join() !== fnParamKey) {
+    fnParamKey = names.join();
+    box.innerHTML = names
+      .map((n) => `<label class="fnPar"><b>${esc(n)} = <output></output></b><input type="range" min="-5" max="5" step="0.1" data-par="${esc(n)}" /></label>`)
+      .join('');
+  }
+  box.querySelectorAll<HTMLInputElement>('[data-par]').forEach((sl) => {
+    const v = val(sl.dataset.par!);
+    sl.value = String(v);
+    sl.parentElement!.querySelector('output')!.textContent = String(+v.toFixed(1));
+  });
+}
 function renderFns(): void {
-  const fns = board.selectedAxes?.fns ?? [];
+  const ax = board.selectedAxes;
+  const fns = ax?.fns ?? [];
   $('fnList').innerHTML = fns
-    .map((f, i) => `<div class="fnItem"><i style="background:${f.color}"></i><span>${esc(f.expr)}</span><button data-fndel="${i}" title="Αφαίρεση">✕</button></div>`)
+    .map(
+      (f, i) =>
+        `<div class="fnItem${f.hidden ? ' off' : ''}${i === fnEdit ? ' ed' : ''}"><button data-fnvis="${i}" class="vis" style="--c:${f.color}" title="Εμφάνιση / απόκρυψη"></button>` +
+        `<span data-fnedit="${i}" title="Πάτα για διόρθωση">${esc(f.expr)}</span><button data-fndel="${i}" title="Αφαίρεση">✕</button></div>`,
+    )
     .join('');
-  $('fnErr').textContent = fns.length ? '' : 'Γράψε π.χ. x²-3x+2, 2x+1, ημ(x), 1/x, √x, |x-2|';
-  if (!fnMenu.classList.contains('hidden')) placeNear(fnMenu, $('fnBtn'));
+  $('fnPts').classList.toggle('on', !!ax?.points);
+  renderFnParams();
+  if (!fnInput.value) $('fnErr').textContent = fns.length ? '' : 'Γράψε π.χ. x²-3x+2, ημ(x), 1/x, ή με παραμέτρους: ax²+b';
+  placeFnMenu();
+}
+/** Σχεδιάζει ζωντανά αυτό που γράφεται, χωρίς να το αποθηκεύει. */
+function previewFn(): void {
+  const expr = fnInput.value.trim();
+  if (!expr) {
+    board.fnPreview = null;
+    $('fnErr').textContent = '';
+  } else {
+    try {
+      compile(expr);
+      board.fnPreview = { index: fnEdit, expr, color: nextFnColor() };
+      $('fnErr').textContent = '';
+    } catch (err) {
+      // κρατάμε την τελευταία έγκυρη μορφή στην οθόνη
+      $('fnErr').textContent = `… ${(err as Error).message}`;
+    }
+  }
+  renderFnParams();
+  board.redraw();
+}
+function resetFnDraft(): void {
+  const dirty = !!board.fnPreview || !!board.paramPreview;
+  board.fnPreview = null;
+  board.paramPreview = null;
+  fnEdit = null;
+  fnInput.value = '';
+  if (dirty) board.redraw();
 }
 function addFn(): void {
   const ax = board.selectedAxes;
@@ -539,31 +621,107 @@ function addFn(): void {
     return;
   }
   const fns = ax.fns ?? [];
-  const pal = palette();
-  board.setAxesFns([...fns, { expr, color: pal[1 + (fns.length % (pal.length - 1))] }]);
+  const next = fnEdit === null ? [...fns, { expr, color: nextFnColor() }] : fns.map((f, i) => (i === fnEdit ? { ...f, expr } : f));
+  const params = { ...ax.params, ...board.paramPreview };
+  for (const n of paramsOf(expr)) params[n] ??= 1;
+  board.fnPreview = null;
+  board.paramPreview = null;
+  fnEdit = null;
   fnInput.value = '';
+  board.updateAxes({ fns: next, params });
   renderFns();
 }
 $('fnAdd').onclick = addFn;
 fnInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') addFn();
 });
+fnInput.addEventListener('input', previewFn);
 $('fnKeys').addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-key]');
   if (!b) return;
-  const k = b.dataset.key === 'x²' ? '²' : b.dataset.key!;
-  const at = fnInput.selectionStart ?? fnInput.value.length;
-  fnInput.value = fnInput.value.slice(0, at) + k + fnInput.value.slice(fnInput.selectionEnd ?? at);
+  const key = b.dataset.key!;
+  const from = fnInput.selectionStart ?? fnInput.value.length;
+  const to = fnInput.selectionEnd ?? from;
+  let at = from;
+  if (key === 'C') {
+    fnInput.value = '';
+    at = 0;
+  } else if (key === '⌫') {
+    const cut = from === to ? Math.max(0, from - 1) : from;
+    fnInput.value = fnInput.value.slice(0, cut) + fnInput.value.slice(to);
+    at = cut;
+  } else {
+    const k = FN_INSERT[key] ?? key;
+    fnInput.value = fnInput.value.slice(0, from) + k + fnInput.value.slice(to);
+    at = from + k.length;
+  }
   fnInput.focus();
-  fnInput.setSelectionRange(at + k.length, at + k.length);
+  fnInput.setSelectionRange(at, at);
+  previewFn();
 });
 $('fnList').addEventListener('click', (e) => {
-  const b = (e.target as HTMLElement).closest<HTMLElement>('[data-fndel]');
+  const t = e.target as HTMLElement;
   const ax = board.selectedAxes;
-  if (!b || !ax) return;
-  board.setAxesFns((ax.fns ?? []).filter((_, i) => i !== Number(b.dataset.fndel)));
+  if (!ax) return;
+  const fns = ax.fns ?? [];
+  const idx = (k: string): number | null => {
+    const el = t.closest<HTMLElement>(`[data-${k}]`);
+    return el ? Number(el.dataset[k]) : null;
+  };
+  const del = idx('fndel'), vis = idx('fnvis'), ed = idx('fnedit');
+  if (del !== null) {
+    resetFnDraft();
+    board.updateAxes({ fns: fns.filter((_, i) => i !== del) });
+  } else if (vis !== null) {
+    board.updateAxes({ fns: fns.map((f, i) => (i === vis ? { ...f, hidden: !f.hidden } : f)) });
+  } else if (ed !== null) {
+    fnEdit = fnEdit === ed ? null : ed;
+    fnInput.value = fnEdit === null ? '' : fns[ed].expr;
+    fnInput.focus();
+    previewFn();
+  }
   renderFns();
 });
+$('fnParams').addEventListener('input', (e) => {
+  const sl = e.target as HTMLInputElement;
+  if (!sl.dataset.par) return;
+  board.paramPreview = { ...board.paramPreview, [sl.dataset.par]: Number(sl.value) };
+  sl.parentElement!.querySelector('output')!.textContent = String(+Number(sl.value).toFixed(1));
+  board.redraw();
+});
+$('fnParams').addEventListener('change', () => {
+  const ax = board.selectedAxes;
+  if (!ax || !board.paramPreview) return;
+  const params = { ...ax.params, ...board.paramPreview };
+  board.paramPreview = null;
+  board.updateAxes({ params });
+});
+$('fnPts').onclick = () => {
+  const ax = board.selectedAxes;
+  if (ax) board.updateAxes({ points: !ax.points });
+  renderFns();
+};
+$('fnClose').onclick = () => closePopups();
+{
+  // το πλαίσιο σέρνεται από την κεφαλίδα του
+  const head = $('fnHead');
+  let off: { x: number; y: number } | null = null;
+  head.addEventListener('pointerdown', (e) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    const r = fnMenu.getBoundingClientRect();
+    off = { x: e.clientX - r.left, y: e.clientY - r.top };
+    head.setPointerCapture(e.pointerId);
+  });
+  head.addEventListener('pointermove', (e) => {
+    if (!off) return;
+    fnMoved = true;
+    fnMenu.style.left = Math.max(0, Math.min(e.clientX - off.x, window.innerWidth - 80)) + 'px';
+    fnMenu.style.top = Math.max(0, Math.min(e.clientY - off.y, window.innerHeight - 50)) + 'px';
+  });
+  const end = (): void => { off = null; };
+  head.addEventListener('pointerup', end);
+  head.addEventListener('pointercancel', end);
+}
 
 // ---------- αναγνώριση γραφής ----------
 
@@ -733,7 +891,10 @@ function refreshUi(): void {
   show('subbar', [...$('subbar').children].some((g) => !g.classList.contains('hidden')));
   $('axesOpts').querySelector('[data-axis=x] span')!.textContent = ax?.lx ?? 'x';
   $('axesOpts').querySelector('[data-axis=y] span')!.textContent = ax?.ly ?? 'y';
-  if (!ax) fnMenu.classList.add('hidden');
+  if (!ax && !fnMenu.classList.contains('hidden')) {
+    fnMenu.classList.add('hidden');
+    resetFnDraft();
+  } else if (ax && !fnMenu.classList.contains('hidden')) renderFns();
 
   ($('undo') as HTMLButtonElement).disabled = !board.canUndo;
   ($('redo') as HTMLButtonElement).disabled = !board.canRedo;
@@ -933,6 +1094,8 @@ const stampMenu = $('stampMenu');
 const tplMenu = $('tplMenu');
 function closePopups(): void {
   document.querySelectorAll('.popup').forEach((p) => p.classList.add('hidden'));
+  resetFnDraft();
+  fnMoved = false;
 }
 /** Τοποθετεί ένα αναδυόμενο μενού δίπλα στο κουμπί του, μέσα στα όρια της οθόνης. */
 function placeNear(popup: HTMLElement, anchor: HTMLElement): void {

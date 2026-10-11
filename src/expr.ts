@@ -1,6 +1,8 @@
 /** Μικρός, ασφαλής μεταγλωττιστής μαθηματικών εκφράσεων του x (χωρίς eval). */
 
-export type Fn = (x: number) => number;
+/** Τιμές παραμέτρων (a, b, …) που ορίζονται με δρομείς. */
+export type Params = Record<string, number>;
+export type Fn = (x: number, p?: Params) => number;
 
 const FUNCS: Record<string, (v: number) => number> = {
   sin: Math.sin, 'ημ': Math.sin,
@@ -14,7 +16,7 @@ const FUNCS: Record<string, (v: number) => number> = {
 };
 const CONSTS: Record<string, number> = { pi: Math.PI, 'π': Math.PI, e: Math.E };
 
-type Tok = { t: 'num'; v: number } | { t: 'id'; v: string } | { t: 'op'; v: string };
+type Tok = { t: 'num'; v: number } | { t: 'id'; v: string } | { t: 'par'; v: string } | { t: 'op'; v: string };
 
 function tokenize(src: string): Tok[] {
   const out: Tok[] = [];
@@ -34,9 +36,10 @@ function tokenize(src: string): Tok[] {
       const known = [...Object.keys(FUNCS), ...Object.keys(CONSTS), 'x'].sort((a, b) => b.length - a.length);
       while (word.length) {
         const k = known.find((w) => word.startsWith(w));
-        if (!k) throw new Error(`Άγνωστο σύμβολο «${word}»`);
-        out.push({ t: 'id', v: k });
-        word = word.slice(k.length);
+        // ό,τι δεν είναι γνωστό όνομα είναι παράμετρος ενός γράμματος (a, b, λ …)
+        if (k) out.push({ t: 'id', v: k });
+        else out.push({ t: 'par', v: word[0] });
+        word = word.slice(k ? k.length : 1);
       }
       i = j;
     } else if ('+-*/^()|²³√'.includes(ch)) {
@@ -66,7 +69,7 @@ export function compile(src: string): Fn {
     while (isOp('+') || isOp('-')) {
       const op = toks[p++].v;
       const a = l, b = term();
-      l = op === '+' ? (x) => a(x) + b(x) : (x) => a(x) - b(x);
+      l = op === '+' ? (x, q) => a(x, q) + b(x, q) : (x, q) => a(x, q) - b(x, q);
     }
     return l;
   }
@@ -80,10 +83,10 @@ export function compile(src: string): Fn {
       if (isOp('*') || isOp('/')) {
         const op = toks[p++].v;
         const a = l, b = unary();
-        l = op === '*' ? (x) => a(x) * b(x) : (x) => a(x) / b(x);
+        l = op === '*' ? (x, q) => a(x, q) * b(x, q) : (x, q) => a(x, q) / b(x, q);
       } else if (startsPrimary()) {
         const a = l, b = power();
-        l = (x) => a(x) * b(x);
+        l = (x, q) => a(x, q) * b(x, q);
       } else {
         return l;
       }
@@ -93,7 +96,7 @@ export function compile(src: string): Fn {
     if (isOp('-')) {
       p++;
       const a = unary();
-      return (x) => -a(x);
+      return (x, q) => -a(x, q);
     }
     if (isOp('+')) {
       p++;
@@ -106,12 +109,12 @@ export function compile(src: string): Fn {
     while (isOp('²') || isOp('³')) {
       const n = toks[p++].v === '²' ? 2 : 3;
       const a = b;
-      b = (x) => a(x) ** n;
+      b = (x, q) => a(x, q) ** n;
     }
     if (isOp('^')) {
       p++;
       const a = b, e = unary();
-      return (x) => a(x) ** e(x);
+      return (x, q) => a(x, q) ** e(x, q);
     }
     return b;
   }
@@ -121,6 +124,10 @@ export function compile(src: string): Fn {
     if (t.t === 'num') {
       const v = t.v;
       return () => v;
+    }
+    if (t.t === 'par') {
+      const name = t.v;
+      return (_x, q) => q?.[name] ?? 1;
     }
     if (t.t === 'id') {
       if (t.v === 'x') return (x) => x;
@@ -138,7 +145,7 @@ export function compile(src: string): Fn {
       } else {
         a = power();
       }
-      return (x) => f(a(x));
+      return (x, q) => f(a(x, q));
     }
     if (t.v === '(') {
       const a = expr();
@@ -148,11 +155,11 @@ export function compile(src: string): Fn {
     if (t.v === '|') {
       const a = expr();
       eat('|');
-      return (x) => Math.abs(a(x));
+      return (x, q) => Math.abs(a(x, q));
     }
     if (t.v === '√') {
       const a = power();
-      return (x) => Math.sqrt(a(x));
+      return (x, q) => Math.sqrt(a(x, q));
     }
     throw new Error(`Δεν περίμενα «${t.v}»`);
   }
@@ -160,6 +167,16 @@ export function compile(src: string): Fn {
   const f = expr();
   if (p < toks.length) throw new Error(`Δεν περίμενα «${toks[p].v}»`);
   return f;
+}
+
+/** Οι παράμετροι (γράμματα εκτός του x) που εμφανίζονται στην έκφραση, με τη σειρά που γράφτηκαν. */
+export function paramsOf(src: string): string[] {
+  try {
+    const names = tokenize(src.slice(src.lastIndexOf('=') + 1)).filter((t) => t.t === 'par').map((t) => t.v as string);
+    return [...new Set(names)];
+  } catch {
+    return [];
+  }
 }
 
 const cache = new Map<string, Fn | null>();
@@ -175,4 +192,58 @@ export function compileCached(src: string): Fn | null {
     cache.set(src, f);
   }
   return f;
+}
+
+export interface KeyPoint {
+  x: number;
+  y: number;
+  kind: 'root' | 'ext' | 'cross';
+}
+
+/** Ρίζες, ακρότατα και σημεία τομής των συναρτήσεων μέσα στο παράθυρο των αξόνων (αριθμητικά, κατά προσέγγιση). */
+export function keyPoints(fns: Fn[], p: Params, xmin: number, xmax: number, ymin: number, ymax: number): KeyPoint[] {
+  const N = 600;
+  const h = (xmax - xmin) / N;
+  const out: KeyPoint[] = [];
+  const add = (x: number, y: number, kind: KeyPoint['kind']): void => {
+    if (!Number.isFinite(y) || y < ymin - 1e-9 || y > ymax + 1e-9 || out.length >= 40) return;
+    if (out.some((o) => Math.abs(o.x - x) < h * 2 && Math.abs(o.y - y) < (ymax - ymin) / 200)) return;
+    out.push({ x, y, kind });
+  };
+  const bisect = (g: (x: number) => number, a: number, b: number): number | null => {
+    let ga = g(a);
+    for (let i = 0; i < 50; i++) {
+      const m = (a + b) / 2, gm = g(m);
+      if (!Number.isFinite(gm)) return null;
+      if (ga < 0 === gm < 0) { a = m; ga = gm; } else b = m;
+    }
+    return (a + b) / 2;
+  };
+  /** Σημεία όπου η g αλλάζει πρόσημο (όχι ασύμπτωτες). */
+  const zeros = (g: (x: number) => number, exact: boolean, hit: (x: number) => void): void => {
+    // η παράγωγος συχνά μηδενίζεται ακριβώς σε ακέραιο x: μετατοπίζουμε λίγο το πλέγμα για να μην το χάσουμε
+    const x0 = exact ? xmin : xmin - h * 0.3183;
+    let px = x0, pg = g(px);
+    for (let i = 1; i <= N + (exact ? 0 : 1); i++) {
+      const x = x0 + i * h, gx = g(x);
+      if (Number.isFinite(pg) && Number.isFinite(gx)) {
+        if (pg === 0) {
+          if (exact && gx !== 0) hit(px);
+        } else if (gx !== 0 && pg < 0 !== gx < 0) {
+          const r = bisect(g, px, x);
+          if (r !== null && Math.abs(g(r)) < 1e-6 * (1 + Math.abs(pg) + Math.abs(gx))) hit(r);
+        }
+      }
+      px = x;
+      pg = gx;
+    }
+  };
+  const e = h / 50;
+  for (const f of fns) {
+    zeros((x) => f(x, p), true, (r) => add(r, 0, 'root'));
+    zeros((x) => f(x + e, p) - f(x - e, p), false, (r) => r >= xmin && r <= xmax && add(r, f(r, p), 'ext'));
+  }
+  for (let i = 0; i < fns.length; i++)
+    for (let j = i + 1; j < fns.length; j++) zeros((x) => fns[i](x, p) - fns[j](x, p), true, (r) => add(r, fns[i](r, p), 'cross'));
+  return out;
 }

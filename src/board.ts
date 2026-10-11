@@ -1,9 +1,9 @@
 import {
-  AngleItem, AxesItem, AxesMode, Background, Doc, Item, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TextItem, Tool, TrigItem, View,
+  AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TextItem, Tool, TrigItem, View,
   angleDegrees, angleEnds, axesRange, cloneItem, erasePartial, hitItem, inLasso, isDark, itemBounds, newDoc, newPage, reboxShape,
   recognizeShape, roundAngle, scaleItem, textFont, textLines, translateItem, trianglePts, uid,
 } from './model';
-import { compileCached } from './expr';
+import { Fn, Params, compileCached, keyPoints } from './expr';
 import { STAMPS } from './stamps';
 import { CM, GadgetDrag, GadgetKind, Gadgets } from './gadgets';
 
@@ -74,6 +74,10 @@ export class Board {
   shapeKind: ShapeKind | 'angle' = 'line';
   readonly gadgets = new Gadgets();
   selected: string | null = null;
+  /** Συνάρτηση που γράφεται αυτή τη στιγμή: σχεδιάζεται ζωντανά, δεν έχει αποθηκευτεί ακόμα. */
+  fnPreview: { index: number | null; expr: string; color: string } | null = null;
+  /** Τιμές παραμέτρων όσο σέρνεται ένας δρομέας. */
+  paramPreview: Params | null = null;
   /** Πολλαπλή επιλογή (λάσο). Όταν έχει στοιχεία, το `selected` είναι null. */
   multi: string[] = [];
   /** Εμφάνιση μηκών, γωνιών και εμβαδών πάνω στα σχήματα. */
@@ -395,10 +399,15 @@ export class Board {
   }
 
   /** Ορίζει τις συναρτήσεις που σχεδιάζονται στους επιλεγμένους άξονες. */
-  setAxesFns(fns: { expr: string; color: string }[]): void {
+  setAxesFns(fns: FnDef[]): void {
+    this.updateAxes({ fns });
+  }
+
+  /** Αλλάζει ιδιότητες των επιλεγμένων αξόνων (συναρτήσεις, παράμετροι, σημεία) με ένα βήμα αναίρεσης. */
+  updateAxes(patch: Partial<AxesItem>): void {
     const before = this.selectedAxes;
     if (!before) return;
-    const after: AxesItem = { ...before, fns };
+    const after = { ...before, ...patch } as AxesItem;
     this.page.items[this.page.items.indexOf(before)] = after;
     this.push({ t: 'mod', p: this.cur, before, after });
     this.redraw();
@@ -788,14 +797,20 @@ export class Board {
     c.globalAlpha = 1;
 
     // συναρτήσεις
-    if (a.fns?.length) {
+    const live = a.id === this.selected;
+    let all: FnDef[] = a.fns ?? [];
+    const pv = live ? this.fnPreview : null;
+    if (pv) all = pv.index === null ? [...all, { expr: pv.expr, color: pv.color }] : all.map((f, i) => (i === pv.index ? { ...f, expr: pv.expr } : f));
+    const fns = all.filter((f) => !f.hidden);
+    const prm: Params = { ...a.params, ...(live ? this.paramPreview : null) };
+    if (fns.length) {
       c.save();
       c.beginPath();
       c.rect(X(xmin), Y(ymax), (xmax - xmin) * u, (ymax - ymin) * u);
       c.clip();
       c.lineWidth = 3;
       const n = Math.max(80, Math.min(1500, Math.round(((xmax - xmin) * u) / 1.5)));
-      for (const f of a.fns) {
+      for (const f of fns) {
         const fn = compileCached(f.expr);
         if (!fn) continue;
         c.strokeStyle = this.ink(f.color);
@@ -803,7 +818,7 @@ export class Board {
         let pen = false, py = 0;
         for (let i = 0; i <= n; i++) {
           const xv = xmin + ((xmax - xmin) * i) / n;
-          const yv = Math.max(-1e5, Math.min(1e5, fn(xv)));
+          const yv = Math.max(-1e5, Math.min(1e5, fn(xv, prm)));
           if (!Number.isFinite(yv)) {
             pen = false;
             continue;
@@ -821,10 +836,23 @@ export class Board {
       c.font = `italic 600 ${lf}px system-ui, "Segoe UI", Roboto, sans-serif`;
       c.textAlign = 'left';
       c.textBaseline = 'top';
-      a.fns.forEach((f, i) => {
+      fns.forEach((f, i) => {
         c.fillStyle = this.ink(f.color);
         c.fillText(compileCached(f.expr) ? f.expr : `${f.expr} ?`, X(xmax + 1.1), Y(ymax) + i * lf * 1.4);
       });
+      if (a.points) {
+        const ok = fns.map((f) => compileCached(f.expr)).filter((f): f is Fn => !!f);
+        const num = (v: number): string => String(+v.toFixed(2) || 0);
+        c.font = `600 ${lf * 0.85}px system-ui, "Segoe UI", Roboto, sans-serif`;
+        c.textBaseline = 'bottom';
+        c.fillStyle = this.ink(a.color);
+        for (const k of keyPoints(ok, prm, xmin, xmax, ymin, ymax)) {
+          c.beginPath();
+          c.arc(X(k.x), Y(k.y), Math.max(4, u * 0.09), 0, Math.PI * 2);
+          c.fill();
+          c.fillText(`(${num(k.x)}, ${num(k.y)})`, X(k.x) + 7, Y(k.y) - 5);
+        }
+      }
       c.fillStyle = this.ink(a.color);
     }
 
