@@ -1,4 +1,4 @@
-# Γραφίδα
+# PrismaBoard
 
 Διαδραστικός πίνακας για γραφίδα, αφή και ποντίκι (BenQ Board, Windows, browser).
 

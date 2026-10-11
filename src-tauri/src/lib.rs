@@ -77,7 +77,7 @@ async fn open_overlay(app: AppHandle) -> Result<(), String> {
         let _ = main.minimize();
     }
     WebviewWindowBuilder::new(&app, "overlay", WebviewUrl::App("index.html".into()))
-        .title("Γραφίδα – γράψιμο πάνω από την οθόνη")
+        .title("PrismaBoard – γράψιμο πάνω από την οθόνη")
         .initialization_script("window.__GRAFIDA_OVERLAY__ = true;")
         .transparent(true)
         .decorations(false)

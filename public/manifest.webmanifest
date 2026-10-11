@@ -1,6 +1,6 @@
 {
-  "name": "Γραφίδα",
-  "short_name": "Γραφίδα",
+  "name": "PrismaBoard",
+  "short_name": "PrismaBoard",
   "start_url": "./",
   "display": "fullscreen",
   "background_color": "#ffffff",

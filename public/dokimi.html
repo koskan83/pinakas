@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Γραφίδα – Δοκιμή στην τάξη</title>
+<title>PrismaBoard – Δοκιμή στην τάξη</title>
 <style>
   :root { color-scheme: light dark; --bg: #f8fafc; --card: #fff; --fg: #111827; --mut: #6b7280; --line: #e5e7eb; --ok: #059669; --bad: #dc2626; }
   @media (prefers-color-scheme: dark) { :root { --bg: #0f172a; --card: #1e293b; --fg: #f1f5f9; --mut: #94a3b8; --line: #334155; } }
@@ -33,7 +33,7 @@
 <body>
 <main>
   <h1>Δοκιμή στην τάξη</h1>
-  <p class="lead">Άνοιξε τη Γραφίδα σε άλλη καρτέλα και κάνε τα βήματα με τη σειρά. Πάτα ✓ αν δούλεψε ή ✗ αν όχι, και γράψε δυο λόγια για το τι είδες. Στο τέλος πάτα «Αντιγραφή αποτελεσμάτων» και στείλε τα.</p>
+  <p class="lead">Άνοιξε το PrismaBoard σε άλλη καρτέλα και κάνε τα βήματα με τη σειρά. Πάτα ✓ αν δούλεψε ή ✗ αν όχι, και γράψε δυο λόγια για το τι είδες. Στο τέλος πάτα «Αντιγραφή αποτελεσμάτων» και στείλε τα.</p>
   <div id="list"></div>
   <textarea id="out" readonly></textarea>
 </main>
@@ -135,7 +135,7 @@ function count() {
 items.forEach((i) => i.paint());
 document.getElementById('reset').onclick = () => { if (confirm('Να σβηστούν όλες οι απαντήσεις;')) { state = {}; save(); items.forEach((i) => i.paint()); } };
 document.getElementById('copy').onclick = async () => {
-  const lines = ['Δοκιμή Γραφίδας – ' + new Date().toLocaleString('el'), navigator.userAgent, innerWidth + 'x' + innerHeight + ' @' + devicePixelRatio, ''];
+  const lines = ['Δοκιμή PrismaBoard – ' + new Date().toLocaleString('el'), navigator.userAgent, innerWidth + 'x' + innerHeight + ' @' + devicePixelRatio, ''];
   for (const i of items) {
     const s = state[i.id] || {};
     lines.push(i.id + '. [' + (s.r === 'ok' ? 'OK' : s.r === 'bad' ? 'ΠΡΟΒΛΗΜΑ' : '—') + '] ' + i.text + (s.r === 'bad' && s.note ? '\n   → ' + s.note : ''));

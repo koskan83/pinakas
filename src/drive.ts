@@ -6,7 +6,7 @@
 
 const KEY = 'grafida.drive';
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
-const FOLDER = 'Γραφίδα';
+const FOLDER = 'PrismaBoard';
 
 interface TokenResponse { access_token?: string; expires_in?: number; error?: string; error_description?: string }
 interface TokenClient { requestAccessToken(o?: { prompt?: string }): void }
@@ -112,7 +112,7 @@ export interface Uploaded {
   shared: boolean;
 }
 
-/** Ανεβάζει το αρχείο στον φάκελο «Γραφίδα» του Drive και το κάνει ορατό σε όποιον έχει τον σύνδεσμο. */
+/** Ανεβάζει το αρχείο στον φάκελο «PrismaBoard» του Drive και το κάνει ορατό σε όποιον έχει τον σύνδεσμο. */
 export async function uploadToDrive(blob: Blob, name: string): Promise<Uploaded> {
   const tk = await getToken();
   const parent = await folderId(tk);
