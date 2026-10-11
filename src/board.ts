@@ -577,27 +577,50 @@ export class Board {
    */
   private angleAround(wx: number, wy: number): AngleItem | null {
     const segs = this.segments().filter(([p, q]) => Math.hypot(q[0] - p[0], q[1] - p[1]) > 10);
-    const SNAP = 14;
+    // ανοχή: γραμμές τραβηγμένες με το χέρι σπάνια ακουμπάνε ακριβώς στην κορυφή
+    const SNAP = Math.max(26, 26 / this.page.view.k);
+    // υποψήφιες κορυφές: τα σημεία όπου δύο τμήματα συναντιούνται ή διασταυρώνονται (και λίγο έξω από τα άκρα τους)
+    const verts: Pt[] = [];
+    for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) {
+      const [p, q] = segs[i], [r, t] = segs[j];
+      const d1x = q[0] - p[0], d1y = q[1] - p[1], d2x = t[0] - r[0], d2y = t[1] - r[1];
+      const l1 = Math.hypot(d1x, d1y), l2 = Math.hypot(d2x, d2y);
+      const cross = d1x * d2y - d1y * d2x;
+      if (Math.abs(cross) < 0.03 * l1 * l2) continue;
+      // δύο άκρα πολύ κοντά το ένα στο άλλο μετράνε ως κοινή κορυφή, ακόμα κι αν οι προεκτάσεις τέμνονται πιο μακριά
+      let joined = false;
+      for (const e1 of [p, q]) for (const e2 of [r, t]) {
+        if (!joined && Math.hypot(e1[0] - e2[0], e1[1] - e2[1]) < SNAP * 1.5) {
+          const mid: Pt = [(e1[0] + e2[0]) / 2, (e1[1] + e2[1]) / 2];
+          if (!verts.some((v) => Math.hypot(v[0] - mid[0], v[1] - mid[1]) < 3)) verts.push(mid);
+          joined = true;
+        }
+      }
+      if (joined) continue;
+      const u = ((r[0] - p[0]) * d2y - (r[1] - p[1]) * d2x) / cross;
+      const w = ((r[0] - p[0]) * d1y - (r[1] - p[1]) * d1x) / cross;
+      if (u * l1 < -SNAP || u * l1 > l1 + SNAP || w * l2 < -SNAP || w * l2 > l2 + SNAP) continue;
+      const x: Pt = [p[0] + d1x * u, p[1] + d1y * u];
+      if (!verts.some((v) => Math.hypot(v[0] - x[0], v[1] - x[1]) < 3)) verts.push(x);
+    }
     let best: { d: number; v: Pt; a1: number; a2: number; len: number } | null = null;
-    const seen: Pt[] = [];
-    for (const [e0, e1] of segs) for (const v of [e0, e1]) {
-      if (seen.some((s) => Math.hypot(s[0] - v[0], s[1] - v[1]) < SNAP)) continue;
-      seen.push(v);
+    for (const v of verts) {
       const d = Math.hypot(wx - v[0], wy - v[1]);
       if (d < 6 || (best && d >= best.d)) continue;
-      // ακτίνες που φεύγουν από την κορυφή v
+      // ακτίνες που φεύγουν από την κορυφή v: προς κάθε άκρο τμήματος που περνά από εκεί
       const rays: { a: number; len: number }[] = [];
       const add = (to: Pt): void => {
-        const a = Math.atan2(to[1] - v[1], to[0] - v[0]), len = Math.hypot(to[0] - v[0], to[1] - v[1]);
+        const len = Math.hypot(to[0] - v[0], to[1] - v[1]);
+        if (len < SNAP * 1.2) return;
+        const a = Math.atan2(to[1] - v[1], to[0] - v[0]);
         const same = rays.find((r) => Math.abs(Math.atan2(Math.sin(r.a - a), Math.cos(r.a - a))) < 0.03);
         if (same) same.len = Math.max(same.len, len);
         else rays.push({ a, len });
       };
       for (const [p, q] of segs) {
-        const dp = Math.hypot(p[0] - v[0], p[1] - v[1]), dq = Math.hypot(q[0] - v[0], q[1] - v[1]);
-        if (dp < SNAP) add(q);
-        else if (dq < SNAP) add(p);
-        else if (distToSeg(v[0], v[1], p, q) < 5) { add(p); add(q); }
+        if (distToSeg(v[0], v[1], p, q) > SNAP) continue;
+        add(p);
+        add(q);
       }
       if (rays.length < 2) continue;
       rays.sort((r, s) => r.a - s.a);
@@ -615,7 +638,14 @@ export class Board {
     // το μήκος ορίζει μόνο την ακτίνα του τόξου (βλ. drawAngleMark)
     // κάθε επόμενη γωνία στην ίδια κορυφή παίρνει μεγαλύτερο τόξο, για να μην πέφτουν οι μοίρες η μία πάνω στην άλλη
     const v = best.v;
-    const here = this.page.items.filter((x) => x.kind === 'angle' && Math.hypot(x.x - v[0], x.y - v[1]) < SNAP).length;
+    const mid = best.a1 + ((((best.a2 - best.a1) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) / 2;
+    const here = this.page.items.filter((x) => {
+      if (x.kind !== 'angle' || Math.hypot(x.x - v[0], x.y - v[1]) >= SNAP) return false;
+      // μόνο όσες γωνίες «πατάνε» στο ίδιο άνοιγμα (π.χ. η μεγάλη γωνία γύρω από μια μικρότερη)
+      const half = Math.abs(Math.atan2(Math.sin(x.a2 - x.a1), Math.cos(x.a2 - x.a1))) / 2;
+      const xm = x.a1 + Math.atan2(Math.sin(x.a2 - x.a1), Math.cos(x.a2 - x.a1)) / 2;
+      return Math.abs(Math.atan2(Math.sin(mid - xm), Math.cos(mid - xm))) < half + 0.02;
+    }).length;
     const len = (Math.max(18, Math.min(46, best.len * 0.4)) + 34 * here) / 0.4;
     return { kind: 'angle', id: uid(), x: best.v[0], y: best.v[1], a1: best.a1, a2: best.a2, len1: len, len2: len, color: this.color, width: 3, arc: true };
   }
@@ -2404,9 +2434,11 @@ export class Board {
         this.renderLive();
         break;
       case 'measure':
-        // σύρσιμο μέσα σε μια γωνία τη μετράει· το τόξο μένει στη σελίδα όταν σηκώσεις τη γραφίδα
+        // πάτημα ή σύρσιμο μέσα σε μια γωνία τη μετράει· το τόξο μένει στη σελίδα όταν σηκώσεις τη γραφίδα
         ps.mode = 'measure';
         ps.start = [e.clientX, e.clientY];
+        ps.live = this.angleAround(wx, wy) ?? undefined;
+        this.renderLive();
         break;
       case 'laser':
         ps.mode = 'laser';
@@ -2706,7 +2738,7 @@ export class Board {
         ps.laser!.pts.push([wx, wy]);
         break;
       case 'measure':
-        ps.live = Math.hypot(e.clientX - ps.start![0], e.clientY - ps.start![1]) > 10 ? this.angleAround(wx, wy) ?? undefined : undefined;
+        ps.live = this.angleAround(wx, wy) ?? undefined;
         break;
       case 'lasso':
         ps.lasso!.push([wx, wy]);
