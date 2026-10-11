@@ -1,9 +1,26 @@
 :root {
-  --bar: #1f2937;
+  /* σκούρα γραμμή εργαλείων, για φωτεινό φόντο */
+  --bar: #111827;
   --bar-2: #374151;
-  --fg: #f9fafb;
+  --bar-3: #4b5563;
+  --fg: #e5e7eb;
+  --on-bg: #ffffff;
+  --on-fg: #111827;
+  --go: #34d399;
+  --ring: rgba(255, 255, 255, .3);
   --accent: #2563eb;
   --btn: 60px;
+}
+/* φωτεινή γραμμή εργαλείων, για σκούρο φόντο */
+body.dark {
+  --bar: #ffffff;
+  --bar-2: #e5e7eb;
+  --bar-3: #d1d5db;
+  --fg: #1f2937;
+  --on-bg: #1f2937;
+  --on-fg: #ffffff;
+  --go: #059669;
+  --ring: rgba(17, 24, 39, .25);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; font-family: system-ui, 'Segoe UI', Roboto, sans-serif; }
@@ -35,7 +52,7 @@ body.inking #toolbar { pointer-events: none; }
   pointer-events: auto;
   max-width: calc((100vw - 16px) / var(--ts));
   display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 6px;
-  padding: 5px 8px; border-radius: 16px; background: rgba(31, 41, 55, .9); color: var(--fg);
+  padding: 5px 8px; border-radius: 16px; background: var(--bar); color: var(--fg);
   box-shadow: 0 4px 16px rgba(0,0,0,.28);
 }
 .group { display: flex; align-items: center; gap: 2px; padding-right: 6px; border-right: 1px solid var(--bar-2); }
@@ -45,13 +62,14 @@ body.inking #toolbar { pointer-events: none; }
 #toolbar button span { font-size: 21px; line-height: 1; }
 #toolbar button span svg { display: block; width: 26px; height: 26px; }
 #toolbar button:hover:not(:disabled) { background: var(--bar-2); }
-#toolbar button.on { background: var(--accent); }
-#toolbar button.accent { background: #059669; }
+#toolbar button.on { background: var(--on-bg); color: var(--on-fg); }
+#toolbar button.on:hover:not(:disabled) { background: var(--on-bg); }
+#toolbar button.accent { color: var(--go); }
 
 /* λαβή πάνω από τη γραμμή: μετακίνηση, μέγεθος, σύμπτυξη */
 #barTab {
   position: absolute; right: 12px; bottom: 100%; display: flex; gap: 1px; padding: 2px 5px 0;
-  border-radius: 11px 11px 0 0; background: rgba(31, 41, 55, .9);
+  border-radius: 11px 11px 0 0; background: var(--bar);
 }
 #toolbar #barTab button { width: 34px; height: 28px; border-radius: 8px; opacity: .8; }
 #toolbar #barTab button span { font-size: 16px; }
@@ -61,22 +79,22 @@ body.inking #toolbar { pointer-events: none; }
 /* δεύτερη σειρά: επιλογές του εργαλείου που κρατάς */
 #subbar {
   position: absolute; right: 12px; bottom: calc(100% + 6px); display: flex; gap: 4px 6px; width: max-content;
-  padding: 4px 7px; border-radius: 14px; background: rgba(31, 41, 55, .9); box-shadow: 0 4px 16px rgba(0,0,0,.28);
+  padding: 4px 7px; border-radius: 14px; background: var(--bar); box-shadow: 0 4px 16px rgba(0,0,0,.28);
 }
 #toolbar.sub-below #subbar { bottom: auto; top: calc(100% + 6px); }
 #toolbar.sub-lift #subbar { bottom: calc(100% + 36px); }
 /* βελάκι που δείχνει σε ποιο εργαλείο ανήκει η σειρά */
 #subbar::after {
   content: ''; position: absolute; left: var(--caret, 24px); top: 100%; margin-left: -7px;
-  border: 7px solid transparent; border-top-color: rgba(31, 41, 55, .9); border-bottom: 0;
+  border: 7px solid transparent; border-top-color: var(--bar); border-bottom: 0;
 }
-#toolbar.sub-below #subbar::after { top: auto; bottom: 100%; border: 7px solid transparent; border-bottom-color: rgba(31, 41, 55, .9); border-top: 0; }
+#toolbar.sub-below #subbar::after { top: auto; bottom: 100%; border: 7px solid transparent; border-bottom-color: var(--bar); border-top: 0; }
 #toolbar.sub-lift #subbar::after { display: none; }
 #toolbar.vertical #subbar::after {
   left: 100%; top: var(--caret, 24px); bottom: auto; margin: -7px 0 0;
-  border: 7px solid transparent; border-left-color: rgba(31, 41, 55, .9); border-right: 0;
+  border: 7px solid transparent; border-left-color: var(--bar); border-right: 0;
 }
-#toolbar.vertical.sub-right #subbar::after { left: auto; right: 100%; border: 7px solid transparent; border-right-color: rgba(31, 41, 55, .9); border-left: 0; }
+#toolbar.vertical.sub-right #subbar::after { left: auto; right: 100%; border: 7px solid transparent; border-right-color: var(--bar); border-left: 0; }
 #toolbar #axesOpts button span { font-style: italic; font-weight: 600; font-size: 19px; }
 #toolbar button span.txt, #toolbar #axesOpts button span.txt { font-size: 16px; font-weight: 600; }
 .popup button.sq svg { display: block; width: 26px; height: 26px; margin: auto; }
@@ -86,11 +104,11 @@ body.inking #toolbar { pointer-events: none; }
   background: linear-gradient(90deg, rgba(37,99,235,.45), transparent);
 }
 #dockHint.right { left: auto; right: 0; background: linear-gradient(270deg, rgba(37,99,235,.45), transparent); }
-#toolbar button.color { width: 30px; height: 30px; margin: 0 2px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); }
-#toolbar button.color.on { border-color: #fff; box-shadow: 0 0 0 3px var(--accent); }
+#toolbar button.color { width: 28px; height: 28px; margin: 0 2px; border-radius: 50%; border: 2px solid var(--bar); box-shadow: 0 0 0 1px var(--ring); }
+#toolbar button.color.on { box-shadow: 0 0 0 2.5px var(--fg); }
 #toolbar button.width { width: 34px; }
-#toolbar button.width i { display: block; background: #fff; border-radius: 50%; }
-#toolbar button.width.on { background: var(--bar-2); box-shadow: inset 0 0 0 2px var(--accent); }
+#toolbar button.width i { display: block; background: currentColor; border-radius: 50%; }
+#toolbar button.width.on { background: var(--bar-2); color: var(--fg); box-shadow: inset 0 0 0 2px var(--fg); }
 .pages #pageLabel { min-width: 52px; text-align: center; font-weight: 600; font-size: 14px; }
 
 #toolbar.folded { padding: 3px 5px; }
@@ -112,7 +130,7 @@ body.inking #toolbar { pointer-events: none; }
   display: flex; flex-direction: column; gap: 2px;
 }
 #menu { left: 14px; top: 80px; }
-.popup button.on { background: var(--accent); }
+.popup button.on { background: var(--accent); color: #fff; }
 .popup button { text-align: left; padding: 14px 16px; border-radius: 10px; font-size: 17px; }
 .popup button:hover { background: var(--bar-2); }
 .popup hr { width: 100%; border: 0; border-top: 1px solid var(--bar-2); margin: 4px 0; }
@@ -176,8 +194,8 @@ body.inking #toolbar { pointer-events: none; }
 
 #colorMenu { min-width: 0; }
 #colorGrid { display: grid; grid-template-columns: repeat(6, 42px); gap: 8px; padding: 6px; }
-#colorGrid button.color { width: 42px; height: 42px; padding: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); }
-#colorGrid button.color.on { border-color: #fff; box-shadow: 0 0 0 3px var(--accent); }
+#colorGrid button.color { width: 42px; height: 42px; padding: 0; border-radius: 50%; border: 2px solid var(--bar); box-shadow: 0 0 0 1px var(--ring); }
+#colorGrid button.color.on { box-shadow: 0 0 0 3px var(--accent); }
 #colorPick { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; font-size: 16px; cursor: pointer; }
 #colorPick input { width: 54px; height: 38px; padding: 0; border: 0; background: none; cursor: pointer; }
 
@@ -217,7 +235,7 @@ body.inking #toolbar { pointer-events: none; }
 .fnRow button { background: #059669; padding: 10px 16px; font-style: normal; }
 #fnKeys { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 2px 8px 6px; }
 #fnKeys button { padding: 11px 0; text-align: center; background: var(--bar-2); font-size: 17px; }
-#fnKeys button.num { background: #374151; font-weight: 600; }
+#fnKeys button.num { background: var(--bar-3); font-weight: 600; }
 #fnMenu #fnErr { min-height: 18px; padding: 0 12px; max-width: none; }
 
 #replayBar {
@@ -246,7 +264,7 @@ body.inking #toolbar { pointer-events: none; }
 #overlayClose { left: 80px; background: #b91c1c; }
 html.overlay, html.overlay body { background: transparent; }
 
-#toolbar button.rec span { font-size: 15px; font-weight: 700; letter-spacing: -.5px; color: #fde68a; }
+#toolbar button.rec span { font-size: 15px; font-weight: 700; letter-spacing: -.5px; }
 #aiMenu { left: 14px; top: 80px; width: 380px; padding: 14px; gap: 8px; }
 #aiMenu b { font-size: 18px; padding: 0 4px; }
 .popup button.pill { padding: 9px 16px; background: var(--bar-2); font-size: 16px; }
@@ -260,4 +278,9 @@ html.overlay, html.overlay body { background: transparent; }
 #measMenu { width: 300px; }
 #measKeys { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; padding: 2px 8px 4px; }
 #measKeys button { padding: 11px 0; text-align: center; background: var(--bar-2); font-size: 17px; }
-#measKeys button.num { background: #374151; font-weight: 600; }
+#measKeys button.num { background: var(--bar-3); font-weight: 600; }
+
+/* τα πράσινα κουμπιά επιβεβαίωσης έχουν πάντα λευκά γράμματα */
+#textEd .row #textOk, #timer .row button.go, .fnRow button, .aiRow #aiSave { color: #fff; }
+#toolbar, #subbar, .popup, .fab { box-shadow: 0 6px 20px rgba(0, 0, 0, .25); }
+body.dark #toolbar, body.dark #subbar, body.dark .popup, body.dark .fab { box-shadow: 0 6px 20px rgba(0, 0, 0, .5); }
