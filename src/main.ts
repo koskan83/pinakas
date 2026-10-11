@@ -208,7 +208,7 @@ app.insertAdjacentHTML(
   <div id="measMenu" class="popup hidden">
     <div class="fnRow"><input id="measInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" /><button id="measOk">✓</button></div>
     <div id="measKeys"></div>
-    <div class="hint">Αριθμός: η πλευρά γίνεται τόσα cm. Γράμμα ή μονάδα (α, 5 m): αλλάζει μόνο η ετικέτα. Κενό: η πραγματική μέτρηση.</div>
+    <div class="hint">Αριθμός: η πλευρά γίνεται τόσα cm (ή η γωνία τόσες μοίρες). Γράμμα ή μονάδα (α, θ, 5 m): αλλάζει μόνο η ετικέτα. Κενό: η πραγματική μέτρηση.</div>
   </div>
   <div id="labelMenu" class="popup hidden">
     <div id="labelGrid"></div>
@@ -800,7 +800,7 @@ $('fnClose').onclick = () => closePopups();
 
 const measMenu = $('measMenu');
 const measInput = $('measInput') as HTMLInputElement;
-const MEAS_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', ',', '⌫', 'α', 'β', 'γ', 'x', 'm', 'cm'];
+const MEAS_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', ',', '⌫', 'α', 'β', 'γ', 'x', 'm', 'cm', 'θ', 'φ', 'ω', '°', 'Α', 'Β'];
 $('measKeys').innerHTML = MEAS_KEYS.map((k) => `<button data-key="${k}"${/^[0-9,]$/.test(k) ? ' class="num"' : ''}>${k}</button>`).join('');
 let measTarget: { id: string; side: number } | null = null;
 const measOpts = $('measOpts');

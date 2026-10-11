@@ -17,6 +17,8 @@ export interface Pic {
   w: number;
   h: number;
   src: string;
+  /** Περιστροφή γύρω από το κέντρο (rad, κατά τη φορά του ρολογιού). */
+  rot?: number;
 }
 
 export type ShapeKind = 'line' | 'arrow' | 'rect' | 'ellipse' | 'triangle';
@@ -38,6 +40,8 @@ export interface Shape {
   angleWith?: string;
   /** Διακεκομμένη γραμμή. */
   dash?: boolean;
+  /** Περιστροφή γύρω από το κέντρο (rad)· μόνο για ορθογώνιο και έλλειψη, τα άλλα σχήματα στρέφουν τα σημεία τους. */
+  rot?: number;
   /** Ετικέτες πλευρών που έγραψε ο χρήστης στη θέση της μέτρησης (αριθμός πλευράς → κείμενο). */
   labels?: Record<number, string>;
   /** Ποιες μετρήσεις φαίνονται πάνω στο σχήμα (εργαλείο «Μετρήσεις»). */
@@ -59,6 +63,7 @@ export interface TextItem {
   text: string;
   size: number;
   color: string;
+  rot?: number;
 }
 
 /** Γωνία: κορυφή (x, y) και δύο πλευρές με γωνίες a1, a2 (rad, άξονας y προς τα κάτω). */
@@ -133,6 +138,7 @@ export interface StampItem {
   marks?: boolean;
   /** Ελατήρια: η ταλάντωση σβήνει σιγά σιγά. */
   damp?: boolean;
+  rot?: number;
 }
 
 /** Τριγωνομετρικός κύκλος με κέντρο (x, y), ακτίνα r και γωνία a (rad, αντίθετα από το ρολόι). */
@@ -230,7 +236,75 @@ export function textSize(t: TextItem): { w: number; h: number } {
   return { w, h: lines.length * t.size * 1.25 };
 }
 
+/** Η περιστροφή ενός στοιχείου που σχεδιάζεται στραμμένο γύρω από το κέντρο του (0 για τα υπόλοιπα). */
+export function itemRot(it: Item): number {
+  return (it.kind === 'image' || it.kind === 'text' || it.kind === 'stamp' || it.kind === 'shape') && it.rot ? it.rot : 0;
+}
+
+function rotPt(x: number, y: number, cx: number, cy: number, ang: number): Pt {
+  const c = Math.cos(ang), s = Math.sin(ang);
+  return [cx + (x - cx) * c - (y - cy) * s, cy + (x - cx) * s + (y - cy) * c];
+}
+
+/** Φέρνει ένα σημείο του πίνακα στο σύστημα του (στραμμένου) στοιχείου, όπου αυτό είναι όρθιο. */
+export function unrot(it: Item, x: number, y: number): Pt {
+  const r = itemRot(it);
+  if (!r) return [x, y];
+  const b = rawBounds(it);
+  return rotPt(x, y, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, -r);
+}
+
+/** Το ορθογώνιο που περικλείει το στοιχείο όπως φαίνεται (μαζί με την περιστροφή του). */
 export function itemBounds(it: Item): { x0: number; y0: number; x1: number; y1: number } {
+  const b = rawBounds(it);
+  const r = itemRot(it);
+  if (!r) return b;
+  const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+  const p = [[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]].map(([x, y]) => rotPt(x, y, cx, cy, r));
+  const xs = p.map((q) => q[0]), ys = p.map((q) => q[1]);
+  return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+}
+
+/** Στρέφει ένα στοιχείο κατά ang (rad) γύρω από το σημείο (cx, cy). */
+export function rotateItem(it: Item, cx: number, cy: number, ang: number): Item {
+  const R = (x: number, y: number): Pt => rotPt(x, y, cx, cy, ang);
+  switch (it.kind) {
+    case 'stroke':
+      return { ...it, pts: it.pts.map(([x, y]) => R(x, y)) };
+    case 'angle': {
+      const [x, y] = R(it.x, it.y);
+      return { ...it, x, y, a1: it.a1 + ang, a2: it.a2 + ang };
+    }
+    case 'axes':
+    case 'trig': {
+      // δεν στρέφονται· μέσα σε ομάδα απλώς ακολουθούν τη θέση τους
+      const b = rawBounds(it);
+      const mx = (b.x0 + b.x1) / 2, my = (b.y0 + b.y1) / 2;
+      const [nx, ny] = R(mx, my);
+      return { ...it, x: it.x + nx - mx, y: it.y + ny - my };
+    }
+    case 'shape':
+      if (it.shape === 'line' || it.shape === 'arrow') {
+        const [x0, y0] = R(it.x0, it.y0), [x1, y1] = R(it.x1, it.y1);
+        return { ...it, x0, y0, x1, y1 };
+      }
+      if (it.shape === 'triangle') {
+        const pts = trianglePts(it).map(([x, y]) => R(x, y));
+        const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+        return { ...it, pts, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+      }
+    // ορθογώνιο και έλλειψη: όπως τα υπόλοιπα «κουτιά»
+    // eslint-disable-next-line no-fallthrough
+    default: {
+      const b = rawBounds(it);
+      const mx = (b.x0 + b.x1) / 2, my = (b.y0 + b.y1) / 2;
+      const [nx, ny] = R(mx, my);
+      return { ...translateItem(it, nx - mx, ny - my), rot: itemRot(it) + ang } as Item;
+    }
+  }
+}
+
+function rawBounds(it: Item): { x0: number; y0: number; x1: number; y1: number } {
   if (it.kind === 'image' || it.kind === 'stamp') return { x0: it.x, y0: it.y, x1: it.x + it.w, y1: it.y + it.h };
   if (it.kind === 'trig') {
     const m = it.r * 1.28;
@@ -275,7 +349,8 @@ export function itemBounds(it: Item): { x0: number; y0: number; x1: number; y1: 
 }
 
 /** Αν το σημείο (x,y) «πιάνει» το στοιχείο, με ανοχή r. */
-export function hitItem(it: Item, x: number, y: number, r: number): boolean {
+export function hitItem(it: Item, px: number, py: number, r: number): boolean {
+  const [x, y] = unrot(it, px, py);
   switch (it.kind) {
     case 'stroke':
       return strokeHit(it, x, y, r);
@@ -284,7 +359,7 @@ export function hitItem(it: Item, x: number, y: number, r: number): boolean {
     case 'stamp':
     case 'trig':
     case 'text': {
-      const b = itemBounds(it);
+      const b = rawBounds(it);
       return x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
     }
     case 'angle': {
@@ -557,7 +632,11 @@ export function erasePartial(it: Item, x: number, y: number, r: number): Item[] 
   if (it.kind === 'text' || it.kind === 'angle') return hitItem(it, x, y, r) ? [] : null;
   const b = itemBounds(it);
   if (x < b.x0 - r || x > b.x1 + r || y < b.y0 - r || y > b.y1 + r) return null;
-  const lines = it.kind === 'stroke' ? [it.pts] : shapePolylines(it);
+  let lines = it.kind === 'stroke' ? [it.pts] : shapePolylines(it);
+  if (itemRot(it)) {
+    const rb = rawBounds(it);
+    lines = lines.map((l) => l.map(([px, py]) => rotPt(px, py, (rb.x0 + rb.x1) / 2, (rb.y0 + rb.y1) / 2, itemRot(it))));
+  }
   const clipped = lines.map((l) => clipPolyline(l, x, y, r));
   if (clipped.every((c) => c === null)) return null;
   const out: Item[] = [];
