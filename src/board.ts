@@ -919,6 +919,21 @@ export class Board {
     return new Set(this.multi.length ? this.multi : this.selected ? [this.selected] : []);
   }
 
+  /** Το πλαίσιο της επιλογής σε συντεταγμένες οθόνης (για τη μπάρα ενεργειών δίπλα της). */
+  selectionScreenBox(): Box | null {
+    const ids = this.selectedIds();
+    let b: Box | null = null;
+    for (const it of this.page.items) {
+      if (!ids.has(it.id)) continue;
+      const ib = itemBounds(it);
+      b = b ? { x0: Math.min(b.x0, ib.x0), y0: Math.min(b.y0, ib.y0), x1: Math.max(b.x1, ib.x1), y1: Math.max(b.y1, ib.y1) } : ib;
+    }
+    if (!b) return null;
+    const [x0, y0] = this.toScreen(b.x0, b.y0);
+    const [x1, y1] = this.toScreen(b.x1, b.y1);
+    return { x0, y0, x1, y1 };
+  }
+
   private groupBounds(): Box | null {
     const ids = new Set(this.multi);
     let b: Box | null = null;
@@ -2815,6 +2830,12 @@ export class Board {
   }
 
   /** Αν στην επιλογή υπάρχει χειρόγραφη γραμμή. */
+  /** Αν στην επιλογή υπάρχει κάτι γραμμένο (χειρόγραφο, κείμενο ή τυπωμένος τύπος) που έχει νόημα να λυθεί. */
+  get selectionHasWriting(): boolean {
+    const ids = this.selectedIds();
+    return this.page.items.some((it) => (it.kind === 'stroke' || it.kind === 'text' || it.kind === 'image') && ids.has(it.id));
+  }
+
   get selectionHasInk(): boolean {
     const ids = this.selectedIds();
     return this.page.items.some((it) => it.kind === 'stroke' && ids.has(it.id));

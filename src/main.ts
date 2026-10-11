@@ -166,14 +166,6 @@ app.insertAdjacentHTML(
         <button data-eraser="stroke"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14c3-7 5 5 8-1s5 5 10-3"/><path d="M5 5l14 14" stroke="#f87171"/></svg></span>Σβήνει ολόκληρη τη γραμμή</button>
         <button id="eraseAll"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/><path d="M10 11l4 5M14 11l-4 5"/></svg></span>Σβήσιμο όλων</button>
       </div>
-      <div class="group" id="selOpts">
-        <button id="del"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></span>Διαγραφή επιλογής</button>
-        <button id="dup"><span class="txt">×2</span>Αντίγραφο επιλογής</button>
-        <button id="sumBtn"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l5-12M4 20l11-3"/><path d="M4 20L20 5" stroke="#60a5fa"/><path d="M14 5h6v6" stroke="#60a5fa"/></svg></span>Συνισταμένη: δύο βέλη ή ευθείες με κοινή κορυφή, ή μία γωνία</button>
-        <button data-rec="text" class="rec"><span>Aα</span>Αναγνώριση της επιλογής ως κείμενο</button>
-        <button data-rec="math" class="rec"><span>√x</span>Αναγνώριση της επιλογής ως τύπο</button>
-        <button data-rec="solve" class="rec solve"><span>x=?</span>Λύση της επιλεγμένης άσκησης (μπαίνει από κάτω)</button>
-      </div>
       <div class="group" id="axesOpts">
         <button data-axis="x"><span>x</span>Όνομα οριζόντιου άξονα</button>
         <button data-axis="y"><span>y</span>Όνομα κατακόρυφου άξονα</button>
@@ -244,7 +236,18 @@ app.insertAdjacentHTML(
     ${mi('id="tplSave"', I.plus, 'Αποθήκευση της σελίδας ως πρότυπο')}
   </div>
 
+  <div id="selOpts" class="hidden">
+    <button id="del" title="Διαγραφή επιλογής"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></span><small>Διαγραφή</small></button>
+    <button id="dup" title="Αντίγραφο επιλογής"><span class="txt">×2</span><small>Αντίγραφο</small></button>
+    <button id="sumBtn" title="Συνισταμένη: δύο βέλη ή ευθείες με κοινή κορυφή, ή μία γωνία"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l5-12M4 20l11-3"/><path d="M4 20L20 5" stroke="#60a5fa"/><path d="M14 5h6v6" stroke="#60a5fa"/></svg></span><small>Συνισταμένη</small></button>
+    <i class="recSep"></i>
+    <button data-rec="text" class="rec" title="Αναγνώριση της επιλογής ως κείμενο"><span class="txt">Aα</span><small>Σε κείμενο</small></button>
+    <button data-rec="math" class="rec" title="Αναγνώριση της επιλογής ως τύπο"><span class="txt">√x</span><small>Σε τύπο</small></button>
+    <button data-rec="solve" class="rec solve" title="Λύση της επιλεγμένης άσκησης (μπαίνει από κάτω)"><span class="txt">x=?</span><small>Λύση</small></button>
+  </div>
   <div id="gadgetMenu" class="popup hidden">
+    <div class="gHead" id="recentHead">Πρόσφατα</div>
+    <div class="tiles" id="recentTiles"></div>
     <div class="gHead">Σχήματα</div>
     <div class="tiles">
       ${tile('data-shape="line"', I.line, 'Ευθεία')}
@@ -1214,7 +1217,9 @@ function refreshUi(): void {
   show('selOpts', tool === 'select' && board.hasSelection);
   // η αναγνώριση έχει νόημα μόνο όταν στην επιλογή υπάρχει χειρόγραφο
   const ink = board.selectionHasInk;
-  document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', !ink && b.dataset.rec !== 'solve'));
+  const writing = board.selectionHasWriting;
+  document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', b.dataset.rec === 'solve' ? !writing : !ink));
+  $('selOpts').querySelector('.recSep')!.classList.toggle('hidden', !writing);
   show('sumBtn', !!board.resultantSource);
   show('axesOpts', !!ax);
   const sp = tool === 'select' ? board.selectedSpring : null;
@@ -1251,6 +1256,23 @@ function refreshUi(): void {
   $('replayBar').querySelector('[data-rp=pause]')!.textContent = board.replayPaused ? '▶' : '⏸';
   document.body.dataset.bg = board.doc.bg;
   layoutBar();
+  placeSelBar();
+}
+/** Η μπάρα ενεργειών στέκεται κάτω από την επιλογή· αν δεν χωρά εκεί, από πάνω της. */
+function placeSelBar(): void {
+  const el = $('selOpts');
+  if (el.classList.contains('hidden')) return;
+  const b = board.selectionScreenBox();
+  if (!b) return;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const W = window.innerWidth, H = window.innerHeight;
+  const x = Math.max(8, Math.min((b.x0 + b.x1) / 2 - w / 2, W - w - 8));
+  const bar = $('toolbar').getBoundingClientRect();
+  const clear = (y: number): boolean => y >= 64 && y + h <= H - 8 && !(x < bar.right + 8 && x + w > bar.left - 8 && y < bar.bottom + 8 && y + h > bar.top - 70);
+  // κάτω από το πλαίσιο (μετά τη λαβή μεγέθους), αλλιώς πάνω από τη λαβή περιστροφής, αλλιώς στην κορυφή της οθόνης
+  const y = [b.y1 + 34, b.y0 - h - 64].find(clear) ?? 70;
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
 }
 board.onUi = refreshUi;
 curtain.onChange = curtainTop.onChange = refreshUi;
@@ -1471,7 +1493,38 @@ function togglePopup(popup: HTMLElement, anchor: HTMLElement): void {
   popup.classList.remove('hidden');
   placeNear(popup, anchor);
 }
-$('gadgetBtn').onclick = () => togglePopup(gadgetMenu, $('gadgetBtn'));
+// ό,τι χρησιμοποιήθηκε τελευταία από τα Όργανα μένει πρώτο στη λίστα
+const RECENT = 'grafida.recent';
+const TILE_ATTRS = ['shape', 'axes', 'ins', 'anq', 'gadget', 'view'];
+const tileKey = (b: HTMLElement): string => {
+  const a = TILE_ATTRS.find((k) => b.dataset[k] !== undefined);
+  return a ? `${a}=${b.dataset[a]}` : '';
+};
+let recent: string[] = (() => { try { return JSON.parse(localStorage.getItem(RECENT) ?? '[]') as string[]; } catch { return []; } })();
+function renderRecent(): void {
+  const box = $('recentTiles');
+  box.innerHTML = '';
+  for (const k of recent) {
+    const [a, v] = k.split('=');
+    const src = gadgetMenu.querySelector<HTMLElement>(`.tiles:not(#recentTiles) [data-${a}="${v}"]`);
+    if (src) box.append(src.cloneNode(true));
+  }
+  const empty = box.children.length === 0;
+  box.classList.toggle('hidden', empty);
+  $('recentHead').classList.toggle('hidden', empty);
+}
+gadgetMenu.addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>('.tile');
+  const k = b && tileKey(b);
+  if (!k) return;
+  recent = [k, ...recent.filter((x) => x !== k)].slice(0, 6);
+  try { localStorage.setItem(RECENT, JSON.stringify(recent)); } catch { /* χωρίς αποθήκευση */ }
+}, true);
+$('gadgetBtn').onclick = () => {
+  renderRecent();
+  refreshUi();
+  togglePopup(gadgetMenu, $('gadgetBtn'));
+};
 $('importBtn').onclick = () => togglePopup(impMenu, $('importBtn'));
 $('menuBtn').onclick = () => {
   const open = menu.classList.contains('hidden');
@@ -2050,6 +2103,7 @@ $('zoomOut').onclick = () => board.zoomBy(1 / 1.25);
 $('zoomIn').onclick = () => board.zoomBy(1.25);
 $('zoomFit').onclick = () => board.fitView();
 board.onView = () => {
+  placeSelBar();
   const t = `${Math.round(board.zoom * 100)}%`;
   if ($('zoomFit').textContent !== t) $('zoomFit').textContent = t;
 };

@@ -402,3 +402,17 @@ body.dark #libHead .lg.onLight { display: block; }
 #libSafe button { padding: 11px 16px; border-radius: 12px; background: var(--bar-2); font-size: 16px; }
 #libSafe button.go { background: var(--ok); color: #fff; font-weight: 600; }
 #lessonName.warn::after { content: ''; display: inline-block; width: 10px; height: 10px; margin-left: 8px; border-radius: 50%; background: #f59e0b; }
+
+/* ενέργειες για ό,τι είναι επιλεγμένο: δίπλα στην επιλογή, με λέξη κάτω από κάθε εικονίδιο */
+#selOpts { position: fixed; z-index: 12; display: flex; gap: 4px; padding: 5px; border-radius: 16px; background: var(--bar); color: var(--fg); box-shadow: 0 4px 16px rgba(0,0,0,.28); transition: opacity .12s; }
+#selOpts.hidden { display: none; }
+body.inking #selOpts { opacity: 0; pointer-events: none; }
+#selOpts button { min-width: 74px; height: 62px; padding: 4px 8px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+#selOpts button.hidden, #selOpts .recSep.hidden { display: none; }
+#selOpts button:hover { background: var(--bar-2); }
+#selOpts button span { height: 28px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 700; }
+#selOpts button span svg { width: 26px; height: 26px; }
+#selOpts button small { font-size: 13px; line-height: 1; white-space: nowrap; }
+#selOpts #del { color: #f87171; }
+#selOpts .solve span { color: var(--accent); }
+#selOpts .recSep { width: 1px; margin: 8px 2px; background: var(--bar-3); }
