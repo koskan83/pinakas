@@ -24,7 +24,7 @@ const OSC_PERIOD_MS = 1600;
 const OSC_FADE_MS = 5000;
 
 /** Ακέραιες μοίρες ως κλάσμα του π: 30 → «π/6», 135 → «3π/4». */
-function radText(deg: number): string {
+export function radText(deg: number): string {
   if (deg === 0) return '0';
   const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
   const g = gcd(deg, 180);
@@ -34,7 +34,7 @@ function radText(deg: number): string {
 
 const HL_ALPHA = 0.35;
 /** Το χρώμα του υπογραμμιστικού όπως φαίνεται πάνω στο φόντο `bg`, χωρίς διαφάνεια. null αν το χρώμα δεν είναι #rrggbb. */
-function hlFlat(color: string, bg: [number, number, number]): string | null {
+export function hlFlat(color: string, bg: [number, number, number]): string | null {
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
   if (!m) return null;
   const ch = bg.map((b, i) => Math.round(b + (parseInt(m[i + 1], 16) - b) * HL_ALPHA));
@@ -53,7 +53,7 @@ interface MSide {
   len: number;
   pos: Pt;
 }
-function measureSides(s: Shape): MSide[] {
+export function measureSides(s: Shape): MSide[] {
   const out: MSide[] = [];
   /** Ετικέτα στο μέσο του τμήματος ab, από την πλευρά που δεν είναι το σημείο `away`. */
   const side = (i: number, a: Pt, b: Pt, away?: Pt): void => {
@@ -79,7 +79,7 @@ function measureSides(s: Shape): MSide[] {
 }
 
 /** Οι γωνίες ενός τριγώνου σε ακέραιες μοίρες με άθροισμα ακριβώς 180, και η θέση της ετικέτας καθεμιάς. */
-function measureAngles(s: Shape): { i: number; deg: number; pos: Pt }[] {
+export function measureAngles(s: Shape): { i: number; deg: number; pos: Pt }[] {
   if (s.shape !== 'triangle' || s.dash) return [];
   const t = trianglePts(s);
   const g: Pt = [(t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3];
@@ -92,7 +92,8 @@ function measureAngles(s: Shape): { i: number; deg: number; pos: Pt }[] {
   // στρογγύλεμα «μεγαλύτερου υπολοίπου»: αλλιώς τρεις στρογγυλεμένες γωνίες μπορεί να δώσουν 179 ή 181
   const deg = raw.map(Math.floor);
   const order = [0, 1, 2].sort((a, b) => raw[b] - deg[b] - (raw[a] - deg[a]));
-  for (let k = 0; k < 180 - (deg[0] + deg[1] + deg[2]) && k < 3; k++) deg[order[k]]++;
+  const need = Math.min(3, 180 - (deg[0] + deg[1] + deg[2]));
+  for (let k = 0; k < need; k++) deg[order[k]]++;
   return t.map((p, i) => {
     const gl = Math.max(Math.hypot(g[0] - p[0], g[1] - p[1]), 1);
     const off = Math.min(42, gl * 0.45);

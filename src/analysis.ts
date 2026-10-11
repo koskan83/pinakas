@@ -36,20 +36,21 @@ export function riemann(g: G, a: number, b: number, n: number): number {
 
 /** Πλευρικό όριο στο x0 (dir = −1 από αριστερά, +1 από δεξιά): αριθμός, ±Infinity, ή null αν δεν υπάρχει. */
 export function oneSided(g: G, x0: number, dir: number): number | null {
-  const v = [1e-2, 1e-3, 1e-4, 1e-5].map((h) => g(x0 + dir * h));
+  // επτά δείγματα που πλησιάζουν το x0· τα τέσσερα πιο κοντινά πρέπει πρακτικά να συμφωνούν
+  const v = [1e-3, 5e-4, 2e-4, 1e-4, 5e-5, 2e-5, 1e-5].map((h) => g(x0 + dir * h));
   if (v.some((y) => Number.isNaN(y))) return null;
-  if (!Number.isFinite(v[3])) return v[3];
-  const d = [Math.abs(v[1] - v[0]), Math.abs(v[2] - v[1]), Math.abs(v[3] - v[2])];
-  if (d[2] < 1e-9 || (d[2] < d[1] * 0.5 && d[1] < d[0] * 0.9)) {
-    // προέκταση προς το h → 0 και στρογγύλεμα όταν είναι πρακτικά «στρογγυλός» αριθμός
-    const lim = v[3] + (v[3] - v[2]) / 9;
-    const r = Math.round(lim * 100) / 100;
-    return Math.abs(lim - r) < 2e-3 ? r : lim;
+  const last = v[v.length - 1];
+  if (!Number.isFinite(last)) return last;
+  const range = (a: number[]): number => Math.max(...a) - Math.min(...a);
+  const far = range(v.slice(0, 4)), near = range(v.slice(3));
+  if (near < 1e-9 || (near < 0.05 * (1 + Math.abs(last)) && near <= far * 0.6)) {
+    // στρογγύλεμα όταν είναι πρακτικά «στρογγυλός» αριθμός
+    const r = Math.round(last * 100) / 100;
+    return Math.abs(last - r) < 4e-3 ? r : last;
   }
-  const sameSign = v[1] > 0 === v[3] > 0 && v[2] > 0 === v[3] > 0;
-  if (sameSign && Math.abs(v[3]) > Math.abs(v[2]) && Math.abs(v[2]) > Math.abs(v[1]) && d[2] >= d[1] * 0.9 && Math.abs(v[3]) > 5) {
-    return v[3] > 0 ? Infinity : -Infinity;
-  }
+  // απειρίζεται: ίδιο πρόσημο και μέτρο που μεγαλώνει συνεχώς όσο πλησιάζουμε
+  const growing = v.every((y, i) => y > 0 === last > 0 && (i === 0 || Math.abs(y) > Math.abs(v[i - 1])));
+  if (growing && Math.abs(last) > 5 && Math.abs(last) > Math.abs(v[0]) * 1.3) return last > 0 ? Infinity : -Infinity;
   return null;
 }
 
