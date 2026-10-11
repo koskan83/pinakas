@@ -63,6 +63,13 @@ await ctx.route('https://accounts.google.com/gsi/client', (r) => r.fulfill({
   contentType: 'text/javascript',
   body: `window.google={accounts:{oauth2:{initTokenClient:(o)=>({requestAccessToken:()=>setTimeout(()=>o.callback({access_token:'fake',expires_in:3600}),10)})}}};`,
 }));
+// ψεύτικο AI: απαντά πάντα ότι η σημειωμένη επιλογή είναι σωστή
+const aiCalls = [];
+await ctx.route('https://generativelanguage.googleapis.com/**', (r) => {
+  const body = r.request().postDataJSON();
+  aiCalls.push({ image: body.contents[0].parts[0].inline_data?.data?.length ?? 0, prompt: body.contents[0].parts[1].text });
+  return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ candidates: [{ content: { parts: [{ text: '✓ Σωστή επιλογή: το 2' }] } }] }) });
+});
 await ctx.route('https://www.googleapis.com/**', (r) => {
   const req = r.request();
   const u = new URL(req.url());
@@ -260,6 +267,26 @@ test('Εισαγωγή PDF: οι σελίδες του μπαίνουν στο �
   await page.waitForFunction(() => /\/ 4$/.test(document.getElementById('pageLabel').textContent.trim()), null, { timeout: 20000 });
   const d = await doc();
   assert(d.pages.length === 4 && d.pages[3].items.some((i) => i.kind === 'image'), 'οι σελίδες του PDF δεν μπήκαν ως εικόνες');
+});
+
+test('Λάσο πάνω σε σελίδα από PDF ή Word: το AI βλέπει την κυκλωμένη περιοχή και ελέγχει την απάντηση', async () => {
+  await page.click('#menuBtn');
+  await page.click('#menu [data-act="more"]');
+  await page.click('#setMenu [data-act="ai"]');
+  await page.fill('#aiKey', 'test-local');
+  await page.click('#aiSave');
+  await tool('select');
+  const pi = parseInt(await page.textContent('#pageLabel'), 10) - 1;
+  assert((await items(pi)).some((i) => i.kind === 'image'), 'η τρέχουσα σελίδα δεν έχει την εικόνα του PDF');
+  const n0 = (await items(pi)).length;
+  await lasso(420, 200, 640, 320);
+  assert(await visible('#selOpts [data-rec="check"]'), 'δεν εμφανίστηκε το «Έλεγχος» για περιοχή πάνω σε εικόνα');
+  assert(await visible('#selOpts [data-rec="solve"]'), 'δεν εμφανίστηκε το «Λύση» για περιοχή πάνω σε εικόνα');
+  await page.click('#selOpts [data-rec="check"]');
+  await page.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Δεν βρέθηκε λάθος'), null, { timeout: 10000 });
+  assert(aiCalls.length === 1 && aiCalls[0].image > 500, 'δεν στάλθηκε εικόνα της περιοχής');
+  const it = await items(pi);
+  assert(it.length === n0 + 1 && it.at(-1).kind === 'text' && it.at(-1).text.startsWith('✓'), 'η απάντηση δεν γράφτηκε κάτω από την περιοχή');
 });
 
 test('Μαθήματα: νέο μάθημα, τμήμα, και όλα μένουν μετά από κλείσιμο', async () => {

@@ -58,6 +58,9 @@ const PROMPT: Record<AiTask, string> = {
     'Reply as LaTeX inside \\begin{aligned} ... \\end{aligned} with \\\\ between lines and & before the main relation sign of each line. ' +
     'Any words must be in Greek, very short, inside \\text{}. Use a decimal comma. ' +
     'Reply with the LaTeX only: no $ delimiters, no code fences, no explanation. ' +
+    'Exception: if it is a multiple-choice, true/false or theory question rather than a calculation, do not use LaTeX. ' +
+    'Reply instead with a first line containing only the word TEXT, then at most three short lines of plain Greek text ' +
+    '(maths in Unicode): the correct option (its number or letter and its wording in brief) and a one-sentence justification. ' +
     'If nothing is readable or there is nothing to solve reply with an empty message.',
   check:
     'The image shows a student\'s handwritten solution to a mathematics or physics exercise on a Greek secondary-school classroom whiteboard, ' +
@@ -67,7 +70,11 @@ const PROMPT: Record<AiTask, string> = {
     'Otherwise reply with at most three short lines: the first starts with "✗ " and says in which line (counting from the top) the first mistake is; ' +
     'the second says in a few words what went wrong; the third gives the correct form of that one line only. ' +
     'Do not write out the rest of the solution and do not comment on handwriting or style. ' +
-    'If nothing is readable or it is not a worked solution reply with an empty message.',
+    'If instead the image shows a multiple-choice or true/false question, printed or handwritten, where one option has been marked by hand ' +
+    '(circled, ticked, underlined or crossed), judge that marked option: reply "✓ " plus a very short confirmation if it is the correct one, ' +
+    'otherwise "✗ " plus which option was marked, then a second line with the correct option, then a third line with a one-sentence reason. ' +
+    'If no option is marked, reply with "✗ Δεν έχει σημειωθεί απάντηση" and on the second line the correct option. ' +
+    'If nothing is readable or there is nothing to check reply with an empty message.',
 };
 
 async function toBase64(blob: Blob): Promise<string> {

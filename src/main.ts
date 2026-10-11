@@ -746,7 +746,8 @@ async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
     return;
   }
   const page = board.cur;
-  const img = await board.inkImage(ids);
+  // λύση και έλεγχος βλέπουν ό,τι υπάρχει στην κυκλωμένη περιοχή (και κομμάτι εικόνας από Word ή PDF)· η αναγνώριση μόνο τα επιλεγμένα χειρόγραφα
+  const img = (kind === 'solve' || kind === 'check') && board.hasRegion ? await board.regionImage() : await board.inkImage(ids);
   if (!img) return;
   aiBusy++;
   toast(kind === 'solve' ? '✨ Λύνεται…' : kind === 'check' ? '✨ Ελέγχεται…' : '✨ Αναγνώριση…', 0);
@@ -770,6 +771,12 @@ async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
       return;
     }
     if (kind === 'solve') {
+      if (/^TEXT\b/.test(out)) {
+        // ερώτηση θεωρίας ή πολλαπλής επιλογής: η απάντηση είναι σκέτο κείμενο
+        board.addItem({ kind: 'text', id: uid(), x: box.x0, y: box.y1 + 24, text: out.replace(/^TEXT\s*/, ''), size: 30, color: '#2563eb' });
+        toast('Η απάντηση μπήκε κάτω από την ερώτηση. Έλεγξέ την πριν τη δείξεις.', 5000);
+        return;
+      }
       // η λύση μπαίνει κάτω από την άσκηση, χωρίς να πειράξει το χειρόγραφο
       const lines = out.split('\\\\').length;
       const pic = await texToImage(out, board.ink(color), Math.max(26, Math.min(60, bh * 0.4)));
@@ -880,12 +887,15 @@ function refreshUi(): void {
   show('penKinds', isPenKind(tool));
   show('shapes', tool === 'shape');
   show('eraserOpts', tool === 'eraser');
-  show('selOpts', tool === 'select' && board.hasSelection);
+  const region = tool === 'select' && board.hasRegion;
+  show('selOpts', tool === 'select' && (board.hasSelection || region));
+  show('del', board.hasSelection);
+  show('dup', board.hasSelection);
   // η αναγνώριση έχει νόημα μόνο όταν στην επιλογή υπάρχει χειρόγραφο
   const ink = board.selectionHasInk;
   const writing = board.selectionHasWriting;
-  document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', b.dataset.rec === 'solve' ? !writing : !ink));
-  $('selOpts').querySelector('.recSep')!.classList.toggle('hidden', !writing);
+  document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', b.dataset.rec === 'solve' || b.dataset.rec === 'check' ? !(writing || region) : !ink));
+  $('selOpts').querySelector('.recSep')!.classList.toggle('hidden', !(writing || region) || !board.hasSelection);
   show('sumBtn', !!board.resultantSource);
   show('axesOpts', !!ax);
   const sp = tool === 'select' ? board.selectedSpring : null;

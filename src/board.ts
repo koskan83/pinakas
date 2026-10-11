@@ -155,6 +155,7 @@ export class Board {
 
   setTool(t: Tool): void {
     this.tool = t;
+    this.region = null;
     if (t !== 'select') {
       this.selected = null;
       this.multi = [];
@@ -184,6 +185,7 @@ export class Board {
     }
     this.doc = d;
     this.cur = 0;
+    this.region = null;
     this.selected = null;
     this.multi = [];
     this.undoStack = [];
@@ -199,6 +201,7 @@ export class Board {
     this.selected = null;
     this.multi = [];
     this.osc.clear();
+    this.region = null;
     this.redraw();
     this.onUi();
   }
@@ -724,6 +727,43 @@ export class Board {
     this.redraw();
   }
 
+  /**
+   * Η περιοχή που κύκλωσε το τελευταίο λάσο (σε συντεταγμένες πίνακα). Χρησιμεύει για να σταλεί στο AI ό,τι φαίνεται εκεί,
+   * ακόμα κι αν είναι κομμάτι εικόνας (π.χ. ερώτηση από σελίδα Word ή PDF) που δεν επιλέγεται ως στοιχείο.
+   */
+  region: Box | null = null;
+
+  /** Αν η κυκλωμένη περιοχή έχει μέσα της κάτι. */
+  get hasRegion(): boolean {
+    const r = this.region;
+    if (!r) return false;
+    return this.page.items.some((it) => {
+      const b = itemBounds(it);
+      return b.x0 < r.x1 && b.x1 > r.x0 && b.y0 < r.y1 && b.y1 > r.y0;
+    });
+  }
+
+  /** Εικόνα PNG όλων όσων φαίνονται μέσα στην κυκλωμένη περιοχή, για αποστολή στο AI. */
+  async regionImage(): Promise<{ blob: Blob; box: Box; color: string } | null> {
+    const b = this.region;
+    if (!b) return null;
+    const bw = b.x1 - b.x0, bh = b.y1 - b.y0;
+    const s = Math.min(3, 1600 / Math.max(bw, bh));
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(bw * s));
+    cv.height = Math.max(1, Math.round(bh * s));
+    const c = cv.getContext('2d')!;
+    c.fillStyle = isDark(this.doc.bg) ? '#14201b' : '#ffffff';
+    c.fillRect(0, 0, cv.width, cv.height);
+    c.setTransform(s, 0, 0, s, -b.x0 * s, -b.y0 * s);
+    for (const it of this.page.items) {
+      const ib = itemBounds(it);
+      if (ib.x0 < b.x1 && ib.x1 > b.x0 && ib.y0 < b.y1 && ib.y1 > b.y0) this.r.drawItem(c, it);
+    }
+    const blob = await new Promise<Blob | null>((res) => cv.toBlob(res, 'image/png'));
+    return blob ? { blob, box: b, color: this.color } : null;
+  }
+
   get hasSelection(): boolean {
     return !!this.selected || this.multi.length > 0;
   }
@@ -782,8 +822,9 @@ export class Board {
   /** Το πλαίσιο της επιλογής σε συντεταγμένες οθόνης (για τη μπάρα ενεργειών δίπλα της). */
   selectionScreenBox(): Box | null {
     const ids = this.selectedIds();
-    let b: Box | null = null;
-    for (const it of this.page.items) {
+    // όταν υπάρχει κυκλωμένη περιοχή, η μπάρα στέκεται κάτω από αυτήν (η επιλογή μπορεί να είναι ολόκληρη σελίδα-εικόνα)
+    let b: Box | null = this.region;
+    for (const it of b ? [] : this.page.items) {
       if (!ids.has(it.id)) continue;
       const ib = itemBounds(it);
       b = b ? { x0: Math.min(b.x0, ib.x0), y0: Math.min(b.y0, ib.y0), x1: Math.max(b.x1, ib.x1), y1: Math.max(b.y1, ib.y1) } : ib;
@@ -1141,6 +1182,19 @@ export class Board {
     c.clearRect(0, 0, this.live.width, this.live.height);
     this.setWorldTransform(c);
     const k = this.page.view.k;
+    const selIds = this.selectedIds();
+    if (this.region && this.tool === 'select' && (selIds.size === 0 || this.page.items.some((it) => it.kind === 'image' && selIds.has(it.id)))) {
+      // η περιοχή που θα δει το AI: φαίνεται όταν το λάσο έπιασε κομμάτι εικόνας και όχι ξεχωριστά στοιχεία
+      const r = this.region;
+      c.save();
+      c.strokeStyle = '#7c68b0';
+      c.fillStyle = 'rgba(124,104,176,.07)';
+      c.lineWidth = 2 / k;
+      c.setLineDash([8 / k, 6 / k]);
+      c.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+      c.strokeRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+      c.restore();
+    }
     for (const id of new Set([...this.osc.keys(), ...(this.oscDrag ? [this.oscDrag.id] : [])])) {
       const it = this.page.items.find((x) => x.id === id);
       if (it && !this.replay) this.r.drawItem(c, it);
@@ -1657,6 +1711,10 @@ export class Board {
     this.onPointerInfo(e, this.ptrs.size + 1);
     const ps: PState = { id: e.pointerId, type: e.pointerType, x: e.clientX, y: e.clientY, t0: performance.now(), mode: 'none' };
     this.ptrs.set(e.pointerId, ps);
+    // κάθε νέο άγγιγμα ακυρώνει την περιοχή του προηγούμενου λάσου
+    const hadRegion = !!this.region;
+    this.region = null;
+    if (hadRegion) this.onUi();
 
     // Χειρονομία δύο δαχτύλων: pan / zoom
     if (e.pointerType === 'touch' && !this.gesture) {
@@ -2233,6 +2291,7 @@ export class Board {
           const ids = this.page.items.filter((it) => inLasso(it, poly)).map((it) => it.id);
           this.selected = ids.length === 1 ? ids[0] : null;
           this.multi = ids.length > 1 ? ids : [];
+          this.region = { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
         }
         this.onUi();
         break;
