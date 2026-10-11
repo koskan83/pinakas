@@ -18,7 +18,7 @@ interface Gis {
  * Το «Client ID» της εφαρμογής στο Google Cloud: δημόσιο αναγνωριστικό, όχι μυστικό.
  * Όταν είναι συμπληρωμένο εδώ, κανείς δεν χρειάζεται να ρυθμίσει τίποτα· απλώς συνδέεται με τον δικό του λογαριασμό Google.
  */
-const BUILT_IN_CLIENT_ID = '';
+const BUILT_IN_CLIENT_ID = '613162937289-dvkduc2gme21ilma0jp6u240fjke068m.apps.googleusercontent.com';
 
 /** Αν η εφαρμογή έχει δικό της Client ID και δεν χρειάζεται ρύθμιση από τον χρήστη. */
 export const driveBuiltIn = !!BUILT_IN_CLIENT_ID;
