@@ -13,7 +13,7 @@ import { Curtain, Spotlight } from './overlays';
 import { STAMPS } from './stamps';
 import { compile, paramsOf } from './expr';
 import { buildPdf } from './pdf';
-import { MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage } from './ai';
+import { AiTask, MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage } from './ai';
 import { axesRange, itemBounds, uid } from './model';
 
 /** Βασικά χρώματα ανά φόντο· ίδια θέση = αντίστοιχο χρώμα στο άλλο φόντο. */
@@ -172,6 +172,7 @@ app.insertAdjacentHTML(
         <button id="sumBtn"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l5-12M4 20l11-3"/><path d="M4 20L20 5" stroke="#60a5fa"/><path d="M14 5h6v6" stroke="#60a5fa"/></svg></span>Συνισταμένη: δύο βέλη ή ευθείες με κοινή κορυφή, ή μία γωνία</button>
         <button data-rec="text" class="rec"><span>Aα</span>Αναγνώριση της επιλογής ως κείμενο</button>
         <button data-rec="math" class="rec"><span>√x</span>Αναγνώριση της επιλογής ως τύπο</button>
+        <button data-rec="solve" class="rec solve"><span>x=?</span>Λύση της επιλεγμένης άσκησης (μπαίνει από κάτω)</button>
       </div>
       <div class="group" id="axesOpts">
         <button data-axis="x"><span>x</span>Όνομα οριζόντιου άξονα</button>
@@ -1076,7 +1077,7 @@ aiMenu.addEventListener('click', (e) => {
 
 let aiBusy = 0;
 /** Στέλνει τα στοιχεία για αναγνώριση και τα αντικαθιστά με κείμενο ή τυπωμένο τύπο. */
-async function runRecognition(ids: string[], kind: RecKind): Promise<void> {
+async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
   if (!ai.keys[ai.provider]) {
     openAi();
     toast('Βάλε πρώτα το κλειδί της υπηρεσίας');
@@ -1086,19 +1087,27 @@ async function runRecognition(ids: string[], kind: RecKind): Promise<void> {
   const img = await board.inkImage(ids);
   if (!img) return;
   aiBusy++;
-  toast('✨ Αναγνώριση…', 0);
+  toast(kind === 'solve' ? '✨ Λύνεται…' : '✨ Αναγνώριση…', 0);
   try {
     const out = await recognize(img.blob, kind, ai);
     if (!out) {
-      toast('Δεν μπόρεσα να το διαβάσω');
+      toast(kind === 'solve' ? 'Δεν βρήκα κάτι να λύσω' : 'Δεν μπόρεσα να το διαβάσω');
       return;
     }
     if (board.cur !== page) {
-      toast('Άλλαξες σελίδα· η αναγνώριση δεν εφαρμόστηκε');
+      toast(kind === 'solve' ? 'Άλλαξες σελίδα· η λύση δεν μπήκε' : 'Άλλαξες σελίδα· η αναγνώριση δεν εφαρμόστηκε');
       return;
     }
     const { box, color } = img;
     const bh = box.y1 - box.y0;
+    if (kind === 'solve') {
+      // η λύση μπαίνει κάτω από την άσκηση, χωρίς να πειράξει το χειρόγραφο
+      const lines = out.split('\\\\').length;
+      const pic = await texToImage(out, board.ink(color), Math.max(26, Math.min(60, bh * 0.4)));
+      board.addItem({ kind: 'image', id: uid(), x: box.x0, y: box.y1 + 24, w: pic.w, h: pic.h, src: pic.src });
+      toast(lines > 1 ? 'Η λύση μπήκε κάτω από την άσκηση. Έλεγξέ την πριν τη δείξεις.' : 'Η απάντηση μπήκε κάτω από την άσκηση. Έλεγξέ την.', 5000);
+      return;
+    }
     if (kind === 'text') {
       const lines = out.split('\n').length;
       const size = Math.max(22, Math.min(96, (bh / lines) * 0.75));
@@ -1112,14 +1121,14 @@ async function runRecognition(ids: string[], kind: RecKind): Promise<void> {
     }
     $('toast').classList.add('hidden');
   } catch (err) {
-    toast(`Η αναγνώριση απέτυχε: ${(err as Error).message}`, 6000);
+    toast(`${kind === 'solve' ? 'Η λύση' : 'Η αναγνώριση'} απέτυχε: ${(err as Error).message}`, 6000);
   } finally {
     aiBusy--;
   }
 }
 $('selOpts').addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-rec]');
-  if (b) void runRecognition(board.selectionIds, b.dataset.rec as RecKind);
+  if (b) void runRecognition(board.selectionIds, b.dataset.rec as AiTask);
 });
 
 // αυτόματη αναγνώριση: ό,τι γράφεται στέλνεται μόλις η γραφίδα μείνει σηκωμένη για λίγο
@@ -1205,7 +1214,7 @@ function refreshUi(): void {
   show('selOpts', tool === 'select' && board.hasSelection);
   // η αναγνώριση έχει νόημα μόνο όταν στην επιλογή υπάρχει χειρόγραφο
   const ink = board.selectionHasInk;
-  document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', !ink));
+  document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', !ink && b.dataset.rec !== 'solve'));
   show('sumBtn', !!board.resultantSource);
   show('axesOpts', !!ax);
   const sp = tool === 'select' ? board.selectedSpring : null;

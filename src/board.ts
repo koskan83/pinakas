@@ -536,6 +536,11 @@ export class Board {
     return this.toWorld(this.W / 2, (this.H - this.bottomInset) / 2);
   }
 
+  /** Προσθέτει ένα έτοιμο στοιχείο στη σελίδα και το αφήνει επιλεγμένο (αναιρείται με ένα ↶). */
+  addItem(item: Item): void {
+    this.addAndSelect(item);
+  }
+
   private addAndSelect(item: Item): void {
     this.page.items.push(item);
     this.push({ t: 'add', p: this.cur, item });
