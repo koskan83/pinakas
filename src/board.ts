@@ -1,6 +1,6 @@
 import {
-  AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TextItem, Tool, TrigItem, View,
-  angleDegrees, angleEnds, axesRange, cloneItem, erasePartial, hitItem, inLasso, isDark, itemBounds, newDoc, newPage, reboxShape,
+  AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TextItem, Tool, TrigItem, View,
+  angleDegrees, angleEnds, axesRange, cloneItem, erasePartial, hitItem, inLasso, isDark, itemBounds, newDoc, newPage, pointInPolygon, reboxShape,
   recognizeShape, roundAngle, scaleItem, textFont, textLines, translateItem, trianglePts, uid,
 } from './model';
 import { Fn, Params, compileCached, keyPoints } from './expr';
@@ -21,6 +21,15 @@ function trigPoint(t: TrigItem): Pt {
 /** Περίοδος της ταλάντωσης των ελατηρίων και χρόνος απόσβεσης. */
 const OSC_PERIOD_MS = 1600;
 const OSC_FADE_MS = 5000;
+
+/** Ακέραιες μοίρες ως κλάσμα του π: 30 → «π/6», 135 → «3π/4». */
+function radText(deg: number): string {
+  if (deg === 0) return '0';
+  const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+  const g = gcd(deg, 180);
+  const n = deg / g, d = 180 / g;
+  return `${n === 1 ? '' : n}π${d === 1 ? '' : `/${d}`}`;
+}
 
 function fmt(n: number): string {
   return n.toLocaleString('el', { maximumFractionDigits: 1 });
@@ -117,8 +126,6 @@ export class Board {
   paramPreview: Params | null = null;
   /** Πολλαπλή επιλογή (λάσο). Όταν έχει στοιχεία, το `selected` είναι null. */
   multi: string[] = [];
-  /** Εμφάνιση μηκών, γωνιών και εμβαδών πάνω στα σχήματα. */
-  showMeasures = false;
   /** Διαφανές φόντο (γράψιμο πάνω από άλλα προγράμματα). */
   transparent = false;
   palmThreshold = 40;
@@ -453,13 +460,12 @@ export class Board {
 
   /** Η μέτρηση πλευράς που βρίσκεται κάτω από το σημείο της οθόνης, αν φαίνονται οι μετρήσεις. */
   measureAt(sx: number, sy: number): { id: string; side: number; text: string; x: number; y: number } | null {
-    if (!this.showMeasures) return null;
     const [wx, wy] = this.toWorld(sx, sy);
     const k = this.page.view.k;
     const items = this.page.items;
     for (let n = items.length - 1; n >= 0; n--) {
       const it = items[n];
-      if (it.kind !== 'shape') continue;
+      if (it.kind !== 'shape' || !it.meas?.len) continue;
       for (const m of measureSides(it)) {
         if (Math.abs(wx - m.pos[0]) < Math.max(34, 26 / k) && Math.abs(wy - m.pos[1]) < Math.max(18, 20 / k)) {
           const [x, y] = this.toScreen(m.pos[0], m.pos[1]);
@@ -468,6 +474,41 @@ export class Board {
       }
     }
     return null;
+  }
+
+  /** Το σχήμα κάτω από το σημείο της οθόνης (και το εσωτερικό του μετράει), με τη θέση της πάνω άκρης του. */
+  shapeAt(sx: number, sy: number): { id: string; shape: ShapeKind; meas: MeasOpts; x: number; y: number } | null {
+    const [wx, wy] = this.toWorld(sx, sy);
+    const r = 14 / this.page.view.k;
+    const items = this.page.items;
+    for (let n = items.length - 1; n >= 0; n--) {
+      const it = items[n];
+      if (it.kind !== 'shape' || it.dash) continue;
+      const b = itemBounds(it);
+      let hit = hitItem(it, wx, wy, r);
+      if (!hit && it.shape === 'rect') hit = wx >= b.x0 && wx <= b.x1 && wy >= b.y0 && wy <= b.y1;
+      if (!hit && it.shape === 'triangle') hit = pointInPolygon(wx, wy, trianglePts(it));
+      if (!hit && it.shape === 'ellipse') {
+        const a = Math.max((b.x1 - b.x0) / 2, 0.5), h = Math.max((b.y1 - b.y0) / 2, 0.5);
+        hit = Math.hypot((wx - (b.x0 + b.x1) / 2) / a, (wy - (b.y0 + b.y1) / 2) / h) <= 1;
+      }
+      if (!hit) continue;
+      const [x, y] = this.toScreen((b.x0 + b.x1) / 2, b.y0);
+      return { id: it.id, shape: it.shape, meas: it.meas ?? {}, x, y };
+    }
+    return null;
+  }
+
+  /** Ορίζει ποιες μετρήσεις φαίνονται σε ένα σχήμα· όταν δεν μένει καμία, το σχήμα μένει σκέτο. */
+  setMeas(id: string, meas: MeasOpts): void {
+    const i = this.page.items.findIndex((x) => x.id === id);
+    const before = this.page.items[i];
+    if (!before || before.kind !== 'shape') return;
+    const after: Shape = { ...before, meas };
+    if (!meas.len && !meas.ang && !meas.area && !meas.per) delete after.meas;
+    this.page.items[i] = after;
+    this.push({ t: 'mod', p: this.cur, before, after });
+    this.redraw();
   }
 
   /**
@@ -1040,6 +1081,18 @@ export class Board {
     c.beginPath();
     c.arc(x, y, r * 0.2, 0, -a, true);
     c.stroke();
+    // η γωνία σε μοίρες πάνω στο σχήμα, στη διχοτόμο του τόξου
+    const degOn = ((Math.round((a * 180) / Math.PI) % 360) + 360) % 360;
+    c.font = `600 ${r * 0.1}px system-ui, "Segoe UI", Roboto, sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    if (degOn < 40) c.fillText(`${degOn}°`, x + r * 0.4, y + r * 0.1);
+    else if (degOn > 320) c.fillText(`${degOn}°`, x + r * 0.4, y - r * 0.1);
+    else {
+      // κοντά στις 180° η διχοτόμος πέφτει πάνω στον κατακόρυφο άξονα: τη γέρνουμε λίγο
+      const m = Math.abs(degOn - 180) < 25 ? a / 2 - 0.3 : a / 2;
+      c.fillText(`${degOn}°`, x + r * 0.36 * Math.cos(m), y - r * 0.36 * Math.sin(m));
+    }
     c.lineWidth = 5;
     c.strokeStyle = cosC;
     c.beginPath();
@@ -1061,7 +1114,7 @@ export class Board {
     c.textAlign = 'left';
     c.textBaseline = 'middle';
     const parts: [string, string][] = [
-      [`θ = ${deg}°`, ink],
+      [`θ = ${radText(deg)} rad`, ink],
       [`ημθ = ${n2(sin)}`, sinC],
       [`συνθ = ${n2(cos)}`, cosC],
       [`εφθ = ${Math.abs(cos) < 1e-9 ? '—' : n2(sin / cos)}`, ink],
@@ -1077,48 +1130,57 @@ export class Board {
     c.restore();
   }
 
-  /** Μήκη πλευρών, γωνίες και εμβαδόν ενός σχήματος, σε μονάδες του χάρακα. */
+  /** Οι μετρήσεις που έχουν ζητηθεί για ένα σχήμα (μήκη, γωνίες, εμβαδόν, περίμετρος), σε μονάδες του χάρακα. */
   private drawMeasures(c: CanvasRenderingContext2D, s: Shape): void {
-    if (s.dash) return;
+    const o = s.meas;
+    if (s.dash || !o) return;
     c.save();
     c.fillStyle = isDark(this.doc.bg) ? '#5eead4' : '#0f766e';
     c.font = '600 17px system-ui, "Segoe UI", Roboto, sans-serif';
     c.textAlign = 'center';
     c.textBaseline = 'middle';
     const len = (a: Pt, b: Pt) => Math.hypot(b[0] - a[0], b[1] - a[1]);
-    for (const m of measureSides(s)) c.fillText(s.labels?.[m.i] ?? fmt(m.len / CM), m.pos[0], m.pos[1]);
-    // με δικές σου ετικέτες το σχήμα δεν είναι σε κλίμακα: το εμβαδόν δεν θα είχε νόημα
+    const sides = measureSides(s);
+    if (o.len) for (const m of sides) c.fillText(s.labels?.[m.i] ?? fmt(m.len / CM), m.pos[0], m.pos[1]);
+    // με δικές σου ετικέτες το σχήμα δεν είναι σε κλίμακα: εμβαδόν και περίμετρος δεν θα είχαν νόημα
     const scaled = !s.labels || Object.keys(s.labels).length === 0;
     const { x0, y0, x1, y1 } = s;
-    if (s.shape === 'line' || s.shape === 'arrow') {
-      /* μόνο το μήκος */
-    } else if (s.shape === 'rect') {
+    /** Γραμμές κειμένου στο κέντρο του σχήματος. */
+    const mid: string[] = [];
+    let ctr: Pt = [(x0 + x1) / 2, (y0 + y1) / 2];
+    /** Μοίρες στην κορυφή p, λίγο προς το εσωτερικό (σημείο g). */
+    const corner = (p: Pt, q: Pt, w: Pt, g: Pt): void => {
+      const u1 = Math.atan2(q[1] - p[1], q[0] - p[0]), u2 = Math.atan2(w[1] - p[1], w[0] - p[0]);
+      let d = Math.abs(u1 - u2) % (2 * Math.PI);
+      if (d > Math.PI) d = 2 * Math.PI - d;
+      const gl = Math.max(len(p, g), 1);
+      const off = Math.min(42, gl * 0.45);
+      c.fillText(`${Math.round((d * 180) / Math.PI)}°`, p[0] + ((g[0] - p[0]) / gl) * off, p[1] + ((g[1] - p[1]) / gl) * off);
+    };
+    if (s.shape === 'rect') {
       const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
-      const ctr: Pt = [(x0 + x1) / 2, (y0 + y1) / 2];
-      if (scaled && w > 90 && h > 40) c.fillText(`Ε = ${fmt((w * h) / CM / CM)}`, ctr[0], ctr[1]);
+      if (o.ang && w > 110 && h > 70) {
+        const q: Pt[] = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+        for (let i = 0; i < 4; i++) corner(q[i], q[(i + 1) % 4], q[(i + 3) % 4], ctr);
+      }
+      if (scaled && o.area) mid.push(`Ε = ${fmt((w * h) / CM / CM)}`);
+      if (scaled && o.per) mid.push(`Π = ${fmt((2 * (w + h)) / CM)}`);
     } else if (s.shape === 'ellipse') {
       const a = Math.abs(x1 - x0) / 2, b = Math.abs(y1 - y0) / 2;
-      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-      if (a < 45 || b < 30) { c.restore(); return; }
       const circle = Math.abs(a - b) < Math.max(a, b) * 0.03;
-      c.fillText(circle ? `r = ${fmt(a / CM)}` : `a = ${fmt(a / CM)}  b = ${fmt(b / CM)}`, cx, cy - 12);
-      c.fillText(`Ε = ${fmt((Math.PI * a * b) / CM / CM)}`, cx, cy + 12);
-    } else {
+      if (o.len) mid.push(circle ? `r = ${fmt(a / CM)}` : `a = ${fmt(a / CM)}  b = ${fmt(b / CM)}`);
+      if (o.area) mid.push(`Ε = ${fmt((Math.PI * a * b) / CM / CM)}`);
+      // περίμετρος έλλειψης: προσέγγιση του Ramanujan (ακριβής για κύκλο)
+      if (o.per) mid.push(`Π = ${fmt((Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)))) / CM)}`);
+    } else if (s.shape === 'triangle') {
       const t = trianglePts(s);
-      const g: Pt = [(t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3];
+      ctr = [(t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3];
       const area = Math.abs((t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1])) / 2;
-      for (let i = 0; i < 3; i++) {
-        const p = t[i], q = t[(i + 1) % 3], o = t[(i + 2) % 3];
-        // γωνία στην κορυφή p
-        const u1 = Math.atan2(q[1] - p[1], q[0] - p[0]), u2 = Math.atan2(o[1] - p[1], o[0] - p[0]);
-        let d = Math.abs(u1 - u2) % (2 * Math.PI);
-        if (d > Math.PI) d = 2 * Math.PI - d;
-        const gl = Math.max(len(p, g), 1);
-        const off = Math.min(42, gl * 0.45);
-        c.fillText(`${Math.round((d * 180) / Math.PI)}°`, p[0] + ((g[0] - p[0]) / gl) * off, p[1] + ((g[1] - p[1]) / gl) * off);
-      }
-      if (scaled && area > 6000) c.fillText(`Ε = ${fmt(area / CM / CM)}`, g[0], g[1]);
+      if (o.ang) for (let i = 0; i < 3; i++) corner(t[i], t[(i + 1) % 3], t[(i + 2) % 3], ctr);
+      if (scaled && o.area) mid.push(`Ε = ${fmt(area / CM / CM)}`);
+      if (scaled && o.per) mid.push(`Π = ${fmt((len(t[0], t[1]) + len(t[1], t[2]) + len(t[2], t[0])) / CM)}`);
     }
+    mid.forEach((text, i) => c.fillText(text, ctr[0], ctr[1] + (i - (mid.length - 1) / 2) * 24));
     c.restore();
   }
 
@@ -1267,7 +1329,7 @@ export class Board {
         break;
       }
       this.drawItem(c, it);
-      if (this.showMeasures && it.kind === 'shape') this.drawMeasures(c, it);
+      if (it.kind === 'shape' && it.meas) this.drawMeasures(c, it);
     }
     this.renderLive();
   }
@@ -1286,7 +1348,7 @@ export class Board {
     for (const p of this.ptrs.values()) {
       if (p.live) {
         this.drawItem(c, p.live);
-        if (this.showMeasures && p.live.kind === 'shape') this.drawMeasures(c, p.live);
+        if (p.live.kind === 'shape' && p.live.meas) this.drawMeasures(c, p.live);
       } else if (p.stroke) this.drawStroke(c, p.stroke);
       if (p.lasso && p.lasso.length > 1) {
         c.save();
@@ -1537,7 +1599,7 @@ export class Board {
       this.paintBackground(c, x0, y0, x1, y1, s);
       for (const it of items) {
         this.drawItem(c, it);
-        if (this.showMeasures && it.kind === 'shape') this.drawMeasures(c, it);
+        if (it.kind === 'shape' && it.meas) this.drawMeasures(c, it);
       }
     } finally {
       this.cur = keep;
@@ -2083,7 +2145,7 @@ export class Board {
         c.save();
         this.setWorldTransform(c);
         this.drawItem(c, s);
-        if (this.showMeasures && s.kind === 'shape') this.drawMeasures(c, s);
+        if (s.kind === 'shape' && s.meas) this.drawMeasures(c, s);
         c.restore();
         break;
       }

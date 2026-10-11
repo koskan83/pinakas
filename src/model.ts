@@ -40,6 +40,15 @@ export interface Shape {
   dash?: boolean;
   /** Ετικέτες πλευρών που έγραψε ο χρήστης στη θέση της μέτρησης (αριθμός πλευράς → κείμενο). */
   labels?: Record<number, string>;
+  /** Ποιες μετρήσεις φαίνονται πάνω στο σχήμα (εργαλείο «Μετρήσεις»). */
+  meas?: MeasOpts;
+}
+
+export interface MeasOpts {
+  len?: boolean;
+  ang?: boolean;
+  area?: boolean;
+  per?: boolean;
 }
 
 export interface TextItem {
@@ -149,7 +158,7 @@ export interface Doc {
   pages: Page[];
 }
 
-export type Tool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'hand' | 'shape' | 'text' | 'laser';
+export type Tool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'hand' | 'shape' | 'text' | 'laser' | 'measure';
 
 let counter = 0;
 export function uid(): string {

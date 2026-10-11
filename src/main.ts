@@ -1,6 +1,6 @@
 import './style.css';
 import { Board, EraserMode, SizedTool } from './board';
-import { AxesMode, Background, Doc, Item, ShapeKind, TextItem, Tool, isDark, newDoc } from './model';
+import { AxesMode, Background, Doc, Item, MeasOpts, ShapeKind, TextItem, Tool, isDark, newDoc } from './model';
 import { blobToPic, captureScreen, clipboardImage, pdfToPages } from './importers';
 import { kvGet, kvSet, loadDoc, saveDoc } from './storage';
 import { Timer } from './timer';
@@ -123,6 +123,7 @@ app.insertAdjacentHTML(
       <button data-tool="highlighter"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l6 6-8 8H8l-2-2v-4z"/><path d="M3 21h13" stroke="#facc15" stroke-width="3.5"/></svg></span>Υπογραμμιστικό</button>
       <button data-tool="text"><span>T</span>Κείμενο</button>
       <button data-tool="eraser"><span><svg viewBox="0 0 24 24"><g transform="rotate(-40 12 12)"><rect x="3" y="7.5" width="9" height="9" rx="1.5" fill="#fb7185"/><rect x="12" y="7.5" width="9" height="9" rx="1.5" fill="#60a5fa"/><rect x="11" y="7.5" width="2" height="9" fill="#f9fafb"/></g></svg></span>Γόμα</button>
+      <button data-tool="measure"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16L16 3l5 5L8 21z"/><path d="M7 12l2 2M10 9l2 2M13 6l2 2"/></svg></span>Μετρήσεις: πάτα ένα σχήμα για μήκη, γωνίες, εμβαδόν, περίμετρο</button>
       <button data-tool="hand"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></span>Μετακίνηση πίνακα</button>
     </div>
     <div class="group" id="colors"></div>
@@ -184,7 +185,6 @@ app.insertAdjacentHTML(
     <button data-gadget="compass">⭕ Διαβήτης</button>
     <button data-gadget="timer">⏱ Χρονόμετρο</button>
     <hr />
-    <button data-view="measures">📐 Μετρήσεις στα σχήματα</button>
     <button data-view="curtain">🪟 Κουρτίνα</button>
     <button data-view="spot">🔦 Προβολέας</button>
     <button data-view="replay">▶ Αναπαραγωγή της σελίδας</button>
@@ -193,6 +193,12 @@ app.insertAdjacentHTML(
   <div id="colorMenu" class="popup hidden">
     <div id="colorGrid"></div>
     <label id="colorPick">🎨 Οποιοδήποτε χρώμα…<input id="colorInput" type="color" value="#2563eb" /></label>
+  </div>
+  <div id="measOpts" class="popup hidden">
+    <button data-meas="len">Μήκη</button>
+    <button data-meas="ang">Γωνίες</button>
+    <button data-meas="area">Εμβαδόν</button>
+    <button data-meas="per">Περίμετρος</button>
   </div>
   <div id="measMenu" class="popup hidden">
     <div class="fnRow"><input id="measInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" /><button id="measOk">✓</button></div>
@@ -755,6 +761,30 @@ const measInput = $('measInput') as HTMLInputElement;
 const MEAS_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', ',', '⌫', 'α', 'β', 'γ', 'x', 'm', 'cm'];
 $('measKeys').innerHTML = MEAS_KEYS.map((k) => `<button data-key="${k}"${/^[0-9,]$/.test(k) ? ' class="num"' : ''}>${k}</button>`).join('');
 let measTarget: { id: string; side: number } | null = null;
+const measOpts = $('measOpts');
+/** Το σχήμα του οποίου οι επιλογές μετρήσεων είναι ανοιχτές. */
+let measShape: string | null = null;
+function renderMeasOpts(): void {
+  const sh = board.page.items.find((x) => x.id === measShape);
+  if (!sh || sh.kind !== 'shape') {
+    measOpts.classList.add('hidden');
+    return;
+  }
+  const line = sh.shape === 'line' || sh.shape === 'arrow';
+  const avail: Record<string, boolean> = { len: true, ang: sh.shape === 'rect' || sh.shape === 'triangle', area: !line, per: !line };
+  measOpts.querySelectorAll<HTMLButtonElement>('[data-meas]').forEach((b) => {
+    const k = b.dataset.meas as keyof MeasOpts;
+    b.classList.toggle('on', !!sh.meas?.[k]);
+    b.classList.toggle('hidden', !avail[k]);
+  });
+}
+measOpts.addEventListener('click', (e) => {
+  const k = (e.target as HTMLElement).closest<HTMLElement>('[data-meas]')?.dataset.meas as keyof MeasOpts | undefined;
+  const sh = board.page.items.find((x) => x.id === measShape);
+  if (!k || !sh || sh.kind !== 'shape') return;
+  board.setMeas(sh.id, { ...sh.meas, [k]: !sh.meas?.[k] });
+  renderMeasOpts();
+});
 /** Μόλις άνοιξε: το πρώτο πλήκτρο αντικαθιστά την παλιά τιμή (χωρίς να ανοίγει το πληκτρολόγιο της συσκευής). */
 let measFresh = false;
 measInput.addEventListener('pointerdown', () => { measFresh = false; });
@@ -762,9 +792,25 @@ measInput.addEventListener('pointerdown', () => { measFresh = false; });
 document.addEventListener(
   'pointerdown',
   (e) => {
-    if (e.target !== $('live') || board.tool !== 'select') return;
+    if (e.target !== $('live') || (board.tool !== 'select' && board.tool !== 'measure')) return;
     const hit = board.measureAt(e.clientX, e.clientY);
-    if (!hit) return;
+    if (!hit) {
+      // με το εργαλείο «Μετρήσεις», πάτημα σε σχήμα ανοίγει από πάνω του τις επιλογές
+      const sh = board.tool === 'measure' ? board.shapeAt(e.clientX, e.clientY) : null;
+      if (!sh) return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      closePopups();
+      measShape = sh.id;
+      // πρώτο πάτημα σε σχήμα χωρίς μετρήσεις: ξεκινά με τα μήκη
+      if (!sh.meas.len && !sh.meas.ang && !sh.meas.area && !sh.meas.per) board.setMeas(sh.id, { len: true });
+      renderMeasOpts();
+      measOpts.classList.remove('hidden');
+      const w = measOpts.offsetWidth, h = measOpts.offsetHeight;
+      measOpts.style.left = Math.max(8, Math.min(sh.x - w / 2, window.innerWidth - w - 8)) + 'px';
+      measOpts.style.top = Math.max(8, sh.y - h - 34) + 'px';
+      return;
+    }
     e.stopImmediatePropagation();
     e.preventDefault();
     closePopups();
@@ -997,7 +1043,7 @@ function refreshUi(): void {
     const g = b.dataset.gadget!;
     b.classList.toggle('on', g === 'timer' ? timer.visible : board.gadgets.has(g as GadgetKind));
   });
-  const viewOn: Record<string, boolean> = { measures: board.showMeasures, curtain: curtain.visible, spot: spot.visible, replay: board.replaying };
+  const viewOn: Record<string, boolean> = { curtain: curtain.visible, spot: spot.visible, replay: board.replaying };
   document.querySelectorAll<HTMLElement>('[data-view]').forEach((b) => b.classList.toggle('on', viewOn[b.dataset.view!]));
   document.querySelectorAll<HTMLElement>('.bgSw').forEach((b) => b.classList.toggle('on', b.dataset.act === `bg-${board.doc.bg}`));
   document.body.classList.toggle('dark', isDark(board.doc.bg));
@@ -1193,6 +1239,7 @@ const stampMenu = $('stampMenu');
 const tplMenu = $('tplMenu');
 function closePopups(): void {
   document.querySelectorAll('.popup').forEach((p) => p.classList.add('hidden'));
+  measShape = null;
   resetFnDraft();
   fnMoved = false;
 }
@@ -1256,10 +1303,7 @@ gadgetMenu.addEventListener('click', (e) => {
   const view = t.closest<HTMLElement>('[data-view]')?.dataset.view;
   if (view) {
     closePopups();
-    if (view === 'measures') {
-      board.showMeasures = !board.showMeasures;
-      board.redraw();
-    } else if (view === 'curtain') curtain.toggle();
+    if (view === 'curtain') curtain.toggle();
     else if (view === 'spot') spot.toggle();
     else if (board.replaying) board.stopReplay();
     else if (board.page.items.length === 0) toast('Η σελίδα είναι κενή');
@@ -1535,7 +1579,7 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'Delete' || e.key === 'Backspace') {
     board.deleteSelected();
   } else if (!ctrl) {
-    const map: Record<string, Tool> = { v: 'select', p: 'pen', h: 'highlighter', l: 'laser', e: 'eraser', m: 'hand', s: 'shape', t: 'text' };
+    const map: Record<string, Tool> = { v: 'select', p: 'pen', h: 'highlighter', l: 'laser', e: 'eraser', m: 'hand', s: 'shape', t: 'text', d: 'measure' };
     const t = map[e.key.toLowerCase()];
     if (t) board.setTool(t);
     else if (e.key === 'PageDown') board.goto(board.cur + 1);

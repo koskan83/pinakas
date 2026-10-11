@@ -284,3 +284,6 @@ html.overlay, html.overlay body { background: transparent; }
 #textEd .row #textOk, #timer .row button.go, .fnRow button, .aiRow #aiSave { color: #fff; }
 #toolbar, #subbar, .popup, .fab { box-shadow: 0 6px 20px rgba(0, 0, 0, .25); }
 body.dark #toolbar, body.dark #subbar, body.dark .popup, body.dark .fab { box-shadow: 0 6px 20px rgba(0, 0, 0, .5); }
+#measOpts { flex-direction: row; min-width: 0; gap: 4px; }
+#measOpts button { text-align: center; padding: 12px 14px; background: var(--bar-2); }
+#measOpts button.on { background: var(--accent); }
