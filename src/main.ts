@@ -15,9 +15,11 @@ import { itemBounds, uid } from './model';
 
 /** Βασικά χρώματα ανά φόντο· ίδια θέση = αντίστοιχο χρώμα στο άλλο φόντο. */
 const PALETTE = {
-  light: ['#111111', '#e11d48', '#2563eb', '#16a34a', '#ea580c', '#7c3aed'],
-  dark: ['#ffffff', '#fb7185', '#7dd3fc', '#86efac', '#fde047', '#c4b5fd'],
+  light: ['#111111', '#e11d48', '#2563eb', '#16a34a'],
+  dark: ['#ffffff', '#fb7185', '#7dd3fc', '#86efac'],
 };
+/** Χρώματα του υπογραμμιστικού (ίδια σε κάθε φόντο). */
+const HL_PALETTE = ['#fde047', '#86efac', '#f9a8d4', '#7dd3fc'];
 const MORE_COLORS = [
   '#111111', '#6b7280', '#d1d5db', '#ffffff', '#92400e', '#d6a36c',
   '#b91c1c', '#ef4444', '#fb7185', '#f472b6', '#be185d', '#a21caf',
@@ -30,9 +32,9 @@ const SIZES: Record<SizedTool, number[]> = {
   eraser: [8, 16, 32, 64],
 };
 const SIZE_NAME = ['Λεπτό', 'Κανονικό', 'Παχύ', 'Πολύ παχύ'];
-type PenKind = 'pen' | 'highlighter' | 'laser';
+type PenKind = 'pen' | 'laser';
 const LASER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="#ef4444" stroke="none"/></svg>';
-const PEN_ICON: Record<PenKind, string> = { pen: '✏️', highlighter: '🖍', laser: LASER_ICON };
+const PEN_ICON: Record<PenKind, string> = { pen: '✏️', laser: LASER_ICON };
 
 const app = document.getElementById('app')!;
 app.insertAdjacentHTML(
@@ -78,7 +80,6 @@ app.insertAdjacentHTML(
     <div id="subbar">
       <div class="group" id="penKinds">
         <button data-pen="pen"><span>✏️</span>Στυλό</button>
-        <button data-pen="highlighter"><span>🖍</span>Μαρκαδόρος</button>
         <button data-pen="laser"><span>${LASER_ICON}</span>Δείκτης λέιζερ (σβήνει μόνος του)</button>
         <button data-auto="text" class="rec"><span>Aα</span>Αυτόματη αναγνώριση κειμένου: ό,τι γράφεις γίνεται καθαρό κείμενο μόλις σταματήσεις</button>
         <button data-auto="math" class="rec"><span>√x</span>Αυτόματη αναγνώριση τύπων: ό,τι γράφεις γίνεται τυπωμένος τύπος μόλις σταματήσεις</button>
@@ -118,6 +119,7 @@ app.insertAdjacentHTML(
     <div class="group" id="tools">
       <button data-tool="select"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="11" rx="1.5" stroke-dasharray="3 2.5"/><path d="M12 11l9 4.5-4 1.3-1.3 4z" fill="currentColor"/></svg></span>Επιλογή (σύρε γύρω από πολλά για ομαδική επιλογή)</button>
       <button id="penBtn"><span>✏️</span>Γραφή</button>
+      <button data-tool="highlighter"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l6 6-8 8H8l-2-2v-4z"/><path d="M3 21h13" stroke="#facc15" stroke-width="3.5"/></svg></span>Υπογραμμιστικό</button>
       <button data-tool="text"><span>T</span>Κείμενο</button>
       <button data-tool="eraser"><span><svg viewBox="0 0 24 24"><g transform="rotate(-40 12 12)"><rect x="3" y="7.5" width="9" height="9" rx="1.5" fill="#fb7185"/><rect x="12" y="7.5" width="9" height="9" rx="1.5" fill="#60a5fa"/><rect x="11" y="7.5" width="2" height="9" fill="#f9fafb"/></g></svg></span>Γόμα</button>
       <button data-tool="hand"><span>🖐</span>Μετακίνηση πίνακα</button>
@@ -390,12 +392,18 @@ function savePrefs(): void {
   }
 }
 
-const palette = (): string[] => PALETTE[isDark(board.doc.bg) ? 'dark' : 'light'];
+const inkPalette = (): string[] => PALETTE[isDark(board.doc.bg) ? 'dark' : 'light'];
+/** Τα χρώματα που δείχνει η γραμμή: του υπογραμμιστικού όταν το κρατάς, αλλιώς της γραφής. */
+const palette = (): string[] => (board.tool === 'highlighter' ? HL_PALETTE : inkPalette());
+/** Το υπογραμμιστικό και η γραφή θυμούνται το καθένα το δικό του χρώμα. */
+let hlColor = HL_PALETTE[0];
+let inkColor: string | null = null;
+let wasHl = false;
 const colorsEl = $('colors');
 let colorsKey = '';
 function renderColors(): void {
   const list = [...palette()];
-  if (customColor && !list.includes(customColor)) list.push(customColor);
+  if (board.tool !== 'highlighter' && customColor && !list.includes(customColor)) list.push(customColor);
   if (!list.includes(board.color)) list.push(board.color);
   const key = list.join();
   if (key === colorsKey) return;
@@ -420,11 +428,11 @@ const sizedTool = (): SizedTool => (board.tool === 'eraser' || board.tool === 'h
 
 /** Η παραλλαγή γραφής που διαλέχτηκε τελευταία (στυλό, μαρκαδόρος ή λέιζερ). */
 let penKind: PenKind = 'pen';
-const isPenKind = (t: Tool): t is PenKind => t === 'pen' || t === 'highlighter' || t === 'laser';
+const isPenKind = (t: Tool): t is PenKind => t === 'pen' || t === 'laser';
 
 function pickColor(c: string): void {
   board.color = c;
-  if (!palette().includes(c)) customColor = c;
+  if (board.tool !== 'highlighter' && !palette().includes(c)) customColor = c;
   if (!['highlighter', 'pen', 'shape', 'text'].includes(board.tool)) board.setTool(penKind === 'laser' ? 'pen' : penKind);
   savePrefs();
   refreshUi();
@@ -546,7 +554,7 @@ let fnMoved = false;
 let fnParamKey = '';
 
 function nextFnColor(): string {
-  const pal = palette();
+  const pal = [...inkPalette(), '#ea580c', '#7c3aed'];
   return pal[1 + ((board.selectedAxes?.fns?.length ?? 0) % (pal.length - 1))];
 }
 /** Βάζει το πλαίσιο δίπλα στους άξονες, ώστε η καμπύλη να φαίνεται όσο γράφεις. */
@@ -931,6 +939,17 @@ $('penKinds').addEventListener('click', (e) => {
 
 function refreshUi(): void {
   const tool = board.tool;
+  // μπαίνοντας στο υπογραμμιστικό (ή βγαίνοντας) αλλάζει και το χρώμα που κρατάς
+  if ((tool === 'highlighter') !== wasHl) {
+    wasHl = tool === 'highlighter';
+    if (wasHl) {
+      inkColor = board.color;
+      board.color = hlColor;
+    } else {
+      hlColor = board.color;
+      board.color = inkColor ?? inkPalette()[0];
+    }
+  }
   if (isPenKind(tool)) penKind = tool;
   const show = (id: string, on: boolean): void => { $(id).classList.toggle('hidden', !on); };
   document.querySelectorAll<HTMLElement>('[data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === tool));
@@ -1065,10 +1084,17 @@ function initToolbar(): void {
       const a = anchor.getBoundingClientRect();
       const s = sub.getBoundingClientRect();
       if (bar.classList.contains('vertical')) {
-        const top = Math.max(8, Math.min(a.top + a.height / 2 - s.height / 2, window.innerHeight - s.height - 8));
+        const first = sub.querySelector<HTMLElement>('.group:not(.hidden) button');
+        const pad = first ? first.getBoundingClientRect().top - s.top : 0;
+        const top = Math.max(8, Math.min(a.top - pad, window.innerHeight - s.height - 8));
+        sub.style.setProperty('--caret', (a.top + a.height / 2 - top) / k + 'px');
         sub.style.top = (top - r.top) / k + 'px';
       } else {
-        const left = Math.max(8, Math.min(a.left + a.width / 2 - s.width / 2, window.innerWidth - s.width - 8));
+        // το πρώτο εικονίδιο της σειράς κάθεται ακριβώς πάνω από το εργαλείο
+        const first = sub.querySelector<HTMLElement>('.group:not(.hidden) button');
+        const pad = first ? first.getBoundingClientRect().left - s.left : 0;
+        const left = Math.max(8, Math.min(a.left - pad, window.innerWidth - s.width - 8));
+        sub.style.setProperty('--caret', (a.left + a.width / 2 - left) / k + 'px');
         sub.style.left = (left - r.left) / k + 'px';
         sub.style.right = 'auto';
         // αν πέφτει πάνω στη λαβή της γραμμής, ανεβαίνει πάνω από αυτήν
