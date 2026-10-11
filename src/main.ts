@@ -31,7 +31,8 @@ const SIZES: Record<SizedTool, number[]> = {
 };
 const SIZE_NAME = ['Λεπτό', 'Κανονικό', 'Παχύ', 'Πολύ παχύ'];
 type PenKind = 'pen' | 'highlighter' | 'laser';
-const PEN_ICON: Record<PenKind, string> = { pen: '✏️', highlighter: '🖍', laser: '🔦' };
+const LASER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="#ef4444" stroke="none"/></svg>';
+const PEN_ICON: Record<PenKind, string> = { pen: '✏️', highlighter: '🖍', laser: LASER_ICON };
 
 const app = document.getElementById('app')!;
 app.insertAdjacentHTML(
@@ -78,7 +79,7 @@ app.insertAdjacentHTML(
       <div class="group" id="penKinds">
         <button data-pen="pen"><span>✏️</span>Στυλό</button>
         <button data-pen="highlighter"><span>🖍</span>Μαρκαδόρος</button>
-        <button data-pen="laser"><span>🔦</span>Δείκτης λέιζερ (σβήνει μόνος του)</button>
+        <button data-pen="laser"><span>${LASER_ICON}</span>Δείκτης λέιζερ (σβήνει μόνος του)</button>
         <button data-auto="text" class="rec"><span>Aα</span>Αυτόματη αναγνώριση κειμένου: ό,τι γράφεις γίνεται καθαρό κείμενο μόλις σταματήσεις</button>
         <button data-auto="math" class="rec"><span>√x</span>Αυτόματη αναγνώριση τύπων: ό,τι γράφεις γίνεται τυπωμένος τύπος μόλις σταματήσεις</button>
       </div>
@@ -96,7 +97,7 @@ app.insertAdjacentHTML(
         <button id="eraseAll"><span>🧹</span>Σβήσιμο όλων</button>
       </div>
       <div class="group" id="selOpts">
-        <button id="del"><span>🗑</span>Διαγραφή επιλογής</button>
+        <button id="del"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></span>Διαγραφή επιλογής</button>
         <button id="dup"><span>⧉</span>Αντίγραφο επιλογής</button>
         <button id="sumBtn"><span>Σ</span>Συνισταμένη των δύο βελών</button>
         <button data-rec="text" class="rec"><span>Aα</span>Αναγνώριση της επιλογής ως κείμενο</button>
@@ -110,11 +111,11 @@ app.insertAdjacentHTML(
       <div class="group" id="widths"></div>
     </div>
     <div class="group" id="tools">
-      <button data-tool="select"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="9.5" rx="8.5" ry="5.8" stroke-dasharray="3.2 2.6"/><circle cx="7" cy="16" r="1.9"/><path d="M7 17.9c0 2 1 3.1 3.2 3.6"/></svg></span>Επιλογή (σύρε γύρω από πολλά για ομαδική επιλογή)</button>
+      <button data-tool="select"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="11" rx="1.5" stroke-dasharray="3 2.5"/><path d="M12 11l9 4.5-4 1.3-1.3 4z" fill="currentColor"/></svg></span>Επιλογή (σύρε γύρω από πολλά για ομαδική επιλογή)</button>
       <button id="penBtn"><span>✏️</span>Γραφή</button>
       <button data-tool="text"><span>T</span>Κείμενο</button>
       <button data-tool="eraser"><span><svg viewBox="0 0 24 24"><g transform="rotate(-40 12 12)"><rect x="3" y="7.5" width="9" height="9" rx="1.5" fill="#fb7185"/><rect x="12" y="7.5" width="9" height="9" rx="1.5" fill="#60a5fa"/><rect x="11" y="7.5" width="2" height="9" fill="#f9fafb"/></g></svg></span>Γόμα</button>
-      <button data-tool="hand"><span>✋</span>Μετακίνηση πίνακα</button>
+      <button data-tool="hand"><span>🖐</span>Μετακίνηση πίνακα</button>
     </div>
     <div class="group" id="colors"></div>
     <div class="group">
@@ -129,7 +130,7 @@ app.insertAdjacentHTML(
       <button id="prev"><span>◀</span></button>
       <div id="pageLabel">1 / 1</div>
       <button id="next"><span>▶</span></button>
-      <button id="addPage"><span>＋</span>Σελίδα</button>
+      <button id="addPage"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="13" height="15" rx="2"/><path d="M4 7v12a2 2 0 0 0 2 2h10M13.5 7v7M10 10.5h7"/></svg></span>Σελίδα</button>
     </div>
   </div>
   </div>
@@ -710,7 +711,7 @@ function refreshUi(): void {
   document.querySelectorAll<HTMLElement>('[data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === tool));
   $('penBtn').classList.toggle('on', isPenKind(tool));
   $('gadgetBtn').classList.toggle('on', tool === 'shape');
-  $('penBtn').querySelector('span')!.textContent = PEN_ICON[penKind];
+  $('penBtn').querySelector('span')!.innerHTML = PEN_ICON[penKind];
   document.querySelectorAll<HTMLElement>('[data-pen]').forEach((b) => b.classList.toggle('on', b.dataset.pen === tool));
   document.querySelectorAll<HTMLElement>('[data-auto]').forEach((b) => b.classList.toggle('on', b.dataset.auto === autoKind));
   renderColors();
