@@ -309,3 +309,38 @@ body.inking #lessonName { opacity: .25; }
 #libGrid .acts { display: flex; gap: 4px; flex-wrap: wrap; }
 #libGrid .acts button { flex: 1; padding: 9px 6px; border-radius: 9px; background: var(--bar-3); font-size: 14px; }
 #libGrid .acts button.danger { color: #f87171; }
+
+/* ---------- μενού με εικονίδια ---------- */
+.popup button i, #colorPick i { display: inline-block; width: 24px; height: 24px; margin-right: 12px; vertical-align: -6px; }
+.popup button i svg, #colorPick i svg { display: block; width: 24px; height: 24px; }
+#colorPick { justify-content: flex-start; }
+#colorPick input { margin-left: auto; }
+#gadgetMenu { min-width: 0; padding: 10px; }
+.gHead { font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .6; padding: 8px 4px 4px; }
+.gHead:first-child { padding-top: 0; }
+.tiles { display: grid; grid-template-columns: repeat(6, 90px); gap: 4px; }
+.popup button.tile { padding: 8px 2px 6px; text-align: center; border-radius: 12px; background: var(--bar-2); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.popup button.tile:hover { background: var(--bar-3); }
+.popup button.tile.on { background: var(--accent); color: #fff; }
+.tile span { height: 30px; display: flex; align-items: center; justify-content: center; }
+.tile span svg { width: 28px; height: 28px; }
+.tile span b { font-size: 24px; font-weight: 600; font-style: italic; }
+.tile span b.sm { font-size: 17px; font-style: normal; }
+.tile small { font-size: 12px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* ---------- zoom ---------- */
+#zoomCtl { position: fixed; right: 14px; top: 14px; z-index: 10; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 14px;
+  background: var(--bar); color: var(--fg); box-shadow: 0 4px 16px rgba(0,0,0,.28); opacity: .85; transition: opacity .15s; }
+#zoomCtl button { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+#zoomCtl button svg { width: 22px; height: 22px; }
+#zoomCtl #zoomFit { width: 58px; font-size: 14px; font-weight: 600; }
+#zoomCtl button:hover { background: var(--bar-2); }
+body.inking #zoomCtl { opacity: .25; pointer-events: none; }
+
+/* ---------- ονόματα κάτω από τα εικονίδια της μπάρας ---------- */
+#toolbar.labels > .group > button[data-l] { width: 52px; height: 54px; flex-direction: column; gap: 2px; }
+#toolbar.labels > .group > button[data-l]::after { content: attr(data-l); font-size: 10.5px; line-height: 1; opacity: .8; }
+#toolbar.labels > .group > button[data-l] span svg { width: 24px; height: 24px; }
+.overlay #zoomCtl { display: none; }
+#menu { max-height: calc(100vh - 96px); overflow-y: auto; }
+#menu > * { flex-shrink: 0; }

@@ -37,6 +37,54 @@ type PenKind = 'pen' | 'laser';
 const LASER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="#ef4444" stroke="none"/></svg>';
 const PENCIL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg>';
 const PEN_ICON: Record<PenKind, string> = { pen: PENCIL_ICON, laser: LASER_ICON };
+/** Γραμμικό εικονίδιο 24×24 στο ύφος της μπάρας. */
+const IC = (d: string): string => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const P = (d: string): string => IC(`<path d="${d}"/>`);
+/** Γραμμή μενού: εικονίδιο και κείμενο. */
+const mi = (attr: string, icon: string, label: string): string => `<button ${attr}><i>${icon}</i>${label}</button>`;
+/** Πλακίδιο του μενού «Όργανα»: εικονίδιο με μικρή λεζάντα από κάτω. */
+const tile = (attr: string, icon: string, label: string, title = label): string =>
+  `<button ${attr} class="tile" title="${title}"><span>${icon}</span><small>${label}</small></button>`;
+const I = {
+  lib: P('M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z'),
+  folder: P('M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'),
+  save: P('M12 4v11M7 11l5 5 5-5M4 20h16'),
+  doc: P('M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6'),
+  image: IC('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/>'),
+  fit: P('M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'),
+  clear: P('M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11l4 5M14 11l-4 5'),
+  delpage: IC('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 12h6"/>'),
+  screen: IC('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>'),
+  spark: P('M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z'),
+  full: P('M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5'),
+  target: IC('<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8.5"/>'),
+  check: P('M4 6.5l1.500 1.500 3-3M4 12.5l1.5 1.5 3-3M4 18.5l1.5 1.5 3-3M12 7h8M12 13h8M12 19h8'),
+  tag: P('M4 5h16M7 5v7M17 5v7M4 16h16M4 20h10'),
+  paste: IC('<rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V3h6v2"/>'),
+  palette: IC('<path d="M12 3a9 9 0 1 0 0 18c1.500 0 2-1 2-2 0-1.500-1-2 0-3s4 .5 6-1.500A9 9 0 0 0 12 3z"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7.500" r="1"/><circle cx="16" cy="10" r="1"/>'),
+  keys: IC('<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>'),
+  line: P('M4 20L20 4'),
+  arrow: P('M4 20L20 4M11 4h9v9'),
+  rect: IC('<rect x="3" y="6" width="18" height="12" rx="1"/>'),
+  ellipse: IC('<ellipse cx="12" cy="12" rx="9" ry="6.5"/>'),
+  triangle: P('M12 4l9 16H3z'),
+  angle: P('M20 20H4L15 5M11 20a7 7 0 0 0-2.800-5.600'),
+  axFull: P('M3 12h18M12 21V3M18.5 9.5L21 12l-2.5 2.5M9.5 5.5L12 3l2.5 2.5'),
+  axQ1: P('M5 19h16M5 19V3M18.5 16.5L21 19l-2.5 2.5M2.5 5.500L5 3l2.5 2.5'),
+  axQ14: P('M5 12h16M5 21V3M18.5 9.5L21 12l-2.5 2.5M2.5 5.500L5 3l2.5 2.5'),
+  asym: IC('<path d="M8 3v18M3 17h18" stroke-dasharray="2.5 3"/><path d="M11 4c.5 7 3 10.500 10 11"/>'),
+  trig: IC('<circle cx="12" cy="12" r="8.5"/><path d="M12 12l6-6M3.5 12h17"/>'),
+  ruler: IC('<rect x="2" y="8" width="20" height="8" rx="1"/><path d="M6 8v3M10 8v4M14 8v3M18 8v4"/>'),
+  protractor: P('M3 17a9 9 0 0 1 18 0zM12 17v-3M7.5 12.500l1.500 1.500M16.5 12.5l-1.5 1.5'),
+  compass: IC('<circle cx="12" cy="4.500" r="1.500"/><path d="M12 6L6 21M12 6l6 15M8.500 14h7"/>'),
+  physics: IC('<path d="M2 12h2l1.500-4 2.500 8 2.500-8 2.500 8 1.500-4h1.500"/><rect x="16" y="8" width="6" height="8" rx="1"/>'),
+  timer: IC('<circle cx="12" cy="13.500" r="7.500"/><path d="M12 13.500V9.500M9.500 3h5M12 3v3"/>'),
+  curtain: IC('<rect x="3" y="4" width="18" height="16" rx="1.500"/><path d="M3 12h18M7 12v8M12 12v8M17 12v8"/>'),
+  spot: IC('<circle cx="12" cy="12" r="5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>'),
+  play: P('M8 5l11 7-11 7z'),
+  plus: P('M12 5v14M5 12h14'),
+  minus: P('M5 12h14'),
+};
 
 const app = document.getElementById('app')!;
 app.insertAdjacentHTML(
@@ -45,11 +93,11 @@ app.insertAdjacentHTML(
   <button id="menuBtn" class="fab" title="Μενού">☰</button>
   <button id="overlayClose" class="fab hidden" title="Κλείσιμο και επιστροφή στον πίνακα">✕</button>
   <div id="menu" class="popup hidden">
-    <button data-act="lib">📚 Μαθήματα…</button>
-    <button data-act="open">📂 Άνοιγμα αρχείου ως νέο μάθημα…</button>
-    <button data-act="save">💾 Αποθήκευση του μαθήματος σε αρχείο</button>
-    <button data-act="pdf">📕 Εξαγωγή όλων των σελίδων σε PDF</button>
-    <button data-act="png">🖼 Εξαγωγή σελίδας σε PNG</button>
+    ${mi('data-act="lib"', I.lib, 'Μαθήματα…')}
+    ${mi('data-act="open"', I.folder, 'Άνοιγμα αρχείου ως νέο μάθημα…')}
+    ${mi('data-act="save"', I.save, 'Αποθήκευση του μαθήματος σε αρχείο')}
+    ${mi('data-act="pdf"', I.doc, 'Εξαγωγή όλων των σελίδων σε PDF')}
+    ${mi('data-act="png"', I.image, 'Εξαγωγή σελίδας σε PNG')}
     <hr />
     <div class="bgRow">
       <span>Φόντο</span>
@@ -61,17 +109,23 @@ app.insertAdjacentHTML(
       <button data-act="bg-dark-lines" class="bgSw dark lines" title="Σκούρο με γραμμές τετραδίου"></button>
     </div>
     <hr />
-    <button data-act="fit">⤢ Προσαρμογή προβολής</button>
-    <button data-act="clear">🧹 Καθαρισμός σελίδας</button>
-    <button data-act="delpage">🗑 Διαγραφή σελίδας</button>
+    ${mi('data-act="fit"', I.fit, 'Προσαρμογή προβολής')}
+    ${mi('data-act="clear"', I.clear, 'Καθαρισμός σελίδας')}
+    ${mi('data-act="delpage"', I.delpage, 'Διαγραφή σελίδας')}
     <hr />
-    <button data-act="overlay" id="overlayAct" class="hidden">🖊 Γράψιμο πάνω από άλλα προγράμματα</button>
-    <button data-act="ai">✨ Αναγνώριση γραφής (ρυθμίσεις)…</button>
-    <button data-act="full">⛶ Πλήρης οθόνη</button>
-    <button data-act="diag">🔬 Διάγνωση αφής/γραφίδας</button>
-    <button data-act="test">🧪 Λίστα δοκιμής στην τάξη</button>
+    ${mi('data-act="overlay" id="overlayAct" class="hidden"', I.screen, 'Γράψιμο πάνω από άλλα προγράμματα')}
+    ${mi('data-act="ai"', I.spark, 'Αναγνώριση γραφής (ρυθμίσεις)…')}
+    ${mi('data-act="full"', I.full, 'Πλήρης οθόνη')}
+    ${mi('data-act="labels"', I.tag, 'Ονόματα κάτω από τα εικονίδια')}
+    ${mi('data-act="diag"', I.target, 'Διάγνωση αφής/γραφίδας')}
+    ${mi('data-act="test"', I.check, 'Λίστα δοκιμής στην τάξη')}
   </div>
 
+  <div id="zoomCtl">
+    <button id="zoomOut" title="Σμίκρυνση">${I.minus}</button>
+    <button id="zoomFit" title="Προσαρμογή: όλη η σελίδα στην οθόνη">100%</button>
+    <button id="zoomIn" title="Μεγέθυνση">${I.plus}</button>
+  </div>
   <div id="toolbarWrap">
   <div id="toolbar">
     <div id="barTab">
@@ -125,39 +179,39 @@ app.insertAdjacentHTML(
       <div class="group" id="widths"></div>
     </div>
     <div class="group" id="tools">
-      <button data-tool="select"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="11" rx="1.5" stroke-dasharray="3 2.5"/><path d="M12 11l9 4.5-4 1.3-1.3 4z" fill="currentColor"/></svg></span>Επιλογή (σύρε γύρω από πολλά για ομαδική επιλογή)</button>
-      <button id="penBtn"><span>${PENCIL_ICON}</span>Γραφή</button>
-      <button data-tool="highlighter"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l6 6-8 8H8l-2-2v-4z"/><path d="M3 21h13" stroke="#facc15" stroke-width="3.5"/></svg></span>Υπογραμμιστικό</button>
-      <button data-tool="text"><span>T</span>Κείμενο</button>
-      <button data-tool="eraser"><span><svg viewBox="0 0 24 24"><g transform="rotate(-40 12 12)"><rect x="3" y="7.5" width="9" height="9" rx="1.5" fill="#fb7185"/><rect x="12" y="7.5" width="9" height="9" rx="1.5" fill="#60a5fa"/><rect x="11" y="7.5" width="2" height="9" fill="#f9fafb"/></g></svg></span>Γόμα</button>
-      <button data-tool="measure"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16L16 3l5 5L8 21z"/><path d="M7 12l2 2M10 9l2 2M13 6l2 2"/></svg></span>Μετρήσεις: πάτα ένα σχήμα για μήκη, γωνίες, εμβαδόν, περίμετρο· σύρε μέσα σε μια γωνία για να τη μετρήσεις</button>
-      <button data-tool="hand"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></span>Μετακίνηση πίνακα</button>
+      <button data-tool="select" data-l="Επιλογή"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="11" rx="1.5" stroke-dasharray="3 2.5"/><path d="M12 11l9 4.5-4 1.3-1.3 4z" fill="currentColor"/></svg></span>Επιλογή (σύρε γύρω από πολλά για ομαδική επιλογή)</button>
+      <button id="penBtn" data-l="Γραφή"><span>${PENCIL_ICON}</span>Γραφή</button>
+      <button data-tool="highlighter" data-l="Υπογρ."><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l6 6-8 8H8l-2-2v-4z"/><path d="M3 21h13" stroke="#facc15" stroke-width="3.5"/></svg></span>Υπογραμμιστικό</button>
+      <button data-tool="text" data-l="Κείμενο"><span>T</span>Κείμενο</button>
+      <button data-tool="eraser" data-l="Γόμα"><span><svg viewBox="0 0 24 24"><g transform="rotate(-40 12 12)"><rect x="3" y="7.5" width="9" height="9" rx="1.5" fill="#fb7185"/><rect x="12" y="7.5" width="9" height="9" rx="1.5" fill="#60a5fa"/><rect x="11" y="7.5" width="2" height="9" fill="#f9fafb"/></g></svg></span>Γόμα</button>
+      <button data-tool="measure" data-l="Μέτρηση"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16L16 3l5 5L8 21z"/><path d="M7 12l2 2M10 9l2 2M13 6l2 2"/></svg></span>Μετρήσεις: πάτα ένα σχήμα για μήκη, γωνίες, εμβαδόν, περίμετρο· σύρε μέσα σε μια γωνία για να τη μετρήσεις</button>
+      <button data-tool="hand" data-l="Κίνηση"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></span>Μετακίνηση πίνακα</button>
     </div>
     <div class="group" id="colors"></div>
     <div class="group">
-      <button id="undo"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4L3 9l5 5"/><path d="M3 9h11a5.5 5.5 0 0 1 0 11h-4"/></svg></span>Αναίρεση</button>
-      <button id="redo"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4l5 5-5 5"/><path d="M21 9H10a5.5 5.5 0 0 0 0 11h4"/></svg></span>Επανάληψη</button>
+      <button id="undo" data-l="Αναίρ."><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4L3 9l5 5"/><path d="M3 9h11a5.5 5.5 0 0 1 0 11h-4"/></svg></span>Αναίρεση</button>
+      <button id="redo" data-l="Ξανά"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4l5 5-5 5"/><path d="M21 9H10a5.5 5.5 0 0 0 0 11h4"/></svg></span>Επανάληψη</button>
     </div>
     <div class="group">
-      <button id="importBtn" class="accent"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>Εισαγωγή</button>
-      <button id="gadgetBtn"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3l4.5 8h-9z"/><circle cx="17" cy="7.5" r="4"/><rect x="4" y="14" width="7" height="7" rx="1"/><path d="M14 21l7-7"/></svg></span>Όργανα και βοηθήματα</button>
+      <button id="importBtn" class="accent" data-l="Εισαγ."><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>Εισαγωγή</button>
+      <button id="gadgetBtn" data-l="Όργανα"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3l4.5 8h-9z"/><circle cx="17" cy="7.5" r="4"/><rect x="4" y="14" width="7" height="7" rx="1"/><path d="M14 21l7-7"/></svg></span>Όργανα και βοηθήματα</button>
     </div>
     <div class="group pages">
       <button id="prev"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></span></button>
       <div id="pageLabel">1 / 1</div>
       <button id="next"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></button>
-      <button id="addPage"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="13" height="15" rx="2"/><path d="M4 7v12a2 2 0 0 0 2 2h10M13.5 7v7M10 10.5h7"/></svg></span>Σελίδα</button>
+      <button id="addPage" data-l="Σελίδα"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="13" height="15" rx="2"/><path d="M4 7v12a2 2 0 0 0 2 2h10M13.5 7v7M10 10.5h7"/></svg></span>Σελίδα</button>
     </div>
   </div>
   </div>
   <div id="dockHint" class="hidden"></div>
 
   <div id="importMenu" class="popup hidden">
-    <button data-imp="file">📁 Εικόνα ή PDF από αρχείο…</button>
-    <button data-imp="shot">🖥 Στιγμιότυπο οθόνης</button>
-    <button data-imp="paste">📋 Επικόλληση από το πρόχειρο</button>
+    ${mi('data-imp="file"', I.folder, 'Εικόνα ή PDF από αρχείο…')}
+    ${mi('data-imp="shot"', I.screen, 'Στιγμιότυπο οθόνης')}
+    ${mi('data-imp="paste"', I.paste, 'Επικόλληση από το πρόχειρο')}
     <hr />
-    <button data-ins="tpl">📄 Σελίδα από πρότυπο…</button>
+    ${mi('data-ins="tpl"', I.doc, 'Σελίδα από πρότυπο…')}
   </div>
 
   <div id="stampMenu" class="popup hidden"><div id="stampGrid"></div></div>
@@ -165,49 +219,50 @@ app.insertAdjacentHTML(
   <div id="tplMenu" class="popup hidden">
     <div id="tplList"></div>
     <hr />
-    <button id="tplSave">＋ Αποθήκευση της σελίδας ως πρότυπο</button>
+    ${mi('id="tplSave"', I.plus, 'Αποθήκευση της σελίδας ως πρότυπο')}
   </div>
 
   <div id="gadgetMenu" class="popup hidden">
-    <div class="bgRow">
-      <span>Σχήματα</span>
-      <button data-shape="line" class="sq" title="Ευθεία">╱</button>
-      <button data-shape="arrow" class="sq" title="Βέλος">➚</button>
-      <button data-shape="rect" class="sq" title="Ορθογώνιο">▭</button>
-      <button data-shape="ellipse" class="sq" title="Έλλειψη">◯</button>
-      <button data-shape="triangle" class="sq" title="Τρίγωνο">△</button>
-      <button data-shape="angle" class="sq" title="Γωνία με μοίρες">∠</button>
+    <div class="gHead">Σχήματα</div>
+    <div class="tiles">
+      ${tile('data-shape="line"', I.line, 'Ευθεία')}
+      ${tile('data-shape="arrow"', I.arrow, 'Βέλος')}
+      ${tile('data-shape="rect"', I.rect, 'Ορθογώνιο')}
+      ${tile('data-shape="ellipse"', I.ellipse, 'Κύκλος', 'Κύκλος ή έλλειψη')}
+      ${tile('data-shape="triangle"', I.triangle, 'Τρίγωνο')}
+      ${tile('data-shape="angle"', I.angle, 'Γωνία', 'Γωνία με μοίρες')}
     </div>
-    <div class="bgRow">
-      <span>Άξονες</span>
-      <button data-axes="full" class="sq" title="4 τεταρτημόρια"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M12 21V3M18.5 9.5L21 12l-2.5 2.5M9.5 5.5L12 3l2.5 2.5"/></svg></button>
-      <button data-axes="q1" class="sq" title="1ο τεταρτημόριο"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19h16M5 19V3M18.5 16.5L21 19l-2.5 2.5M2.5 5.500L5 3l2.5 2.5"/></svg></button>
-      <button data-axes="q14" class="sq" title="1ο και 4ο (x ≥ 0)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h16M5 21V3M18.5 9.5L21 12l-2.5 2.5M2.5 5.500L5 3l2.5 2.5"/></svg></button>
+    <div class="gHead">Άξονες και συναρτήσεις</div>
+    <div class="tiles">
+      ${tile('data-axes="full"', I.axFull, 'Άξονες', 'Άξονες με 4 τεταρτημόρια')}
+      ${tile('data-axes="q1"', I.axQ1, '1ο τεταρτ.', 'Άξονες: 1ο τεταρτημόριο')}
+      ${tile('data-axes="q14"', I.axQ14, 'x ≥ 0', 'Άξονες: 1ο και 4ο τεταρτημόριο (x ≥ 0)')}
+      ${tile('data-ins="trig"', I.trig, 'Τριγ. κύκλος', 'Τριγωνομετρικός κύκλος')}
+      ${tile('data-anq="int"', '<b>∫</b>', 'Ολοκλήρωμα', 'Ορισμένο ολοκλήρωμα ως εμβαδόν')}
+      ${tile('data-anq="sum"', '<b>Σ</b>', 'Riemann', 'Αθροίσματα Riemann')}
+      ${tile('data-anq="lim"', '<b class="sm">lim</b>', 'Όριο', 'Όριο σε σημείο')}
+      ${tile('data-anq="tan"', '<b>f′</b>', 'Εφαπτομένη', 'Εφαπτομένη και παράγωγος')}
+      ${tile('data-anq="asym"', I.asym, 'Ασύμπτωτες')}
     </div>
-    <div class="bgRow">
-      <span>Ανάλυση</span>
-      <button data-anq="int" class="sq" title="Ορισμένο ολοκλήρωμα ως εμβαδόν">∫</button>
-      <button data-anq="sum" class="sq" title="Αθροίσματα Riemann">Σ</button>
-      <button data-anq="lim" class="sq lim" title="Όριο σε σημείο">lim</button>
-      <button data-anq="tan" class="sq" title="Εφαπτομένη και παράγωγος">f′</button>
-      <button data-anq="asym" class="sq" title="Ασύμπτωτες"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v18M3 17h18" stroke-dasharray="2.5 3"/><path d="M11 4c.5 7 3 10.500 10 11"/></svg></button>
+    <div class="gHead">Όργανα και φυσική</div>
+    <div class="tiles">
+      ${tile('data-gadget="ruler"', I.ruler, 'Χάρακας')}
+      ${tile('data-gadget="protractor"', I.protractor, 'Μοιρογν.', 'Μοιρογνωμόνιο')}
+      ${tile('data-gadget="compass"', I.compass, 'Διαβήτης')}
+      ${tile('data-ins="stamps"', I.physics, 'Φυσική…', 'Σχήματα φυσικής')}
     </div>
-    <button data-ins="trig">◔ Τριγωνομετρικός κύκλος</button>
-    <button data-ins="stamps">🧲 Σχήματα φυσικής…</button>
-    <hr />
-    <button data-gadget="ruler">📏 Χάρακας</button>
-    <button data-gadget="protractor">◗ Μοιρογνωμόνιο</button>
-    <button data-gadget="compass">⭕ Διαβήτης</button>
-    <button data-gadget="timer">⏱ Χρονόμετρο</button>
-    <hr />
-    <button data-view="curtain">🪟 Κουρτίνα</button>
-    <button data-view="spot">🔦 Προβολέας</button>
-    <button data-view="replay">▶ Αναπαραγωγή της σελίδας</button>
+    <div class="gHead">Παρουσίαση</div>
+    <div class="tiles">
+      ${tile('data-gadget="timer"', I.timer, 'Χρονόμετρο')}
+      ${tile('data-view="curtain"', I.curtain, 'Κουρτίνα')}
+      ${tile('data-view="spot"', I.spot, 'Προβολέας')}
+      ${tile('data-view="replay"', I.play, 'Αναπαραγωγή', 'Αναπαραγωγή της σελίδας')}
+    </div>
   </div>
 
   <div id="colorMenu" class="popup hidden">
     <div id="colorGrid"></div>
-    <label id="colorPick">🎨 Οποιοδήποτε χρώμα…<input id="colorInput" type="color" value="#2563eb" /></label>
+    <label id="colorPick"><i>${I.palette}</i>Οποιοδήποτε χρώμα…<input id="colorInput" type="color" value="#2563eb" /></label>
   </div>
   <div id="measOpts" class="popup hidden">
     <button data-meas="len">Μήκη</button>
@@ -222,7 +277,7 @@ app.insertAdjacentHTML(
   </div>
   <div id="labelMenu" class="popup hidden">
     <div id="labelGrid"></div>
-    <button id="labelOther">⌨ Άλλο…</button>
+    ${mi('id="labelOther"', I.keys, 'Άλλο…')}
   </div>
   <div id="fnMenu" class="popup hidden">
     <div id="fnHead"><b>⠿ Συναρτήσεις</b><button id="fnPts" class="pill" title="Ρίζες, ακρότατα και σημεία τομής">• Σημεία</button><button id="fnClose" title="Κλείσιμο">✕</button></div>
@@ -1072,7 +1127,7 @@ function refreshUi(): void {
   const st = sizedTool();
   document.querySelectorAll<HTMLElement>('[data-width]').forEach((b) => b.classList.toggle('on', SIZES[st][Number(b.dataset.width)] === board.sizes[st]));
   document.querySelectorAll<HTMLElement>('[data-eraser]').forEach((b) => b.classList.toggle('on', b.dataset.eraser === board.eraserMode));
-  document.querySelectorAll<HTMLElement>('[data-shape]').forEach((b) => b.classList.toggle('on', b.dataset.shape === board.shapeKind));
+  document.querySelectorAll<HTMLElement>('[data-shape]').forEach((b) => b.classList.toggle('on', tool === 'shape' && b.dataset.shape === board.shapeKind));
 
   // η δεύτερη σειρά δείχνει μόνο ό,τι αφορά το εργαλείο που κρατάς
   const ax = tool === 'select' ? board.selectedAxes : null;
@@ -1080,6 +1135,9 @@ function refreshUi(): void {
   show('shapes', tool === 'shape');
   show('eraserOpts', tool === 'eraser');
   show('selOpts', tool === 'select' && board.hasSelection);
+  // η αναγνώριση έχει νόημα μόνο όταν στην επιλογή υπάρχει χειρόγραφο
+  const ink = board.selectionHasInk;
+  document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', !ink));
   show('sumBtn', !!board.resultantSource);
   show('axesOpts', !!ax);
   const sp = tool === 'select' ? board.selectedSpring : null;
@@ -1517,7 +1575,9 @@ menu.addEventListener('click', async (e) => {
   if (!b) return;
   const act = b.dataset.act!;
   if (!act.startsWith('bg-')) closePopups();
-  if (act === 'lib') {
+  if (act === 'labels') {
+    setLabels(!$('toolbar').classList.contains('labels'));
+  } else if (act === 'lib') {
     void lessons?.open();
   } else if (act === 'test') {
     window.open('./dokimi.html', '_blank');
@@ -1673,6 +1733,28 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ---------- αυτόματη αποθήκευση ----------
+
+// ---------- zoom και ονόματα εικονιδίων ----------
+
+$('zoomOut').onclick = () => board.zoomBy(1 / 1.25);
+$('zoomIn').onclick = () => board.zoomBy(1.25);
+$('zoomFit').onclick = () => board.fitView();
+board.onView = () => {
+  const t = `${Math.round(board.zoom * 100)}%`;
+  if ($('zoomFit').textContent !== t) $('zoomFit').textContent = t;
+};
+/** Μικρά ονόματα κάτω από τα εικονίδια της μπάρας· ανοιχτά μέχρι να τα κλείσει ο χρήστης. */
+function setLabels(on: boolean): void {
+  $('toolbar').classList.toggle('labels', on);
+  document.querySelector('[data-act=labels]')!.classList.toggle('on', on);
+  try {
+    localStorage.setItem('grafida.labels', on ? '1' : '0');
+  } catch {
+    /* χωρίς αποθήκευση */
+  }
+  layoutBar();
+}
+setLabels((() => { try { return localStorage.getItem('grafida.labels') !== '0'; } catch { return true; } })());
 
 // το διαφανές παράθυρο δεν έχει μαθήματα και δεν πειράζει ό,τι είναι αποθηκευμένο
 const lessons = isOverlay

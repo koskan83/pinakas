@@ -184,6 +184,8 @@ export class Board {
 
   /** Ζητά από το UI να ανοίξει editor κειμένου. */
   onTextRequest: (x: number, y: number, existing?: TextItem) => void = () => {};
+  /** Καλείται όταν αλλάζει η προβολή (zoom/μετακίνηση). */
+  onView: () => void = () => {};
   onChange: () => void = () => {};
   onUi: () => void = () => {};
   onPointerInfo: (e: PointerEvent, count: number) => void = () => {};
@@ -1866,6 +1868,7 @@ export class Board {
       if (it.kind === 'shape' && it.meas) this.drawMeasures(c, it);
     }
     this.renderLive();
+    this.onView();
   }
 
   renderLive(): void {
@@ -2573,6 +2576,24 @@ export class Board {
 
   get zoom(): number {
     return this.page.view.k;
+  }
+
+  /** Μεγέθυνση ή σμίκρυνση γύρω από το κέντρο της οθόνης. */
+  zoomBy(f: number): void {
+    const v = this.page.view;
+    const k = Math.min(8, Math.max(0.1, v.k * f));
+    const cx = this.W / 2, cy = (this.H - this.bottomInset) / 2;
+    v.x = cx - ((cx - v.x) / v.k) * k;
+    v.y = cy - ((cy - v.y) / v.k) * k;
+    v.k = k;
+    this.redraw();
+    this.onChange();
+  }
+
+  /** Αν στην επιλογή υπάρχει χειρόγραφη γραμμή. */
+  get selectionHasInk(): boolean {
+    const ids = this.selectedIds();
+    return this.page.items.some((it) => it.kind === 'stroke' && ids.has(it.id));
   }
 
   private move(e: PointerEvent): void {
