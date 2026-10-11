@@ -2,7 +2,8 @@ import './style.css';
 import { Board, EraserMode, SizedTool } from './board';
 import { AxesAn, AxesMode, Background, Doc, Item, MeasOpts, ShapeKind, TextItem, Tool, isDark, newDoc } from './model';
 import { blobToPic, captureScreen, clipboardImage, pdfToPages } from './importers';
-import { kvGet, kvSet, loadDoc, saveDoc } from './storage';
+import { kvGet, kvSet } from './storage';
+import { Lessons } from './lessons';
 import { Timer } from './timer';
 import { GadgetKind } from './gadgets';
 import { closeOverlay, isNative, isOverlay, nativeSave, nativeScreenshot, openOverlay } from './native';
@@ -44,9 +45,9 @@ app.insertAdjacentHTML(
   <button id="menuBtn" class="fab" title="Μενού">☰</button>
   <button id="overlayClose" class="fab hidden" title="Κλείσιμο και επιστροφή στον πίνακα">✕</button>
   <div id="menu" class="popup hidden">
-    <button data-act="new">🆕 Νέος πίνακας</button>
-    <button data-act="open">📂 Άνοιγμα αρχείου…</button>
-    <button data-act="save">💾 Αποθήκευση αρχείου</button>
+    <button data-act="lib">📚 Μαθήματα…</button>
+    <button data-act="open">📂 Άνοιγμα αρχείου ως νέο μάθημα…</button>
+    <button data-act="save">💾 Αποθήκευση του μαθήματος σε αρχείο</button>
     <button data-act="pdf">📕 Εξαγωγή όλων των σελίδων σε PDF</button>
     <button data-act="png">🖼 Εξαγωγή σελίδας σε PNG</button>
     <hr />
@@ -68,6 +69,7 @@ app.insertAdjacentHTML(
     <button data-act="ai">✨ Αναγνώριση γραφής (ρυθμίσεις)…</button>
     <button data-act="full">⛶ Πλήρης οθόνη</button>
     <button data-act="diag">🔬 Διάγνωση αφής/γραφίδας</button>
+    <button data-act="test">🧪 Λίστα δοκιμής στην τάξη</button>
   </div>
 
   <div id="toolbarWrap">
@@ -304,6 +306,11 @@ function download(blob: Blob, name: string): void {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
+/** Όνομα κατάλληλο για αρχείο. */
+function fileName(s: string): string {
+  return s.replace(/[\\/:*?"<>|]/g, '_').trim() || 'pinakas';
+}
+
 function stamp(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
@@ -324,8 +331,12 @@ async function importFiles(files: File[]): Promise<void> {
         const pic = await blobToPic(f);
         board.addPicture(pic.src, pic.w, pic.h);
       } else if (/\.json$/i.test(f.name)) {
-        board.loadDoc(JSON.parse(await f.text()) as Doc);
-        toast('Ο πίνακας άνοιξε');
+        const doc = JSON.parse(await f.text()) as Doc;
+        if (doc?.v !== 1 || !Array.isArray(doc.pages) || doc.pages.length === 0) throw new Error('Μη έγκυρο αρχείο πίνακα');
+        // το αρχείο ανοίγει ως ξεχωριστό μάθημα· το τρέχον δεν πειράζεται
+        if (lessons) await lessons.createFrom(doc, f.name.replace(/\.json$/i, ''));
+        else board.loadDoc(doc);
+        toast('Το αρχείο άνοιξε ως νέο μάθημα');
       } else {
         toast(`Μη υποστηριζόμενο αρχείο: ${f.name}`);
       }
@@ -1506,12 +1517,14 @@ menu.addEventListener('click', async (e) => {
   if (!b) return;
   const act = b.dataset.act!;
   if (!act.startsWith('bg-')) closePopups();
-  if (act === 'new') {
-    if (confirm('Να δημιουργηθεί νέος πίνακας; Ο τρέχων θα χαθεί αν δεν τον έχεις αποθηκεύσει.')) board.loadDoc(newDoc());
+  if (act === 'lib') {
+    void lessons?.open();
+  } else if (act === 'test') {
+    window.open('./dokimi.html', '_blank');
   } else if (act === 'open') {
     ($('fileOpen') as HTMLInputElement).click();
   } else if (act === 'save') {
-    download(new Blob([JSON.stringify(board.doc)], { type: 'application/json' }), `pinakas_${stamp()}.json`);
+    download(new Blob([JSON.stringify(board.doc)], { type: 'application/json' }), `${fileName(lessons?.current?.name ?? 'pinakas')}_${stamp()}.json`);
   } else if (act === 'png') {
     download(await board.exportPng(), `selida_${board.cur + 1}_${stamp()}.png`);
   } else if (act === 'pdf') {
@@ -1661,22 +1674,14 @@ window.addEventListener('keydown', (e) => {
 
 // ---------- αυτόματη αποθήκευση ----------
 
-let saveTimer = 0;
-board.onChange = () => {
-  clearTimeout(saveTimer);
-  // το διαφανές παράθυρο δεν πειράζει τον αποθηκευμένο πίνακα
-  if (!isOverlay) saveTimer = window.setTimeout(() => void saveDoc(board.doc), 1500);
-};
+// το διαφανές παράθυρο δεν έχει μαθήματα και δεν πειράζει ό,τι είναι αποθηκευμένο
+const lessons = isOverlay
+  ? null
+  : new Lessons({ getDoc: () => board.doc, setDoc: (d) => board.loadDoc(d), thumb: () => board.thumb(), download, toast }, app);
+board.onChange = () => lessons?.touch();
 
 void (async () => {
-  const saved = isOverlay ? null : await loadDoc();
-  if (saved) {
-    try {
-      board.loadDoc(saved);
-    } catch {
-      /* κατεστραμμένη αποθήκευση: ξεκινάμε καθαροί */
-    }
-  }
+  await lessons?.init().catch((err) => console.error(err));
   refreshUi();
   initToolbar();
 })();

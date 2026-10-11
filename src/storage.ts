@@ -64,3 +64,14 @@ export async function kvGet<T>(key: string): Promise<T | null> {
     return null;
   }
 }
+
+export async function kvDel(key: string): Promise<void> {
+  const db = await open();
+  await new Promise<void>((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(key);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+  db.close();
+}

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Γραφίδα – Δοκιμή στην τάξη</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f8fafc; --card: #fff; --fg: #111827; --mut: #6b7280; --line: #e5e7eb; --ok: #059669; --bad: #dc2626; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f172a; --card: #1e293b; --fg: #f1f5f9; --mut: #94a3b8; --line: #334155; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 18px/1.45 system-ui, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 20px 16px 120px; }
+  h1 { font-size: 28px; margin: 8px 0 4px; }
+  h2 { font-size: 20px; margin: 28px 0 8px; }
+  p.lead { color: var(--mut); margin: 0 0 12px; }
+  .item { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 8px 0; display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+  .item.ok { border-color: var(--ok); }
+  .item.bad { border-color: var(--bad); }
+  .item small { color: var(--mut); display: block; }
+  .btns { display: flex; gap: 8px; }
+  .btns button { width: 60px; height: 52px; border-radius: 12px; border: 2px solid var(--line); background: none; color: inherit; font-size: 24px; cursor: pointer; }
+  .item.ok .y { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .item.bad .n { background: var(--bad); border-color: var(--bad); color: #fff; }
+  .item textarea { grid-column: 1 / -1; display: none; width: 100%; min-height: 64px; font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: inherit; }
+  .item.bad textarea { display: block; }
+  #bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  #bar span { flex: 1; color: var(--mut); }
+  #bar button { padding: 13px 18px; border-radius: 12px; border: 0; background: #2563eb; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  #bar button.sec { background: none; color: inherit; border: 1px solid var(--line); font-weight: 400; }
+  #out { width: 100%; min-height: 160px; margin-top: 16px; display: none; font: 15px ui-monospace, monospace; padding: 10px; border-radius: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Δοκιμή στην τάξη</h1>
+  <p class="lead">Άνοιξε τη Γραφίδα σε άλλη καρτέλα και κάνε τα βήματα με τη σειρά. Πάτα ✓ αν δούλεψε ή ✗ αν όχι, και γράψε δυο λόγια για το τι είδες. Στο τέλος πάτα «Αντιγραφή αποτελεσμάτων» και στείλε τα.</p>
+  <div id="list"></div>
+  <textarea id="out" readonly></textarea>
+</main>
+<div id="bar"><span id="count"></span><button class="sec" id="reset">Καθαρισμός</button><button id="copy">Αντιγραφή αποτελεσμάτων</button></div>
+<script>
+const GROUPS = [
+  ['Γραφή', [
+    ['Γράψε μια πρόταση με τη γραφίδα της οθόνης.', 'Η γραμμή ακολουθεί χωρίς καθυστέρηση και χωρίς κενά;'],
+    ['Γράψε με το δάχτυλο.', 'Γράφει κι αυτό;'],
+    ['Γράφοντας, ακούμπησε την παλάμη στην οθόνη.', 'Δεν πρέπει να αφήνει σημάδια ούτε να σβήνει κατά λάθος.'],
+    ['Σβήσε με τη γόμα ένα κομμάτι και μετά ολόκληρη γραμμή.', ''],
+    ['Σβήσε με την παλάμη ή τη γροθιά (χωρίς να αλλάξεις εργαλείο).', 'Εμφανίζεται ο κόκκινος κύκλος της γόμας;'],
+    ['Δύο άτομα γράφουν ταυτόχρονα.', 'Γράφουν και οι δύο χωρίς να μπερδεύονται οι γραμμές;'],
+    ['Υπογράμμισε μια λέξη με το υπογραμμιστικό, δύο φορές στο ίδιο σημείο.', 'Βγαίνει ευθεία και δεν σκουραίνει;'],
+    ['Αναίρεση και επανάληψη, 5 φορές η καθεμία.', ''],
+  ]],
+  ['Μετακίνηση και zoom', [
+    ['Τσίμπημα με δύο δάχτυλα για μεγέθυνση και σμίκρυνση.', 'Με ποιο εργαλείο ενεργό το δοκίμασες;'],
+    ['Σύρσιμο με δύο δάχτυλα για μετακίνηση.', ''],
+    ['☰ → Προσαρμογή προβολής.', 'Επιστρέφει όλη η σελίδα στην οθόνη;'],
+    ['Νέα σελίδα, επόμενη, προηγούμενη.', ''],
+  ]],
+  ['Μπάρα και μενού', [
+    ['Τα κουμπιά της μπάρας πατιούνται εύκολα με το δάχτυλο;', 'Αν όχι, δοκίμασε το + στη λαβή της μπάρας.'],
+    ['Σύρε τη μπάρα στο πλάι της οθόνης.', 'Γίνεται κατακόρυφη και τα μενού ανοίγουν δίπλα της;'],
+    ['Άλλαξε φόντο σε σκούρο και πίσω.', 'Η μπάρα αλλάζει χρώμα και φαίνονται όλα καθαρά;'],
+    ['Διαβάζονται τα εικονίδια από το πίσω μέρος της τάξης;', ''],
+  ]],
+  ['Σχήματα και μετρήσεις', [
+    ['Όργανα → τρίγωνο. Με τον χάρακα πάτα το και άναψε μήκη και γωνίες.', ''],
+    ['Πάτα πάνω σε ένα μήκος και άλλαξέ το από το πληκτρολόγιο που ανοίγει.', 'Ανοίγει το πληκτρολόγιο της οθόνης από πάνω του;'],
+    ['Επίλεξε το τρίγωνο και στρέψε το με τη στρογγυλή λαβή.', ''],
+    ['Δύο βέλη από κοινή αρχή και συνισταμένη. Μετά άλλαξε το ένα βέλος.', 'Ακολουθεί η συνισταμένη;'],
+    ['Χάρακας, μοιρογνωμόνιο, διαβήτης: μετακίνηση και περιστροφή.', ''],
+  ]],
+  ['Συναρτήσεις', [
+    ['Όργανα → Ανάλυση → ∫. Γράψε x²/4 από το πληκτρολόγιο της εφαρμογής.', ''],
+    ['Σύρε τις δύο λαβές του ολοκληρώματος πάνω στον άξονα.', 'Πιάνονται εύκολα με το δάχτυλο;'],
+    ['Άναψε lim και f′ και σύρε τα σημεία πάνω στην καμπύλη.', ''],
+  ]],
+  ['Αρχεία και μαθήματα', [
+    ['Πάτα το όνομα του μαθήματος πάνω αριστερά και φτιάξε νέο μάθημα.', 'Ανοίγει πληκτρολόγιο για το όνομα;'],
+    ['Κλείσε τον browser και ξανάνοιξέ τον.', 'Άνοιξε το ίδιο μάθημα με όσα είχες γράψει;'],
+    ['＋ → εικόνα ή PDF από αρχείο.', ''],
+    ['☰ → Εξαγωγή σε PDF.', 'Πού αποθηκεύτηκε το αρχείο; Το βρήκες;'],
+    ['Μαθήματα → Αντίγραφο ασφαλείας.', 'Κατέβηκε αρχείο;'],
+  ]],
+  ['Παρουσίαση', [
+    ['Κουρτίνα και προβολέας.', ''],
+    ['Λέιζερ (μέσα στο μολύβι).', ''],
+    ['Χρονόμετρο.', ''],
+    ['Πλήρης οθόνη.', ''],
+  ]],
+  ['Γενικά', [
+    ['Μετά από 20 λεπτά χρήσης με πολλές σελίδες, είναι ακόμα γρήγορο;', ''],
+    ['Τι σου έλειψε περισσότερο; Τι σε μπέρδεψε;', 'Γράψε το στο ✗ ακόμα κι αν όλα δούλεψαν.'],
+  ]],
+];
+const KEY = 'grafida.dokimi';
+let state = {};
+try { state = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { /* χωρίς αποθήκευση */ }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* ιδιωτική περιήγηση */ } };
+const list = document.getElementById('list');
+let n = 0;
+const items = [];
+for (const [title, rows] of GROUPS) {
+  const h = document.createElement('h2');
+  h.textContent = title;
+  list.append(h);
+  for (const [text, hint] of rows) {
+    const id = String(++n);
+    const el = document.createElement('div');
+    el.className = 'item';
+    el.innerHTML = '<div><b></b> <span></span><small></small></div><div class="btns"><button class="y" title="Δούλεψε">✓</button><button class="n" title="Πρόβλημα">✗</button></div><textarea placeholder="Τι είδες;"></textarea>';
+    el.querySelector('b').textContent = id + '.';
+    el.querySelector('span').textContent = text;
+    el.querySelector('small').textContent = hint;
+    const ta = el.querySelector('textarea');
+    const paint = () => {
+      const s = state[id] || {};
+      el.classList.toggle('ok', s.r === 'ok');
+      el.classList.toggle('bad', s.r === 'bad');
+      ta.value = s.note || '';
+      count();
+    };
+    const set = (r) => { const s = state[id] || {}; state[id] = { ...s, r: s.r === r ? undefined : r }; save(); paint(); };
+    el.querySelector('.y').onclick = () => set('ok');
+    el.querySelector('.n').onclick = () => set('bad');
+    ta.oninput = () => { state[id] = { ...(state[id] || {}), note: ta.value }; save(); };
+    list.append(el);
+    items.push({ id, title, text, paint });
+  }
+}
+function count() {
+  const done = items.filter((i) => state[i.id] && state[i.id].r).length;
+  const bad = items.filter((i) => state[i.id] && state[i.id].r === 'bad').length;
+  document.getElementById('count').textContent = done + ' από ' + items.length + ' · ' + bad + ' προβλήματα';
+}
+items.forEach((i) => i.paint());
+document.getElementById('reset').onclick = () => { if (confirm('Να σβηστούν όλες οι απαντήσεις;')) { state = {}; save(); items.forEach((i) => i.paint()); } };
+document.getElementById('copy').onclick = async () => {
+  const lines = ['Δοκιμή Γραφίδας – ' + new Date().toLocaleString('el'), navigator.userAgent, innerWidth + 'x' + innerHeight + ' @' + devicePixelRatio, ''];
+  for (const i of items) {
+    const s = state[i.id] || {};
+    lines.push(i.id + '. [' + (s.r === 'ok' ? 'OK' : s.r === 'bad' ? 'ΠΡΟΒΛΗΜΑ' : '—') + '] ' + i.text + (s.r === 'bad' && s.note ? '\n   → ' + s.note : ''));
+  }
+  const text = lines.join('\n');
+  const out = document.getElementById('out');
+  out.value = text;
+  out.style.display = 'block';
+  try { await navigator.clipboard.writeText(text); document.getElementById('count').textContent = 'Αντιγράφηκε. Επικόλλησέ το στη συνομιλία.'; }
+  catch { out.select(); document.getElementById('count').textContent = 'Διάλεξε το κείμενο πιο κάτω και αντίγραψέ το.'; }
+  out.scrollIntoView({ behavior: 'smooth' });
+};
+</script>
+</body>
+</html>

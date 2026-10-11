@@ -2198,6 +2198,17 @@ export class Board {
     return cv;
   }
 
+  /** Μικρογραφία της πρώτης σελίδας (JPEG data URL), για τη βιβλιοθήκη μαθημάτων. */
+  async thumb(maxW = 360): Promise<string> {
+    const cv = await this.pageCanvas(0, true);
+    const s = Math.min(1, maxW / cv.width, (maxW * 0.7) / cv.height);
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(cv.width * s));
+    out.height = Math.max(1, Math.round(cv.height * s));
+    out.getContext('2d')!.drawImage(cv, 0, 0, out.width, out.height);
+    return out.toDataURL('image/jpeg', 0.7);
+  }
+
   async exportPng(): Promise<Blob> {
     const cv = await this.pageCanvas(this.cur, false);
     return new Promise((res, rej) => cv.toBlob((b) => (b ? res(b) : rej(new Error('PNG'))), 'image/png'));
