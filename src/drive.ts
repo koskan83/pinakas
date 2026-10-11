@@ -14,12 +14,20 @@ interface Gis {
   accounts: { oauth2: { initTokenClient(o: { client_id: string; scope: string; callback: (r: TokenResponse) => void; error_callback?: (e: { type?: string; message?: string }) => void }): TokenClient } };
 }
 
-/** Το «Client ID» του έργου στο Google Cloud (δημόσιο αναγνωριστικό, όχι μυστικό). */
+/**
+ * Το «Client ID» της εφαρμογής στο Google Cloud: δημόσιο αναγνωριστικό, όχι μυστικό.
+ * Όταν είναι συμπληρωμένο εδώ, κανείς δεν χρειάζεται να ρυθμίσει τίποτα· απλώς συνδέεται με τον δικό του λογαριασμό Google.
+ */
+const BUILT_IN_CLIENT_ID = '';
+
+/** Αν η εφαρμογή έχει δικό της Client ID και δεν χρειάζεται ρύθμιση από τον χρήστη. */
+export const driveBuiltIn = !!BUILT_IN_CLIENT_ID;
+
 export function driveClientId(): string {
   try {
-    return localStorage.getItem(KEY) ?? '';
+    return localStorage.getItem(KEY) || BUILT_IN_CLIENT_ID;
   } catch {
-    return '';
+    return BUILT_IN_CLIENT_ID;
   }
 }
 

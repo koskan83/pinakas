@@ -4,7 +4,7 @@ import { AxesAn, AxesMode, Background, Doc, Item, MeasOpts, ShapeKind, TextItem,
 import { blobToPic, captureScreen, clipboardImage, pdfToPages } from './importers';
 import { kvGet, kvSet } from './storage';
 import { Lessons } from './lessons';
-import { driveClientId, driveConnect, setDriveClientId, uploadToDrive } from './drive';
+import { driveBuiltIn, driveClientId, driveConnect, setDriveClientId, uploadToDrive } from './drive';
 import qrcode from 'qrcode-generator';
 import { Timer } from './timer';
 import { GadgetKind } from './gadgets';
@@ -1787,7 +1787,8 @@ function renderSend(editId = false): void {
   const has = !!driveClientId();
   $('sendSetup').classList.toggle('hidden', has && !editId);
   $('sendDrive').classList.toggle('hidden', !has);
-  $('sendIdEdit').classList.toggle('hidden', !has || editId);
+  // με ενσωματωμένο Client ID η ρύθμιση δεν φαίνεται καθόλου
+  $('sendIdEdit').classList.toggle('hidden', !has || editId || driveBuiltIn);
   ($('sendId') as HTMLInputElement).value = driveClientId();
 }
 function openSend(): void {
