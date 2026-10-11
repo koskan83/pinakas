@@ -287,3 +287,4 @@ body.dark #toolbar, body.dark #subbar, body.dark .popup, body.dark .fab { box-sh
 #measOpts { flex-direction: row; min-width: 0; gap: 4px; }
 #measOpts button { text-align: center; padding: 12px 14px; background: var(--bar-2); }
 #measOpts button.on { background: var(--accent); }
+.popup button.sq.lim { font-size: 15px; font-weight: 600; }

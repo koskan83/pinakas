@@ -182,6 +182,14 @@ app.insertAdjacentHTML(
       <button data-axes="q1" class="sq" title="1ο τεταρτημόριο"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19h16M5 19V3M18.5 16.5L21 19l-2.5 2.5M2.5 5.500L5 3l2.5 2.5"/></svg></button>
       <button data-axes="q14" class="sq" title="1ο και 4ο (x ≥ 0)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h16M5 21V3M18.5 9.5L21 12l-2.5 2.5M2.5 5.500L5 3l2.5 2.5"/></svg></button>
     </div>
+    <div class="bgRow">
+      <span>Ανάλυση</span>
+      <button data-anq="int" class="sq" title="Ορισμένο ολοκλήρωμα ως εμβαδόν">∫</button>
+      <button data-anq="sum" class="sq" title="Αθροίσματα Riemann">Σ</button>
+      <button data-anq="lim" class="sq lim" title="Όριο σε σημείο">lim</button>
+      <button data-anq="tan" class="sq" title="Εφαπτομένη και παράγωγος">f′</button>
+      <button data-anq="asym" class="sq" title="Ασύμπτωτες"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v18M3 17h18" stroke-dasharray="2.5 3"/><path d="M11 4c.5 7 3 10.500 10 11"/></svg></button>
+    </div>
     <button data-ins="trig">◔ Τριγωνομετρικός κύκλος</button>
     <button data-ins="stamps">🧲 Σχήματα φυσικής…</button>
     <hr />
@@ -1328,6 +1336,24 @@ document.addEventListener('pointerdown', (e) => {
 
 gadgetMenu.addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
+  const anq = t.closest<HTMLElement>('[data-anq]')?.dataset.anq;
+  if (anq) {
+    // τα εργαλεία ανάλυσης δουλεύουν πάνω σε άξονες με συνάρτηση: διαλέγουμε (ή φτιάχνουμε) άξονες και, αν λείπει, ζητάμε συνάρτηση
+    closePopups();
+    board.setTool('select');
+    if (!board.selectedAxes && !board.selectAxes()) board.addAxes('full');
+    refreshUi();
+    const ax = board.selectedAxes;
+    if (ax && (ax.fns ?? []).some((f) => !f.hidden)) {
+      const on: Record<string, boolean> = { int: !!ax.an?.int, sum: false, lim: !!ax.an?.lim, tan: !!ax.an?.tan, asym: !!ax.an?.asym };
+      if (!on[anq]) toggleAnalysis(anq);
+    } else {
+      togglePopup(fnMenu, $('fnBtn'));
+      renderFns();
+      toast('Γράψε πρώτα τη συνάρτηση. Μετά, τα ∫, Σ, lim, f′ είναι στη σειρά πάνω από τη μπάρα.', 6000);
+    }
+    return;
+  }
   const shape = t.closest<HTMLElement>('[data-shape]')?.dataset.shape;
   const ax = t.closest<HTMLElement>('[data-axes]')?.dataset.axes;
   const ins = t.closest<HTMLElement>('[data-ins]')?.dataset.ins;

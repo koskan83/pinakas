@@ -443,6 +443,17 @@ export class Board {
     return it && it.kind === 'axes' ? it : null;
   }
 
+  /** Επιλέγει τους πιο πρόσφατους άξονες της σελίδας. false αν δεν υπάρχουν. */
+  selectAxes(): boolean {
+    const ax = [...this.page.items].reverse().find((x) => x.kind === 'axes');
+    if (!ax) return false;
+    this.selected = ax.id;
+    this.multi = [];
+    this.redraw();
+    this.onUi();
+    return true;
+  }
+
   /** Αλλάζει το όνομα ενός άξονα (π.χ. y → υ για ταχύτητα). */
   setAxisLabel(axis: 'x' | 'y', label: string): void {
     const before = this.selectedAxes;
