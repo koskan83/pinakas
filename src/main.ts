@@ -1971,6 +1971,10 @@ function openSend(): void {
   closePopups();
   $('sendOut').classList.add('hidden');
   renderSend();
+  showSend();
+}
+/** Εμφανίζει (ή ξαναεμφανίζει) το παράθυρο αποστολής στο κέντρο: η επιλογή σελίδων το κλείνει στο μεταξύ. */
+function showSend(): void {
   sendMenu.classList.remove('hidden');
   sendMenu.style.left = Math.max(8, (window.innerWidth - sendMenu.offsetWidth) / 2) + 'px';
   sendMenu.style.top = Math.max(8, (window.innerHeight - sendMenu.offsetHeight) / 3) + 'px';
@@ -1997,6 +2001,7 @@ $('sendDrive').onclick = async () => {
       ? 'Το αρχείο είναι στον φάκελο «PrismaBoard» του Drive. Όποιος έχει τον σύνδεσμο ή το QR μπορεί να το δει.'
       : 'Το αρχείο ανέβηκε στον φάκελο «PrismaBoard», αλλά ο λογαριασμός δεν επιτρέπει κοινή χρήση με σύνδεσμο. Άνοιξέ το στο Drive και μοίρασέ το από εκεί.';
     $('sendOut').classList.remove('hidden');
+    showSend();
     toast('Ανέβηκε');
   } catch (err) {
     console.error(err);
