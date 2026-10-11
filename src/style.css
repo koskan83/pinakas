@@ -50,7 +50,7 @@ body.inking #toolbar { pointer-events: none; }
 
 /* λαβή πάνω από τη γραμμή: μετακίνηση, μέγεθος, σύμπτυξη */
 #barTab {
-  position: absolute; left: 12px; bottom: 100%; display: flex; gap: 1px; padding: 2px 5px 0;
+  position: absolute; right: 12px; bottom: 100%; display: flex; gap: 1px; padding: 2px 5px 0;
   border-radius: 11px 11px 0 0; background: rgba(31, 41, 55, .9);
 }
 #toolbar #barTab button { width: 34px; height: 28px; border-radius: 8px; opacity: .8; }
@@ -60,10 +60,11 @@ body.inking #toolbar { pointer-events: none; }
 
 /* δεύτερη σειρά: επιλογές του εργαλείου που κρατάς */
 #subbar {
-  position: absolute; right: 12px; bottom: calc(100% + 6px); display: flex; gap: 4px 6px;
+  position: absolute; right: 12px; bottom: calc(100% + 6px); display: flex; gap: 4px 6px; width: max-content;
   padding: 4px 7px; border-radius: 14px; background: rgba(31, 41, 55, .9); box-shadow: 0 4px 16px rgba(0,0,0,.28);
 }
 #toolbar.sub-below #subbar { bottom: auto; top: calc(100% + 6px); }
+#toolbar.sub-lift #subbar { bottom: calc(100% + 36px); }
 #toolbar #axesOpts button span, #toolbar #sumBtn span { font-style: italic; font-weight: 600; font-size: 19px; }
 
 #dockHint {

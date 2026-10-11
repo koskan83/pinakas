@@ -222,6 +222,8 @@ app.insertAdjacentHTML(
 );
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+/** Ξαναστήνει τη γραμμή εργαλείων και τη δεύτερη σειρά της. */
+let layoutBar = (): void => {};
 const timer = new Timer(app);
 const curtain = new Curtain(app);
 const spot = new Spotlight(app);
@@ -738,6 +740,7 @@ function refreshUi(): void {
   show('replayBar', board.replaying);
   $('replayBar').querySelector('[data-rp=pause]')!.textContent = board.replayPaused ? '▶' : '⏸';
   document.body.dataset.bg = board.doc.bg;
+  layoutBar();
 }
 board.onUi = refreshUi;
 curtain.onChange = refreshUi;
@@ -808,6 +811,27 @@ function initToolbar(): void {
     const r = bar.getBoundingClientRect();
     bar.classList.toggle('sub-below', r.top < 70 * st.scale + 30);
     bar.classList.toggle('sub-right', r.left + r.width / 2 < window.innerWidth / 2);
+    // ...και στέκεται πάνω από (ή δίπλα σε) το εργαλείο που αφορά
+    const sub = $('subbar');
+    const anchor = bar.querySelector<HTMLElement>('#tools button.on');
+    sub.style.left = sub.style.right = sub.style.top = '';
+    bar.classList.remove('sub-lift');
+    if (anchor && !sub.classList.contains('hidden') && !st.folded) {
+      const k = r.width / bar.offsetWidth || 1;
+      const a = anchor.getBoundingClientRect();
+      const s = sub.getBoundingClientRect();
+      if (bar.classList.contains('vertical')) {
+        const top = Math.max(8, Math.min(a.top + a.height / 2 - s.height / 2, window.innerHeight - s.height - 8));
+        sub.style.top = (top - r.top) / k + 'px';
+      } else {
+        const left = Math.max(8, Math.min(a.left + a.width / 2 - s.width / 2, window.innerWidth - s.width - 8));
+        sub.style.left = (left - r.left) / k + 'px';
+        sub.style.right = 'auto';
+        // αν πέφτει πάνω στη λαβή της γραμμής, ανεβαίνει πάνω από αυτήν
+        const t = tab.getBoundingClientRect();
+        bar.classList.toggle('sub-lift', !bar.classList.contains('sub-below') && left + s.width > t.left - 4 && left < t.right + 4);
+      }
+    }
     board.bottomInset = st.pos ? 0 : r.height + 24 + 56 * st.scale;
   };
   const save = (): void => {
@@ -882,6 +906,7 @@ function initToolbar(): void {
   live.addEventListener('pointerup', lift);
   live.addEventListener('pointercancel', lift);
 
+  layoutBar = apply;
   apply();
 }
 
@@ -903,6 +928,15 @@ function placeNear(popup: HTMLElement, anchor: HTMLElement): void {
   const a = anchor.getBoundingClientRect();
   const w = popup.offsetWidth;
   const h = popup.offsetHeight;
+  const bar = $('toolbar');
+  if (bar.classList.contains('vertical') && bar.contains(anchor)) {
+    // κατακόρυφη γραμμή: το μενού ανοίγει δίπλα στο κουμπί, προς το κέντρο της οθόνης
+    const b = (anchor.closest<HTMLElement>('#subbar') ?? bar).getBoundingClientRect();
+    const left = b.left + b.width / 2 > window.innerWidth / 2 ? b.left - w - 10 : b.right + 10;
+    popup.style.left = Math.max(8, Math.min(left, window.innerWidth - w - 8)) + 'px';
+    popup.style.top = Math.max(8, Math.min(a.top + a.height / 2 - h / 2, window.innerHeight - h - 8)) + 'px';
+    return;
+  }
   const left = Math.max(8, Math.min(a.left + a.width / 2 - w / 2, window.innerWidth - w - 8));
   let top = a.top - h - 10;
   if (top < 8) top = Math.min(a.bottom + 10, window.innerHeight - h - 8);
