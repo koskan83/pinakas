@@ -5,16 +5,17 @@ export type Params = Record<string, number>;
 export type Fn = (x: number, p?: Params) => number;
 
 const FUNCS: Record<string, (v: number) => number> = {
-  sin: Math.sin, 'ημ': Math.sin,
-  cos: Math.cos, 'συν': Math.cos,
-  tan: Math.tan, 'εφ': Math.tan,
-  sqrt: Math.sqrt, 'ρίζα': Math.sqrt, 'ριζα': Math.sqrt,
-  abs: Math.abs,
+  'ημ': Math.sin,
+  'συν': Math.cos,
+  'εφ': Math.tan,
+  'σφ': (v) => 1 / Math.tan(v),
+  'ρίζα': Math.sqrt, 'ριζα': Math.sqrt,
   ln: Math.log,
   log: Math.log10,
-  exp: Math.exp,
 };
-const CONSTS: Record<string, number> = { pi: Math.PI, 'π': Math.PI, e: Math.E };
+const CONSTS: Record<string, number> = { 'π': Math.PI, e: Math.E };
+/** Αγγλικά ονόματα που δεν δεχόμαστε, με το ελληνικό που τους αντιστοιχεί. */
+const ENGLISH: Record<string, string> = { sin: 'ημ', cos: 'συν', tan: 'εφ', cot: 'σφ', sqrt: '√', abs: '|x|', exp: 'e^x', pi: 'π' };
 
 type Tok = { t: 'num'; v: number } | { t: 'id'; v: string } | { t: 'par'; v: string } | { t: 'op'; v: string };
 
@@ -32,6 +33,8 @@ function tokenize(src: string): Tok[] {
       let j = i;
       while (j < s.length && /[a-zA-Zα-ωΑ-Ωάέήίόύώ]/.test(s[j])) j++;
       let word = s.slice(i, j).toLowerCase();
+      const en = Object.keys(ENGLISH).find((w) => word.includes(w));
+      if (en) throw new Error(`γράψε «${ENGLISH[en]}» αντί για «${en}»`);
       // «2xsin» δεν υπάρχει ως λέξη: κόβουμε το μακρύτερο γνωστό πρόθεμα, αλλιώς ένα γράμμα
       const known = [...Object.keys(FUNCS), ...Object.keys(CONSTS), 'x'].sort((a, b) => b.length - a.length);
       while (word.length) {

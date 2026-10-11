@@ -524,6 +524,7 @@ const FN_KEYS = [
   '4', '5', '6', '×', '(', ')', '|', 'π',
   '1', '2', '3', '−', 'ημ(', 'συν(', 'εφ(', 'ln(',
   '0', ',', '+', 'e', 'a', 'b', '⌫', 'C',
+  'σφ(', 'log(', 'c', 'k', 'λ', 'ω', '←', '→',
 ];
 const FN_INSERT: Record<string, string> = { 'x²': '²', '÷': '/', '×': '·', '−': '-' };
 $('fnKeys').innerHTML = FN_KEYS.map((k) => `<button data-key="${k}"${/^[0-9,]$/.test(k) ? ' class="num"' : ''}>${k}</button>`).join('');
@@ -646,6 +647,8 @@ $('fnKeys').addEventListener('click', (e) => {
   if (key === 'C') {
     fnInput.value = '';
     at = 0;
+  } else if (key === '←' || key === '→') {
+    at = Math.max(0, Math.min(fnInput.value.length, (key === '←' ? from : to) + (key === '←' ? -1 : 1)));
   } else if (key === '⌫') {
     const cut = from === to ? Math.max(0, from - 1) : from;
     fnInput.value = fnInput.value.slice(0, cut) + fnInput.value.slice(to);
