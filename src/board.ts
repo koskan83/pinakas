@@ -4,10 +4,10 @@ import {
   recognizeShape, roundAngle, scaleItem, textFont, textLines, translateItem, trianglePts, uid,
 } from './model';
 import { Fn, Params, compileCached, keyPoints } from './expr';
-import { STAMPS } from './stamps';
+import { STAMPS, SpringState } from './stamps';
 import { CM, GadgetDrag, GadgetKind, Gadgets } from './gadgets';
 
-type Mode = 'draw' | 'shape' | 'gadget' | 'erase' | 'move' | 'resize' | 'pan' | 'lasso' | 'gmove' | 'gresize' | 'laser' | 'none';
+type Mode = 'draw' | 'shape' | 'gadget' | 'erase' | 'move' | 'resize' | 'pan' | 'lasso' | 'gmove' | 'gresize' | 'laser' | 'osc' | 'none';
 
 type Box = { x0: number; y0: number; x1: number; y1: number };
 /** Ίχνος του δείκτη λέιζερ· t = στιγμή που σηκώθηκε η γραφίδα (0 όσο γράφει). */
@@ -17,6 +17,10 @@ const LASER_MS = 1800;
 function trigPoint(t: TrigItem): Pt {
   return [t.x + t.r * Math.cos(t.a), t.y - t.r * Math.sin(t.a)];
 }
+
+/** Περίοδος της ταλάντωσης των ελατηρίων και χρόνος απόσβεσης. */
+const OSC_PERIOD_MS = 1600;
+const OSC_FADE_MS = 5000;
 
 function fmt(n: number): string {
   return n.toLocaleString('el', { maximumFractionDigits: 1 });
@@ -224,6 +228,7 @@ export class Board {
     this.cur = i;
     this.selected = null;
     this.multi = [];
+    this.osc.clear();
     this.redraw();
     this.onUi();
   }
@@ -1005,7 +1010,7 @@ export class Board {
     c.lineWidth = s.width;
     c.lineCap = 'round';
     c.lineJoin = 'round';
-    d.draw(c, s.w, s.h);
+    d.draw(c, s.w, s.h, d.spring ? this.springState(s) : undefined);
     c.restore();
   }
 
@@ -1156,7 +1161,89 @@ export class Board {
   private dragPreviewIds(): Set<string> {
     const ids = new Set<string>();
     for (const p of this.ptrs.values()) if (p.orig) ids.add(p.orig.id);
+    // ό,τι ταλαντώνεται ζωγραφίζεται στο ζωντανό στρώμα, για να μην ξαναστήνεται όλη η σελίδα σε κάθε καρέ
+    for (const id of this.osc.keys()) ids.add(id);
+    if (this.oscDrag) ids.add(this.oscDrag.id);
     return ids;
+  }
+
+  // ---------- ταλάντωση ελατηρίων ----------
+
+  /** Ελατήρια που ταλαντώνονται τώρα (δεν αποθηκεύεται). */
+  private osc = new Map<string, { amp: number; t0: number }>();
+  /** Σώμα που τραβιέται αυτή τη στιγμή. */
+  private oscDrag: { id: string; d: number } | null = null;
+  private oscRaf = 0;
+
+  private springState(s: StampItem): SpringState {
+    const marks = !!s.marks;
+    if (this.oscDrag?.id === s.id) return { d: this.oscDrag.d, amp: Math.abs(this.oscDrag.d), marks };
+    const o = this.osc.get(s.id);
+    if (!o) return { d: 0, amp: 0, marks };
+    const t = performance.now() - o.t0;
+    const fade = s.damp ? Math.exp(-t / OSC_FADE_MS) : 1;
+    return { d: o.amp * fade * Math.cos((2 * Math.PI * t) / OSC_PERIOD_MS), amp: Math.abs(o.amp), marks };
+  }
+
+  /** Το ελατήριο του οποίου το σώμα βρίσκεται κάτω από το σημείο. */
+  private springAt(wx: number, wy: number): StampItem | null {
+    const items = this.page.items;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      if (it.kind !== 'stamp') continue;
+      const g = STAMPS[it.name]?.spring?.(it.w, it.h);
+      if (!g) continue;
+      const d = this.springState(it).d;
+      if (Math.hypot(wx - (it.x + g.cx + g.ux * d), wy - (it.y + g.cy + g.uy * d)) < g.r) return it;
+    }
+    return null;
+  }
+
+  private runOsc(): void {
+    if (this.oscRaf) return;
+    const loop = (): void => {
+      const now = performance.now();
+      for (const [id, o] of this.osc) {
+        const it = this.page.items.find((x) => x.id === id);
+        // σβήνει όταν το πλάτος γίνει αμελητέο ή το ελατήριο διαγραφεί
+        if (!it || it.kind !== 'stamp' || (it.damp && Math.abs(o.amp) * Math.exp(-(now - o.t0) / OSC_FADE_MS) < 0.7)) this.osc.delete(id);
+      }
+      if (this.osc.size) {
+        this.renderLive();
+        this.oscRaf = requestAnimationFrame(loop);
+      } else {
+        this.oscRaf = 0;
+        this.redraw();
+      }
+    };
+    this.oscRaf = requestAnimationFrame(loop);
+  }
+
+  /** Το επιλεγμένο ελατήριο, αν η επιλογή είναι ελατήριο. */
+  get selectedSpring(): StampItem | null {
+    const it = this.selected ? this.page.items.find((x) => x.id === this.selected) : undefined;
+    return it && it.kind === 'stamp' && STAMPS[it.name]?.spring ? it : null;
+  }
+
+  get springMoving(): boolean {
+    return !!this.selected && this.osc.has(this.selected);
+  }
+
+  /** Αλλάζει ιδιότητα του επιλεγμένου ελατηρίου (σημάνσεις, απόσβεση). */
+  updateSpring(patch: Partial<StampItem>): void {
+    const before = this.selectedSpring;
+    if (!before) return;
+    const after = { ...before, ...patch } as StampItem;
+    this.page.items[this.page.items.indexOf(before)] = after;
+    this.push({ t: 'mod', p: this.cur, before, after });
+    this.redraw();
+  }
+
+  /** Σταματά την ταλάντωση του επιλεγμένου ελατηρίου· το σώμα γυρίζει στη θέση ισορροπίας. */
+  stopSpring(): void {
+    if (this.selected) this.osc.delete(this.selected);
+    this.redraw();
+    this.onUi();
   }
 
   redraw(): void {
@@ -1191,6 +1278,10 @@ export class Board {
     c.clearRect(0, 0, this.live.width, this.live.height);
     this.setWorldTransform(c);
     const k = this.page.view.k;
+    for (const id of new Set([...this.osc.keys(), ...(this.oscDrag ? [this.oscDrag.id] : [])])) {
+      const it = this.page.items.find((x) => x.id === id);
+      if (it && !this.replay) this.drawItem(c, it);
+    }
     let selItem: Item | undefined;
     for (const p of this.ptrs.values()) {
       if (p.live) {
@@ -1648,6 +1739,19 @@ export class Board {
         break;
       case 'select': {
         const items = this.page.items;
+        // πιάνοντας το σώμα ενός ελατηρίου το τραβάς· όταν το αφήσεις ταλαντώνεται
+        const spring = this.springAt(wx, wy);
+        if (spring) {
+          this.osc.delete(spring.id);
+          this.selected = spring.id;
+          this.multi = [];
+          this.oscDrag = { id: spring.id, d: 0 };
+          ps.mode = 'osc';
+          ps.start = [wx, wy];
+          this.redraw();
+          this.onUi();
+          return;
+        }
         const sel = this.selected ? items.find((x) => x.id === this.selected) : undefined;
         if (sel) {
           const hi = this.pointHandles(sel).findIndex((p) => Math.hypot(wx - p[0], wy - p[1]) < 24 / v.k);
@@ -1893,6 +1997,13 @@ export class Board {
         this.redraw();
         break;
       }
+      case 'osc': {
+        const o = this.oscDrag;
+        const it = o && this.page.items.find((x) => x.id === o.id);
+        const g = it && it.kind === 'stamp' ? STAMPS[it.name]?.spring?.(it.w, it.h) : undefined;
+        if (o && g) o.d = Math.max(-g.max, Math.min(g.max, (wx - ps.start![0]) * g.ux + (wy - ps.start![1]) * g.uy));
+        break;
+      }
       case 'move': {
         const dx = wx - ps.start![0];
         const dy = wy - ps.start![1];
@@ -2010,6 +2121,18 @@ export class Board {
         }
         this.redraw();
         return;
+      case 'osc': {
+        const o = this.oscDrag;
+        this.oscDrag = null;
+        // ένα απλό άγγιγμα (χωρίς τράβηγμα) απλώς σταματά το σώμα
+        if (o && Math.abs(o.d) > 3) {
+          this.osc.set(o.id, { amp: o.d, t0: performance.now() });
+          this.runOsc();
+        }
+        this.redraw();
+        this.onUi();
+        return;
+      }
       case 'move':
       case 'resize': {
         const before = ps.orig!;

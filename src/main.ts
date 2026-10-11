@@ -108,6 +108,11 @@ app.insertAdjacentHTML(
         <button data-axis="y"><span>y</span>Όνομα κατακόρυφου άξονα</button>
         <button id="fnBtn"><span class="txt">f(x)</span>Γραφική παράσταση συνάρτησης</button>
       </div>
+      <div class="group" id="springOpts">
+        <button id="spMarks"><span class="txt">ΘΦΜ</span>Εμφάνιση θέσης φυσικού μήκους, θέσης ισορροπίας και ±A</button>
+        <button id="spDamp"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.500-9 3.500-9 5 0s3 6 4.500 0 2.500-4 3.500 0 2 2.500 3 0 1.500-1 2 0h1.500"/></svg></span>Απόσβεση: η ταλάντωση σβήνει σιγά σιγά</button>
+        <button id="spStop"><span>⏹</span>Σταμάτημα ταλάντωσης</button>
+      </div>
       <div class="group" id="widths"></div>
     </div>
     <div class="group" id="tools">
@@ -638,6 +643,9 @@ function addFn(): void {
   renderFns();
 }
 $('fnAdd').onclick = addFn;
+$('spMarks').onclick = () => board.updateSpring({ marks: !board.selectedSpring?.marks });
+$('spDamp').onclick = () => board.updateSpring({ damp: !board.selectedSpring?.damp });
+$('spStop').onclick = () => board.stopSpring();
 fnInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') addFn();
 });
@@ -946,6 +954,11 @@ function refreshUi(): void {
   show('selOpts', tool === 'select' && board.hasSelection);
   show('sumBtn', !!board.resultantPair);
   show('axesOpts', !!ax);
+  const sp = tool === 'select' ? board.selectedSpring : null;
+  show('springOpts', !!sp);
+  $('spMarks').classList.toggle('on', !!sp?.marks);
+  $('spDamp').classList.toggle('on', !!sp?.damp);
+  ($('spStop') as HTMLButtonElement).disabled = !board.springMoving;
   show('widths', tool === 'pen' || tool === 'highlighter' || tool === 'shape' || tool === 'text' || tool === 'eraser');
   show('subbar', [...$('subbar').children].some((g) => !g.classList.contains('hidden')));
   $('axesOpts').querySelector('[data-axis=x] span')!.textContent = ax?.lx ?? 'x';

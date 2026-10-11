@@ -107,6 +107,10 @@ export interface StampItem {
   h: number;
   color: string;
   width: number;
+  /** Ελατήρια: εμφάνιση Θ.Φ.Μ., Θ.Ι. και ±A. */
+  marks?: boolean;
+  /** Ελατήρια: η ταλάντωση σβήνει σιγά σιγά. */
+  damp?: boolean;
 }
 
 /** Τριγωνομετρικός κύκλος με κέντρο (x, y), ακτίνα r και γωνία a (rad, αντίθετα από το ρολόι). */

@@ -2,12 +2,38 @@
 
 type C = CanvasRenderingContext2D;
 
+/** Κατάσταση ταλάντωσης ενός ελατηρίου τη στιγμή που ζωγραφίζεται. */
+export interface SpringState {
+  /** Απομάκρυνση του σώματος από τη θέση ισορροπίας (θετική = επιμήκυνση). */
+  d: number;
+  /** Πλάτος, για τις γραμμές ±A· 0 αν δεν ταλαντώνεται. */
+  amp: number;
+  /** Εμφάνιση Θ.Φ.Μ., Θ.Ι. και ±A. */
+  marks: boolean;
+}
+
+/** Πού βρίσκεται το σώμα ενός ελατηρίου και προς τα πού κινείται. */
+export interface SpringGeom {
+  /** Κέντρο του σώματος στη θέση ισορροπίας. */
+  cx: number;
+  cy: number;
+  /** Μοναδιαίο διάνυσμα της επιμήκυνσης. */
+  ux: number;
+  uy: number;
+  /** Μέγιστο πλάτος. */
+  max: number;
+  /** Ακτίνα μέσα στην οποία «πιάνεται» το σώμα. */
+  r: number;
+}
+
 export interface StampDef {
   label: string;
   /** Αρχικό μέγεθος σε μονάδες πίνακα. */
   w: number;
   h: number;
-  draw(c: C, w: number, h: number): void;
+  draw(c: C, w: number, h: number, st?: SpringState): void;
+  /** Μόνο για ελατήρια: το σώμα μπορεί να τραβηχτεί και να ταλαντωθεί. */
+  spring?(w: number, h: number): SpringGeom;
 }
 
 function path(c: C, pts: number[][], close = false): void {
@@ -42,6 +68,20 @@ function label(c: C, text: string, x: number, y: number, size: number): void {
   c.textAlign = 'center';
   c.textBaseline = 'middle';
   c.fillText(text, x, y);
+}
+
+/** Διακεκομμένη γραμμή αναφοράς με ετικέτα στο σημείο (tx, ty). */
+function mark(c: C, x0: number, y0: number, x1: number, y1: number, text: string, tx: number, ty: number, size: number): void {
+  c.save();
+  c.globalAlpha = 0.75;
+  c.lineWidth *= 0.55;
+  c.setLineDash([7, 6]);
+  path(c, [[x0, y0], [x1, y1]]);
+  c.font = `600 ${size}px system-ui, "Segoe UI", Roboto, sans-serif`;
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText(text, tx, ty);
+  c.restore();
 }
 
 function meter(letter: string): StampDef['draw'] {
@@ -82,53 +122,101 @@ export const STAMPS: Record<string, StampDef> = {
     },
   },
   spring: {
-    label: 'Οριζόντιο ελατήριο', w: 340, h: 100,
-    draw(c, w, h) {
+    label: 'Οριζόντιο ελατήριο', w: 380, h: 100,
+    draw(c, w, h, st) {
+      const d = st?.d ?? 0;
+      const x = w * 0.5 + d;
       path(c, [[10, 0], [10, h]]);
       hatch(c, 10, 6, 10, h - 6, 6, -10, 10);
       path(c, [[0, h], [w, h]]);
-      path(c, [[10, h * 0.55], [30, h * 0.55], ...zigzag(30, w * 0.62, h * 0.55, h * 0.2, 14).slice(1), [w * 0.68, h * 0.55]]);
-      c.strokeRect(w * 0.68, h * 0.2, w * 0.24, h * 0.8 - 1);
-      label(c, 'm', w * 0.8, h * 0.6, h * 0.3);
+      path(c, [[10, h * 0.55], [30, h * 0.55], ...zigzag(30, x - w * 0.05, h * 0.55, h * 0.2, 14).slice(1), [x, h * 0.55]]);
+      c.strokeRect(x, h * 0.2, w * 0.22, h * 0.8 - 1);
+      label(c, 'm', x + w * 0.11, h * 0.6, h * 0.3);
+      if (st?.marks) {
+        const fs = Math.max(11, h * 0.15);
+        // οριζόντια, η θέση ισορροπίας συμπίπτει με τη θέση φυσικού μήκους
+        mark(c, w * 0.5, -h * 0.15, w * 0.5, h, 'Θ.Φ.Μ. ≡ Θ.Ι.', w * 0.5, -h * 0.3, fs);
+        if (st.amp) {
+          mark(c, w * 0.5 - st.amp, h * 0.05, w * 0.5 - st.amp, h, '−A', w * 0.5 - st.amp, -h * 0.08, fs);
+          mark(c, w * 0.5 + st.amp, h * 0.05, w * 0.5 + st.amp, h, '+A', w * 0.5 + st.amp, -h * 0.08, fs);
+        }
+      }
     },
+    spring: (w, h) => ({ cx: w * 0.61, cy: h * 0.6, ux: 1, uy: 0, max: w * 0.24, r: Math.max(w * 0.13, h * 0.45) }),
   },
   springV: {
-    label: 'Κατακόρυφο ελατήριο', w: 150, h: 330,
-    draw(c, w, h) {
-      const cx = w / 2, top = 2, y0 = h * 0.08, y1 = h * 0.68, amp = w * 0.16, n = 14;
+    label: 'Κατακόρυφο ελατήριο', w: 150, h: 360,
+    draw(c, w, h, st) {
+      const d = st?.d ?? 0;
+      const cx = w / 2, top = 2, y0 = h * 0.06, yi = h * 0.56, y = yi + d, amp = w * 0.16, n = 14;
       path(c, [[w * 0.1, top], [w * 0.9, top]]);
       hatch(c, w * 0.15, top, w * 0.85, top, 6, 8, -8);
+      const y1 = y - h * 0.04;
       const pts = [[cx, top], [cx, y0]];
       for (let i = 0; i < n; i++) pts.push([cx + (i % 2 ? amp : -amp), y0 + ((y1 - y0) * (i + 0.5)) / n]);
-      pts.push([cx, y1], [cx, h * 0.74]);
+      pts.push([cx, y1], [cx, y]);
       path(c, pts);
-      c.strokeRect(cx - w * 0.3, h * 0.74, w * 0.6, h * 0.26 - 1);
-      label(c, 'm', cx, h * 0.87, h * 0.1);
+      c.strokeRect(cx - w * 0.3, y, w * 0.6, h * 0.2);
+      label(c, 'm', cx, y + h * 0.1, h * 0.09);
+      if (st?.marks) {
+        const fs = Math.max(11, w * 0.1);
+        const line = (yy: number, text: string): void => mark(c, w * 0.05, yy, w * 1.1, yy, text, w * 1.1 + fs * (text.length * 0.33 + 0.4), yy, fs);
+        line(yi - h * 0.1, 'Θ.Φ.Μ.');
+        line(yi, 'Θ.Ι.');
+        if (st.amp) {
+          line(yi - st.amp, '−A');
+          line(yi + st.amp, '+A');
+        }
+      }
     },
+    spring: (w, h) => ({ cx: w / 2, cy: h * 0.66, ux: 0, uy: 1, max: h * 0.2, r: Math.max(w * 0.34, h * 0.12) }),
   },
   springIncline: {
-    label: 'Ελατήριο σε κεκλιμένο', w: 380, h: 240,
-    draw(c, w, h) {
+    label: 'Ελατήριο σε κεκλιμένο', w: 400, h: 250,
+    draw(c, w, h, st) {
+      const d = st?.d ?? 0;
       const rise = h * 0.72;
       path(c, [[0, h], [w, h], [w, h - rise], [0, h]], true);
       const ang = Math.atan2(rise, -w);
       const L = Math.hypot(w, rise);
-      const bh = h * 0.2, bw = L * 0.17, s0 = L * 0.06, s1 = L * 0.5;
+      const bh = h * 0.2, bw = L * 0.17, s0 = L * 0.05, xi = L * 0.42, x = xi + d;
       c.save();
       // x κατά μήκος του επιπέδου προς τα κάτω, y κάθετα προς τα έξω
       c.translate(w, h - rise);
       c.rotate(ang);
       path(c, [[0, 0], [0, bh * 1.25]]);
-      path(c, [[0, bh / 2], [s0, bh / 2], ...zigzag(s0, s1, bh / 2, bh * 0.32, 12).slice(1), [s1 + L * 0.04, bh / 2]]);
-      c.strokeRect(s1 + L * 0.04, 0, bw, bh);
+      path(c, [[0, bh / 2], [s0, bh / 2], ...zigzag(s0, x - L * 0.04, bh / 2, bh * 0.32, 12).slice(1), [x, bh / 2]]);
+      c.strokeRect(x, 0, bw, bh);
       c.restore();
-      // το γράμμα μένει όρθιο: υπολογίζουμε τη θέση του έξω από την περιστροφή
-      const mx = s1 + L * 0.04 + bw / 2, my = bh / 2;
-      label(c, 'm', w + mx * Math.cos(ang) - my * Math.sin(ang), h - rise + mx * Math.sin(ang) + my * Math.cos(ang), bh * 0.6);
+      // τα γράμματα μένουν όρθια: υπολογίζουμε τη θέση τους έξω από την περιστροφή
+      const at = (px: number, py: number): [number, number] => [w + px * Math.cos(ang) - py * Math.sin(ang), h - rise + px * Math.sin(ang) + py * Math.cos(ang)];
+      const [mx, my] = at(x + bw / 2, bh / 2);
+      label(c, 'm', mx, my, bh * 0.6);
       c.beginPath();
       c.arc(0, h, w * 0.15, -Math.atan2(rise, w), 0);
       c.stroke();
       label(c, 'φ', w * 0.2, h - h * 0.07, h * 0.12);
+      if (st?.marks) {
+        const fs = Math.max(11, h * 0.065);
+        const line = (px: number, text: string, far: number): void => {
+          const [ax, ay] = at(px, 0), [bx, by] = at(px, bh * far), [tx, ty] = at(px, bh * far + fs * 1.1);
+          mark(c, ax, ay, bx, by, text, tx, ty, fs);
+        };
+        line(xi - L * 0.09, 'Θ.Φ.Μ.', 2.1);
+        line(xi, 'Θ.Ι.', 2.1);
+        if (st.amp) {
+          line(xi - st.amp, '−A', 1.5);
+          line(xi + st.amp, '+A', 1.5);
+        }
+      }
+    },
+    spring(w, h) {
+      const rise = h * 0.72, L = Math.hypot(w, rise), ang = Math.atan2(rise, -w);
+      const px = L * 0.42 + (L * 0.17) / 2, py = h * 0.1;
+      return {
+        cx: w + px * Math.cos(ang) - py * Math.sin(ang), cy: h - rise + px * Math.sin(ang) + py * Math.cos(ang),
+        ux: Math.cos(ang), uy: Math.sin(ang), max: L * 0.2, r: L * 0.12,
+      };
     },
   },
   pulley: {
