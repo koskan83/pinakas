@@ -189,6 +189,8 @@ interface PState {
   start?: Pt;
   /** Περιστροφή: η γωνία της γραφίδας ως προς το κέντρο όταν ακούμπησε. */
   a0?: number;
+  /** Περιστροφή: μένει true όσο η γραφίδα δεν έχει συρθεί (απλό πάτημα της λαβής αλλάζει κέντρο). */
+  tap?: boolean;
   v0?: View;
 }
 
@@ -221,6 +223,8 @@ export class Board {
   paramPreview: Params | null = null;
   /** Πολλαπλή επιλογή (λάσο). Όταν έχει στοιχεία, το `selected` είναι null. */
   multi: string[] = [];
+  /** Κέντρο περιστροφής της επιλογής όταν δεν είναι το κέντρο της: ποια άκρη (i) και, για ομάδα, το σημείο. */
+  private pivot: { key: string; i: number; p: Pt } | null = null;
   /** Διαφανές φόντο (γράψιμο πάνω από άλλα προγράμματα). */
   transparent = false;
   palmThreshold = 40;
@@ -2008,7 +2012,10 @@ export class Board {
           c.stroke();
         }
       }
-      if (this.rotatable(selItem)) this.drawRotHandle(c, b);
+      if (this.rotatable(selItem)) {
+        this.drawRotHandle(c, b);
+        if (this.pivot?.key === this.pivotKey()) this.drawPivot(c, this.pivotPoint(b, selItem));
+      }
       c.restore();
     }
     if (this.multi.length && this.tool === 'select') {
@@ -2033,6 +2040,7 @@ export class Board {
         c.arc(b.x1, b.y1, 12 / k, 0, Math.PI * 2);
         c.fill();
         this.drawRotHandle(c, b);
+        if (this.pivot?.key === this.pivotKey()) this.drawPivot(c, this.pivotPoint(b));
       }
       c.restore();
     }
@@ -2076,6 +2084,56 @@ export class Board {
     return it.kind !== 'axes' && it.kind !== 'trig';
   }
 
+  /** Οι άκρες ενός στοιχείου που μπορούν να γίνουν κέντρο περιστροφής (άκρα γραμμής, κορυφές, γωνίες πλαισίου). */
+  private pivots(it: Item): Pt[] {
+    if (it.kind === 'stroke') return it.pts.length > 1 ? [[it.pts[0][0], it.pts[0][1]], [it.pts[it.pts.length - 1][0], it.pts[it.pts.length - 1][1]]] : [];
+    if (it.kind === 'angle') return [[it.x, it.y], ...angleEnds(it)];
+    if (it.kind === 'shape' && (it.shape === 'line' || it.shape === 'arrow')) return [[it.x0, it.y0], [it.x1, it.y1]];
+    if (it.kind === 'shape' && it.shape === 'triangle') return trianglePts(it);
+    const rot = itemRot(it);
+    const b = it.kind === 'shape' ? it : itemBounds(rot ? ({ ...it, rot: 0 } as Item) : it);
+    const mx = (b.x0 + b.x1) / 2, my = (b.y0 + b.y1) / 2, cs = Math.cos(rot), sn = Math.sin(rot);
+    return ([[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]] as Pt[]).map(([x, y]) => [mx + (x - mx) * cs - (y - my) * sn, my + (x - mx) * sn + (y - my) * cs]);
+  }
+
+  private pivotKey(): string {
+    return this.selected ?? this.multi.join(',');
+  }
+
+  /** Το σημείο γύρω από το οποίο στρέφεται η επιλογή: το κέντρο του πλαισίου, ή η άκρη που έχει διαλεχτεί. */
+  private pivotPoint(b: Box, it?: Item): Pt {
+    const ctr: Pt = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
+    const pv = this.pivot;
+    if (!pv || pv.key !== this.pivotKey()) return ctr;
+    return it ? this.pivots(it)[pv.i] ?? ctr : pv.p;
+  }
+
+  /** Πάτημα στη λαβή περιστροφής: κέντρο → κάθε άκρη με τη σειρά → πάλι κέντρο. */
+  private nextPivot(b: Box, it?: Item): void {
+    const key = this.pivotKey();
+    const list = it ? this.pivots(it) : ([[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]] as Pt[]);
+    const i = this.pivot && this.pivot.key === key ? this.pivot.i + 1 : 0;
+    this.pivot = i < list.length ? { key, i, p: list[i] } : null;
+  }
+
+  private drawPivot(c: CanvasRenderingContext2D, p: Pt): void {
+    const k = this.page.view.k;
+    c.save();
+    c.setLineDash([]);
+    c.lineWidth = 2.5 / k;
+    c.strokeStyle = '#2563eb';
+    c.fillStyle = '#ffffff';
+    c.beginPath();
+    c.arc(p[0], p[1], 11 / k, 0, Math.PI * 2);
+    c.fill();
+    c.stroke();
+    c.fillStyle = '#2563eb';
+    c.beginPath();
+    c.arc(p[0], p[1], 4 / k, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  }
+
   /** Η λαβή περιστροφής: πάνω από τη μέση του πλαισίου επιλογής. */
   private rotHandle(b: Box): Pt {
     return [(b.x0 + b.x1) / 2, b.y0 - 38 / this.page.view.k];
@@ -2107,6 +2165,13 @@ export class Board {
     c.lineTo(hx + 9.5 / k, hy - 8.5 / k);
     c.stroke();
     c.restore();
+  }
+
+  /** Αν η γραφίδα δεν έχει ακόμα συρθεί γύρω από το κέντρο (λιγότερο από 8 px στην οθόνη). */
+  private rotStill(ps: PState, wx: number, wy: number): boolean {
+    const [cx, cy] = ps.start!;
+    const d = Math.atan2(wy - cy, wx - cx) - ps.a0!;
+    return Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) * Math.hypot(wx - cx, wy - cy) * this.page.view.k < 8;
   }
 
   /** Γωνία περιστροφής από τη θέση της γραφίδας· κοντά σε πολλαπλάσια των 15° «κουμπώνει». */
@@ -2527,8 +2592,9 @@ export class Board {
             ps.mode = 'rotate';
             ps.orig = sel;
             ps.preview = sel;
-            ps.start = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
+            ps.start = this.pivotPoint(b, sel);
             ps.a0 = Math.atan2(wy - ps.start[1], wx - ps.start[0]);
+            ps.tap = true;
             this.redraw();
             return;
           }
@@ -2552,8 +2618,9 @@ export class Board {
               ps.mode = 'grotate';
               ps.before = items.slice();
               ps.ids = new Set(this.multi);
-              ps.start = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
+              ps.start = this.pivotPoint(b);
               ps.a0 = Math.atan2(wy - ps.start[1], wx - ps.start[0]);
+              ps.tap = true;
               return;
             }
             if (corner || inside) {
@@ -2795,9 +2862,13 @@ export class Board {
         ps.lasso!.push([wx, wy]);
         break;
       case 'rotate':
+        if (ps.tap && this.rotStill(ps, wx, wy)) break;
+        ps.tap = false;
         ps.preview = rotateItem(ps.orig!, ps.start![0], ps.start![1], this.rotAngle(ps, wx, wy));
         break;
       case 'grotate': {
+        if (ps.tap && this.rotStill(ps, wx, wy)) break;
+        ps.tap = false;
         const ang = this.rotAngle(ps, wx, wy);
         const ids = ps.ids!;
         this.page.items = ps.before!.map((it) => (ids.has(it.id) ? rotateItem(it, ps.start![0], ps.start![1], ang) : it));
@@ -2965,6 +3036,15 @@ export class Board {
       case 'gmove':
       case 'gresize':
       case 'grotate':
+        if (ps.mode === 'grotate' && ps.tap) {
+          const gb = this.groupBounds();
+          if (gb) this.nextPivot(gb);
+        } else if (this.pivot && ps.changed && ps.mode !== 'grotate') {
+          // η ομάδα μετακινήθηκε: το κέντρο περιστροφής πάει μαζί της· αν άλλαξε μέγεθος, ξαναγίνεται το κέντρο της
+          const gb = this.groupBounds();
+          if (ps.mode === 'gmove' && gb && ps.gb) this.pivot = { ...this.pivot, p: [this.pivot.p[0] + gb.x0 - ps.gb.x0, this.pivot.p[1] + gb.y0 - ps.gb.y0] };
+          else this.pivot = null;
+        }
         if (ps.changed && ps.before) {
           this.push({ t: 'set', p: this.cur, before: ps.before, after: this.page.items.slice() });
         }
@@ -2987,6 +3067,7 @@ export class Board {
       case 'resize': {
         const before = ps.orig!;
         const after = ps.preview!;
+        if (ps.mode === 'rotate' && ps.tap) this.nextPivot(itemBounds(before), before);
         const i = this.page.items.findIndex((x) => x.id === before.id);
         if (i >= 0 && after !== before) {
           this.page.items[i] = after;
