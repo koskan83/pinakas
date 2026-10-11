@@ -375,6 +375,18 @@ export function hitItem(it: Item, px: number, py: number, r: number): boolean {
     }
     case 'angle': {
       const rr = r + it.width / 2;
+      if (it.arc) {
+        // μετρημένη γωνία: πιάνεται από το τόξο και τις μοίρες της, όχι από τις γραμμές που μετράει
+        const ar = it.len1 * 0.4;
+        const diff = Math.atan2(Math.sin(it.a2 - it.a1), Math.cos(it.a2 - it.a1));
+        const mid = it.a1 + diff / 2;
+        if (Math.hypot(x - it.x - (ar + 26) * Math.cos(mid), y - it.y - (ar + 26) * Math.sin(mid)) <= rr + 22) return true;
+        const d = Math.hypot(x - it.x, y - it.y);
+        if (d > ar + rr) return false;
+        if (d <= rr) return true;
+        const off = Math.atan2(Math.sin(Math.atan2(y - it.y, x - it.x) - mid), Math.cos(Math.atan2(y - it.y, x - it.x) - mid));
+        return Math.abs(off) <= Math.abs(diff) / 2 + Math.asin(Math.min(1, rr / d));
+      }
       const [p1, p2] = angleEnds(it);
       return distToSeg(x, y, [it.x, it.y], p1) <= rr || distToSeg(x, y, [it.x, it.y], p2) <= rr;
     }

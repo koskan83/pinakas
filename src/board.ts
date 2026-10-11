@@ -100,6 +100,50 @@ export function measureAngles(s: Shape): { i: number; deg: number; pos: Pt }[] {
     return { i, deg: deg[i], pos: [p[0] + ((g[0] - p[0]) / gl) * off, p[1] + ((g[1] - p[1]) / gl) * off] as Pt };
   });
 }
+/**
+ * Η γόμα πάνω σε μετρήσεις: σβήνει όσες ετικέτες (μήκη, γωνίες, εμβαδόν/περίμετρος) ακουμπά ο κύκλος της.
+ * Επιστρέφει το στοιχείο χωρίς αυτές, ή null αν δεν ακούμπησε καμία. Το ίδιο το σχήμα μένει.
+ */
+export function eraseMeasures(it: Item, x: number, y: number, r: number): Item | null {
+  if ((it.kind !== 'shape' && it.kind !== 'angle') || !it.meas) return null;
+  const o = it.meas;
+  const [wx, wy] = it.kind === 'shape' ? unrot(it, x, y) : [x, y];
+  const near = (p: Pt, hw = 26, hh = 13): boolean => Math.abs(wx - p[0]) < hw + r && Math.abs(wy - p[1]) < hh + r;
+  const m: MeasOpts = { ...o };
+  if (it.kind === 'angle') {
+    if (o.len && angleSides(it).some((q) => near(q.pos))) m.len = false;
+  } else {
+    if (o.len && measureSides(it).some((q) => near(q.pos))) m.len = false;
+    const { x0, y0, x1, y1 } = it;
+    let ctr: Pt = [(x0 + x1) / 2, (y0 + y1) / 2];
+    if (o.ang && it.shape === 'triangle' && measureAngles(it).some((q) => near(q.pos))) m.ang = false;
+    if (o.ang && it.shape === 'rect') {
+      const hit = ([[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as Pt[]).some((p) => {
+        const gl = Math.max(Math.hypot(ctr[0] - p[0], ctr[1] - p[1]), 1);
+        const off = Math.min(42, gl * 0.45);
+        return near([p[0] + ((ctr[0] - p[0]) / gl) * off, p[1] + ((ctr[1] - p[1]) / gl) * off]);
+      });
+      if (hit) m.ang = false;
+    }
+    if (it.shape === 'triangle') {
+      const t = trianglePts(it);
+      ctr = [(t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3];
+    }
+    // οι γραμμές στο κέντρο (r/a/b της έλλειψης, Ε, Π) με τη σειρά που ζωγραφίζονται
+    const mid: (keyof MeasOpts)[] = [];
+    if (it.shape === 'ellipse' && o.len) mid.push('len');
+    if (it.shape !== 'line' && it.shape !== 'arrow') {
+      if (o.area) mid.push('area');
+      if (o.per) mid.push('per');
+    }
+    mid.forEach((key, i) => {
+      if (near([ctr[0], ctr[1] + (i - (mid.length - 1) / 2) * 24], 60, 11)) m[key] = false;
+    });
+  }
+  if (m.len === o.len && m.ang === o.ang && m.area === o.area && m.per === o.per) return null;
+  return { ...it, meas: m };
+}
+
 /** Στις ετικέτες του σχήματος οι γωνίες έχουν αριθμό 10 + κορυφή (οι πλευρές 0, 1, 2). */
 const ANGLE_KEY = 10;
 
@@ -2289,6 +2333,13 @@ export class Board {
       const it = items[i];
       // εικόνες, άξονες, τριγωνομετρικός κύκλος και σχήματα φυσικής σβήνονται μόνο με τον κάδο
       if (it.kind === 'image' || it.kind === 'axes' || it.kind === 'trig' || it.kind === 'stamp') continue;
+      // πρώτα οι μετρήσεις: η γόμα πάνω σε ένα μήκος ή μια γωνία σβήνει την ένδειξη, όχι το σχήμα
+      const bare = eraseMeasures(it, x, y, r);
+      if (bare) {
+        items[i] = bare;
+        changed = true;
+        continue;
+      }
       if (this.eraserMode === 'partial') {
         const rest = erasePartial(it, x, y, r);
         if (!rest) continue;

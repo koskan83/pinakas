@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hlFlat, measureAngles, measureSides, radText } from '../src/board';
+import { eraseMeasures, hlFlat, measureAngles, measureSides, radText } from '../src/board';
 import { Pt, Shape } from '../src/model';
 
 const tri = (pts: Pt[]): Shape => {
@@ -40,5 +40,25 @@ describe('ακτίνια και χρώμα υπογραμμιστικού', () =
   it('το υπογραμμιστικό γίνεται αδιαφανές χρώμα πάνω στο φόντο', () => {
     expect(hlFlat('#fde047', [255, 255, 255])).toBe('rgb(254,244,191)');
     expect(hlFlat('yellow', [255, 255, 255])).toBeNull();
+  });
+});
+
+describe('γόμα πάνω σε μετρήσεις', () => {
+  const tri: Shape = { kind: 'shape', id: 't', shape: 'triangle', x0: 0, y0: 0, x1: 400, y1: 300, pts: [[0, 300], [400, 300], [0, 0]], color: '#111111', width: 3, meas: { len: true, ang: true, area: true } };
+  it('πάνω σε μήκος σβήνει μόνο τα μήκη', () => {
+    const p = measureSides(tri)[0].pos;
+    const r = eraseMeasures(tri, p[0], p[1], 10) as Shape;
+    expect(r.meas).toEqual({ len: false, ang: true, area: true });
+  });
+  it('πάνω σε γωνία σβήνει μόνο τις γωνίες', () => {
+    const p = measureAngles(tri)[1].pos;
+    expect((eraseMeasures(tri, p[0], p[1], 10) as Shape).meas?.ang).toBe(false);
+  });
+  it('στο κέντρο σβήνει το εμβαδόν', () => {
+    expect((eraseMeasures(tri, 400 / 3, 200, 10) as Shape).meas?.area).toBe(false);
+  });
+  it('μακριά από ετικέτες ή χωρίς μετρήσεις δεν κάνει τίποτα', () => {
+    expect(eraseMeasures(tri, 900, 900, 10)).toBeNull();
+    expect(eraseMeasures({ ...tri, meas: undefined }, 200, 318, 10)).toBeNull();
   });
 });

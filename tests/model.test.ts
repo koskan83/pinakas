@@ -127,3 +127,19 @@ describe('έγγραφο', () => {
     expect(d.pages[0].items).toEqual([]);
   });
 });
+
+describe('μετρημένη γωνία (τόξο)', () => {
+  const a: AngleItem = { kind: 'angle', id: 'm', x: 0, y: 0, a1: 0, a2: Math.PI / 2, len1: 100, len2: 100, color: '#111111', width: 3, arc: true };
+  it('πιάνεται μέσα στο άνοιγμα και πάνω στις μοίρες', () => {
+    expect(hitItem(a, 20, 20, 8)).toBe(true);
+    expect(hitItem(a, 66 * Math.SQRT1_2, 66 * Math.SQRT1_2, 8)).toBe(true);
+  });
+  it('δεν πιάνεται έξω από το άνοιγμα ή μακριά πάνω στις πλευρές', () => {
+    expect(hitItem(a, -25, -25, 8)).toBe(false);
+    expect(hitItem(a, 90, 0, 8)).toBe(false);
+  });
+  it('η γόμα τμημάτων τη σβήνει ολόκληρη', () => {
+    expect(erasePartial(a, 20, 20, 8)).toEqual([]);
+    expect(erasePartial(a, 90, 0, 8)).toBeNull();
+  });
+});
