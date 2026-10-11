@@ -31,6 +31,15 @@ function radText(deg: number): string {
   return `${n === 1 ? '' : n}π${d === 1 ? '' : `/${d}`}`;
 }
 
+const HL_ALPHA = 0.35;
+/** Το χρώμα του υπογραμμιστικού όπως φαίνεται πάνω στο φόντο `bg`, χωρίς διαφάνεια. null αν το χρώμα δεν είναι #rrggbb. */
+function hlFlat(color: string, bg: [number, number, number]): string | null {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+  if (!m) return null;
+  const ch = bg.map((b, i) => Math.round(b + (parseInt(m[i + 1], 16) - b) * HL_ALPHA));
+  return `rgb(${ch.join(',')})`;
+}
+
 function fmt(n: number): string {
   return n.toLocaleString('el', { maximumFractionDigits: 1 });
 }
@@ -791,7 +800,16 @@ export class Board {
     c.lineCap = 'round';
     c.lineJoin = 'round';
     const w = s.hl ? s.width * 4 : s.width;
-    c.globalAlpha = s.hl ? 0.35 : 1;
+    if (s.hl) {
+      // Πάνω στη σελίδα το υπογραμμιστικό «βάφει» μόνο ό,τι είναι πιο ανοιχτό από το χρώμα του (πιο σκούρο, σε σκούρο φόντο):
+      // δεύτερο πέρασμα στο ίδιο σημείο δεν το σκουραίνει και η γραφή από κάτω μένει καθαρή.
+      const dark = isDark(this.doc.bg);
+      const flat = c !== this.lctx && !this.transparent ? hlFlat(this.ink(s.color), dark ? [20, 32, 27] : [255, 255, 255]) : null;
+      if (flat) {
+        c.strokeStyle = c.fillStyle = flat;
+        c.globalCompositeOperation = dark ? 'lighten' : 'darken';
+      } else c.globalAlpha = HL_ALPHA;
+    }
     c.lineWidth = w;
     if (pts.length === 1) {
       c.beginPath();
@@ -1902,7 +1920,7 @@ export class Board {
   private armSnap(ps: PState): void {
     clearTimeout(ps.timer);
     ps.timer = window.setTimeout(() => {
-      if (ps.mode !== 'draw' || !ps.stroke || ps.live) return;
+      if (ps.mode !== 'draw' || !ps.stroke || ps.stroke.hl || ps.live) return;
       const r = recognizeShape(ps.stroke.pts);
       if (!r) return;
       const s = ps.stroke;
@@ -2003,6 +2021,18 @@ export class Board {
           break;
         }
         const pts = ps.stroke!.pts;
+        if (ps.stroke!.hl) {
+          // το υπογραμμιστικό τραβάει μόνο ευθεία· κοντά στο οριζόντιο ή το κατακόρυφο ισιώνει τελείως
+          const [ax, ay] = pts[0];
+          let bx = wx, by = wy;
+          if (Math.abs(by - ay) < Math.abs(bx - ax) * 0.14) by = ay;
+          else if (Math.abs(bx - ax) < Math.abs(by - ay) * 0.14) bx = ax;
+          // ενδιάμεσα σημεία, για να μπορεί η γόμα να σβήσει ένα κομμάτι της
+          const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 8));
+          pts.length = 1;
+          for (let i = 1; i <= n; i++) pts.push([ax + ((bx - ax) * i) / n, ay + ((by - ay) * i) / n]);
+          break;
+        }
         const last = pts[pts.length - 1];
         const minD = 1.2 / this.page.view.k;
         if (Math.hypot(wx - last[0], wy - last[1]) >= minD) pts.push([wx, wy]);
