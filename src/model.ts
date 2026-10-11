@@ -83,6 +83,12 @@ export interface AngleItem {
   len2: number;
   color: string;
   width: number;
+  /** Μόνο το τόξο και οι μοίρες, χωρίς πλευρές: γωνία που μετρήθηκε ανάμεσα σε γραμμές που υπάρχουν ήδη. */
+  arc?: boolean;
+  /** Εμφάνιση των μηκών των δύο πλευρών (meas.len). */
+  meas?: MeasOpts;
+  /** Ετικέτες στη θέση των μηκών (0, 1). */
+  labels?: Record<number, string>;
 }
 
 export type AxesMode = 'full' | 'q1' | 'q14';

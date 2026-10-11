@@ -128,7 +128,7 @@ app.insertAdjacentHTML(
       <button data-tool="highlighter"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l6 6-8 8H8l-2-2v-4z"/><path d="M3 21h13" stroke="#facc15" stroke-width="3.5"/></svg></span>Υπογραμμιστικό</button>
       <button data-tool="text"><span>T</span>Κείμενο</button>
       <button data-tool="eraser"><span><svg viewBox="0 0 24 24"><g transform="rotate(-40 12 12)"><rect x="3" y="7.5" width="9" height="9" rx="1.5" fill="#fb7185"/><rect x="12" y="7.5" width="9" height="9" rx="1.5" fill="#60a5fa"/><rect x="11" y="7.5" width="2" height="9" fill="#f9fafb"/></g></svg></span>Γόμα</button>
-      <button data-tool="measure"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16L16 3l5 5L8 21z"/><path d="M7 12l2 2M10 9l2 2M13 6l2 2"/></svg></span>Μετρήσεις: πάτα ένα σχήμα για μήκη, γωνίες, εμβαδόν, περίμετρο</button>
+      <button data-tool="measure"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16L16 3l5 5L8 21z"/><path d="M7 12l2 2M10 9l2 2M13 6l2 2"/></svg></span>Μετρήσεις: πάτα ένα σχήμα για μήκη, γωνίες, εμβαδόν, περίμετρο· σύρε μέσα σε μια γωνία για να τη μετρήσεις</button>
       <button data-tool="hand"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></span>Μετακίνηση πίνακα</button>
     </div>
     <div class="group" id="colors"></div>
@@ -816,12 +816,13 @@ const measOpts = $('measOpts');
 let measShape: string | null = null;
 function renderMeasOpts(): void {
   const sh = board.page.items.find((x) => x.id === measShape);
-  if (!sh || sh.kind !== 'shape') {
+  if (!sh || (sh.kind !== 'shape' && sh.kind !== 'angle')) {
     measOpts.classList.add('hidden');
     return;
   }
-  const line = sh.shape === 'line' || sh.shape === 'arrow';
-  const avail: Record<string, boolean> = { len: true, ang: sh.shape === 'rect' || sh.shape === 'triangle', area: !line, per: !line };
+  // ευθεία, βέλος και γωνία έχουν μόνο μήκη
+  const line = sh.kind === 'angle' || sh.shape === 'line' || sh.shape === 'arrow';
+  const avail: Record<string, boolean> = { len: true, ang: sh.kind === 'shape' && (sh.shape === 'rect' || sh.shape === 'triangle'), area: !line, per: !line };
   measOpts.querySelectorAll<HTMLButtonElement>('[data-meas]').forEach((b) => {
     const k = b.dataset.meas as keyof MeasOpts;
     b.classList.toggle('on', !!sh.meas?.[k]);
@@ -831,7 +832,7 @@ function renderMeasOpts(): void {
 measOpts.addEventListener('click', (e) => {
   const k = (e.target as HTMLElement).closest<HTMLElement>('[data-meas]')?.dataset.meas as keyof MeasOpts | undefined;
   const sh = board.page.items.find((x) => x.id === measShape);
-  if (!k || !sh || sh.kind !== 'shape') return;
+  if (!k || !sh || (sh.kind !== 'shape' && sh.kind !== 'angle')) return;
   board.setMeas(sh.id, { ...sh.meas, [k]: !sh.meas?.[k] });
   renderMeasOpts();
 });
