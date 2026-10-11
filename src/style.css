@@ -438,3 +438,14 @@ body.dark #wHead .onLight { display: block; }
 #wActs button { font: inherit; font-size: 18px; color: inherit; border: 0; cursor: pointer; padding: 14px 22px; border-radius: 14px; background: var(--bar-2); }
 #wActs button.go { background: var(--ok); color: #fff; font-weight: 600; padding: 14px 44px; }
 @media (max-width: 640px) { #wCards { grid-template-columns: 1fr; } }
+
+#menu button.end { background: var(--ok); color: #fff; font-weight: 600; }
+#setMenu .gHead { padding: 8px 12px 2px; }
+
+#libGroups { display: flex; align-items: center; gap: 8px; padding: 10px 20px 0; flex-wrap: wrap; font-size: 16px; }
+#libGroups.hidden { display: none; }
+#libGroups span { opacity: .7; margin-right: 4px; }
+#libGroups button { padding: 10px 16px; border-radius: 999px; background: var(--bar-2); font-size: 16px; }
+#libGroups button.on { background: var(--accent); color: #fff; font-weight: 600; }
+#libGroups button small { opacity: .7; font-size: 13px; }
+#libGrid .nm .grp { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 13px; vertical-align: 2px; }

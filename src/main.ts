@@ -101,11 +101,9 @@ app.insertAdjacentHTML(
   <button id="overlayClose" class="fab hidden" title="Κλείσιμο και επιστροφή στον πίνακα">✕</button>
   <div id="menu" class="popup hidden">
     ${mi('data-act="lib"', I.lib, 'Μαθήματα…')}
-    ${mi('data-act="open"', I.folder, 'Άνοιγμα αρχείου ως νέο μάθημα…')}
-    ${mi('data-act="save"', I.save, 'Αποθήκευση του μαθήματος σε αρχείο')}
+    ${mi('data-act="end" class="end"', I.send, 'Τέλος μαθήματος: QR για τους μαθητές')}
+    ${mi('data-act="send"', I.send, 'Αποστολή με επιλογή σελίδων…')}
     ${mi('data-act="pdf"', I.doc, 'Εξαγωγή σε PDF…')}
-    ${mi('data-act="png"', I.image, 'Εξαγωγή σελίδας σε PNG')}
-    ${mi('data-act="send"', I.send, 'Αποστολή στους μαθητές (QR)…')}
     <hr />
     <div class="bgRow">
       <span>Φόντο</span>
@@ -121,13 +119,22 @@ app.insertAdjacentHTML(
     ${mi('data-act="clear"', I.clear, 'Καθαρισμός σελίδας')}
     ${mi('data-act="delpage"', I.delpage, 'Διαγραφή σελίδας')}
     <hr />
-    ${mi('data-act="overlay" id="overlayAct" class="hidden"', I.screen, 'Γράψιμο πάνω από άλλα προγράμματα')}
-    ${mi('data-act="ai"', I.spark, 'Αναγνώριση γραφής (ρυθμίσεις)…')}
     ${mi('data-act="full"', I.full, 'Πλήρης οθόνη')}
+    ${mi('data-act="overlay" id="overlayAct" class="hidden"', I.screen, 'Γράψιμο πάνω από άλλα προγράμματα')}
+    ${mi('data-act="help"', I.doc, 'Οδηγίες χρήσης')}
+    ${mi('data-act="more"', I.target, 'Ρυθμίσεις και αρχεία…')}
+  </div>
+  <div id="setMenu" class="popup hidden">
+    <div class="gHead">Ρυθμίσεις</div>
+    ${mi('data-act="ai"', I.spark, 'Αναγνώριση γραφής και λύσεις (κλειδί)…')}
     ${mi('data-act="labels"', I.tag, 'Ονόματα κάτω από τα εικονίδια')}
     ${mi('data-act="pdflogo"', I.doc, 'Λογότυπο στις σελίδες του PDF')}
+    <div class="gHead">Αρχεία</div>
+    ${mi('data-act="open"', I.folder, 'Άνοιγμα αρχείου ως νέο μάθημα…')}
+    ${mi('data-act="save"', I.save, 'Αποθήκευση του μαθήματος σε αρχείο')}
+    ${mi('data-act="png"', I.image, 'Εξαγωγή σελίδας σε PNG')}
+    <div class="gHead">Έλεγχος της οθόνης</div>
     ${mi('data-act="diag"', I.target, 'Διάγνωση αφής/γραφίδας')}
-    ${mi('data-act="help"', I.doc, 'Οδηγίες χρήσης')}
     ${mi('data-act="test"', I.check, 'Λίστα δοκιμής στην τάξη')}
   </div>
 
@@ -244,6 +251,7 @@ app.insertAdjacentHTML(
     <button data-rec="text" class="rec" title="Αναγνώριση της επιλογής ως κείμενο"><span class="txt">Aα</span><small>Σε κείμενο</small></button>
     <button data-rec="math" class="rec" title="Αναγνώριση της επιλογής ως τύπο"><span class="txt">√x</span><small>Σε τύπο</small></button>
     <button data-rec="solve" class="rec solve" title="Λύση της επιλεγμένης άσκησης (μπαίνει από κάτω)"><span class="txt">x=?</span><small>Λύση</small></button>
+    <button data-rec="check" class="rec check" title="Έλεγχος της λύσης ενός μαθητή: δείχνει σε ποια γραμμή είναι το πρώτο λάθος"><span class="txt">✓?</span><small>Έλεγχος</small></button>
   </div>
   <div id="gadgetMenu" class="popup hidden">
     <div class="gHead" id="recentHead">Πρόσφατα</div>
@@ -364,7 +372,7 @@ app.insertAdjacentHTML(
         <div><i>${PENCIL_ICON}</i><b>Γράψε αμέσως</b><span>Το στυλό γράφει. Η παλάμη ή η γροθιά σβήνει. Δύο δάχτυλα μετακινούν και μεγεθύνουν.</span></div>
         <div><i>${I.ruler}</i><b>Όργανα</b><span>Σχήματα που μετριούνται, άξονες και συναρτήσεις, χάρακας, διαβήτης, κουρτίνα.</span></div>
         <div><i>${I.doc}</i><b>Δεν χάνεται τίποτα</b><span>Ό,τι γράφεις αποθηκεύεται μόνο του. Τα μαθήματά σου είναι στο όνομα πάνω αριστερά.</span></div>
-        <div><i>${I.send}</i><b>Στο τέλος, ένα QR</b><span>☰ → «Αποστολή στους μαθητές»: σκανάρουν και παίρνουν το μάθημα σε PDF.</span></div>
+        <div><i>${I.send}</i><b>Στο τέλος, ένα QR</b><span>☰ → «Τέλος μαθήματος»: οι μαθητές σκανάρουν και παίρνουν το μάθημα σε PDF.</span></div>
       </div>
       <div id="wActs"><button id="wHelp">Πλήρεις οδηγίες (PDF)</button><button id="wGo" class="go">Ξεκίνα</button></div>
     </div>
@@ -1102,19 +1110,26 @@ async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
   const img = await board.inkImage(ids);
   if (!img) return;
   aiBusy++;
-  toast(kind === 'solve' ? '✨ Λύνεται…' : '✨ Αναγνώριση…', 0);
+  toast(kind === 'solve' ? '✨ Λύνεται…' : kind === 'check' ? '✨ Ελέγχεται…' : '✨ Αναγνώριση…', 0);
   try {
     const out = await recognize(img.blob, kind, ai);
     if (!out) {
-      toast(kind === 'solve' ? 'Δεν βρήκα κάτι να λύσω' : 'Δεν μπόρεσα να το διαβάσω');
+      toast(kind === 'solve' ? 'Δεν βρήκα κάτι να λύσω' : kind === 'check' ? 'Δεν βρήκα λύση να ελέγξω' : 'Δεν μπόρεσα να το διαβάσω');
       return;
     }
     if (board.cur !== page) {
-      toast(kind === 'solve' ? 'Άλλαξες σελίδα· η λύση δεν μπήκε' : 'Άλλαξες σελίδα· η αναγνώριση δεν εφαρμόστηκε');
+      toast(kind === 'solve' ? 'Άλλαξες σελίδα· η λύση δεν μπήκε' : kind === 'check' ? 'Άλλαξες σελίδα· ο έλεγχος δεν μπήκε' : 'Άλλαξες σελίδα· η αναγνώριση δεν εφαρμόστηκε');
       return;
     }
     const { box, color } = img;
     const bh = box.y1 - box.y0;
+    if (kind === 'check') {
+      // η κρίση μπαίνει κάτω από τη λύση του μαθητή: πράσινη αν είναι σωστή, κόκκινη αν έχει λάθος
+      const ok = out.startsWith('✓');
+      board.addItem({ kind: 'text', id: uid(), x: box.x0, y: box.y1 + 24, text: out, size: 30, color: ok ? '#059669' : '#dc2626' });
+      toast(ok ? 'Δεν βρέθηκε λάθος. Ρίξε κι εσύ μια ματιά.' : 'Βρέθηκε πιθανό λάθος. Έλεγξέ το πριν το πεις στον μαθητή.', 5000);
+      return;
+    }
     if (kind === 'solve') {
       // η λύση μπαίνει κάτω από την άσκηση, χωρίς να πειράξει το χειρόγραφο
       const lines = out.split('\\\\').length;
@@ -1136,7 +1151,7 @@ async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
     }
     $('toast').classList.add('hidden');
   } catch (err) {
-    toast(`${kind === 'solve' ? 'Η λύση' : 'Η αναγνώριση'} απέτυχε: ${(err as Error).message}`, 6000);
+    toast(`${kind === 'solve' ? 'Η λύση' : kind === 'check' ? 'Ο έλεγχος' : 'Η αναγνώριση'} απέτυχε: ${(err as Error).message}`, 6000);
   } finally {
     aiBusy--;
   }
@@ -1755,7 +1770,7 @@ tplMenu.addEventListener('click', (e) => {
 // ---------- κύριο μενού ----------
 
 if (isNative && !isOverlay) $('overlayAct').classList.remove('hidden');
-menu.addEventListener('click', async (e) => {
+const onMenu = async (e: Event): Promise<void> => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
   if (!b) return;
   const act = b.dataset.act!;
@@ -1807,8 +1822,17 @@ menu.addEventListener('click', async (e) => {
     openAi();
   } else if (act === 'diag') {
     $('diag').classList.toggle('hidden');
+  } else if (act === 'end') {
+    void endLesson();
+  } else if (act === 'more') {
+    const m = $('setMenu');
+    m.classList.remove('hidden');
+    m.style.left = '14px';
+    m.style.top = '80px';
   }
-});
+};
+menu.addEventListener('click', (e) => void onMenu(e));
+$('setMenu').addEventListener('click', (e) => void onMenu(e));
 
 // ---------- διάγνωση ----------
 
@@ -1950,9 +1974,10 @@ function loadLogo(): Promise<HTMLImageElement | null> {
 }
 
 /** Το PDF του μαθήματος· με πάνω από μία σελίδα ρωτά ποιες θα μπουν. null αν ο χρήστης ακύρωσε. */
-async function lessonPdf(): Promise<Blob | null> {
+/** Το PDF του μαθήματος. `all`: όλες οι σελίδες, χωρίς ερώτηση. */
+async function lessonPdf(all = false): Promise<Blob | null> {
   const total = board.doc.pages.length;
-  const only = total > 1 ? await pickPages('Ποιες σελίδες θα μπουν στο PDF;', 'Εξαγωγή', total, (i, w) => board.pageThumb(i, w), board.cur) : undefined;
+  const only = total > 1 && !all ? await pickPages('Ποιες σελίδες θα μπουν στο PDF;', 'Εξαγωγή', total, (i, w) => board.pageThumb(i, w), board.cur) : undefined;
   if (only === null) return null;
   const mark = pdfLogo ? await loadLogo() : null;
   const pages = await board.exportJpegPages((d, n) => toast(`Ετοιμάζεται το PDF… σελίδα ${d + 1} από ${n}`, 0), mark ?? undefined, only);
@@ -2084,6 +2109,44 @@ $('sendDrive').onclick = async () => {
     toast(`Δεν ανέβηκε: ${err instanceof Error ? err.message : err}`, 8000);
   }
 };
+/** «Τέλος μαθήματος»: όλο το μάθημα σε PDF, στο Drive, και μεγάλο QR στην οθόνη, με ένα πάτημα. */
+async function endLesson(): Promise<void> {
+  if (!driveClientId()) return openSend();
+  const name = `${fileName(lessons?.current?.name ?? 'mathima')}_${stamp()}.pdf`;
+  try {
+    // η σύνδεση πρώτα, όσο «μετράει» ακόμα το πάτημα: αλλιώς ο browser μπλοκάρει το παράθυρο της Google
+    await driveConnect();
+    const pdf = await lessonPdf(true);
+    if (!pdf) return;
+    toast('Ανεβαίνει στο Google Drive…', 0);
+    const up = await uploadToDrive(pdf, name);
+    sendUrl = up.url;
+    if (up.shared) {
+      showBigQr();
+      toast('Έτοιμο: οι μαθητές σκανάρουν το QR');
+    } else {
+      // χωρίς κοινή χρήση το QR δεν θα άνοιγε στους μαθητές: δείχνουμε το παράθυρο με την εξήγηση
+      drawQr($('sendQr') as HTMLCanvasElement, up.url);
+      $('sendUrl').textContent = up.url;
+      $('sendNote').textContent = 'Το αρχείο ανέβηκε στον φάκελο «PrismaBoard», αλλά ο λογαριασμός δεν επιτρέπει κοινή χρήση με σύνδεσμο. Άνοιξέ το στο Drive και μοίρασέ το από εκεί.';
+      renderSend();
+      $('sendOut').classList.remove('hidden');
+      showSend();
+      toast('Ανέβηκε');
+    }
+    void lessons?.cloudBackup(true);
+  } catch (err) {
+    console.error(err);
+    toast(`Δεν ανέβηκε: ${err instanceof Error ? err.message : err}`, 8000);
+  }
+}
+function showBigQr(): void {
+  const big = $('qrBig');
+  drawQr(big.querySelector('canvas')!, sendUrl);
+  big.querySelector('div')!.textContent = 'Σκανάρετε για τις σημειώσεις του μαθήματος · πάτημα για κλείσιμο';
+  big.classList.remove('hidden');
+  closePopups();
+}
 $('sendShare').onclick = async () => {
   try {
     const name = `${fileName(lessons?.current?.name ?? 'mathima')}_${stamp()}.pdf`;
@@ -2100,13 +2163,7 @@ $('sendShare').onclick = async () => {
 $('sendCopy').onclick = () => {
   navigator.clipboard?.writeText(sendUrl).then(() => toast('Ο σύνδεσμος αντιγράφηκε'), () => toast('Δεν έγινε αντιγραφή', 4000));
 };
-$('sendBig').onclick = () => {
-  const big = $('qrBig');
-  drawQr(big.querySelector('canvas')!, sendUrl);
-  big.querySelector('div')!.textContent = 'Σκανάρετε για τις σημειώσεις του μαθήματος · πάτημα για κλείσιμο';
-  big.classList.remove('hidden');
-  closePopups();
-};
+$('sendBig').onclick = showBigQr;
 $('qrBig').onclick = () => $('qrBig').classList.add('hidden');
 
 // ---------- οθόνη πρώτης χρήσης ----------

@@ -3,7 +3,7 @@
 export type Provider = 'gemini' | 'claude';
 export type RecKind = 'text' | 'math';
 /** Τι ζητάμε από την υπηρεσία: μεταγραφή (κείμενο ή τύπος) ή λύση της άσκησης. */
-export type AiTask = RecKind | 'solve';
+export type AiTask = RecKind | 'solve' | 'check';
 
 export interface AiSettings {
   provider: Provider;
@@ -59,6 +59,15 @@ const PROMPT: Record<AiTask, string> = {
     'Any words must be in Greek, very short, inside \\text{}. Use a decimal comma. ' +
     'Reply with the LaTeX only: no $ delimiters, no code fences, no explanation. ' +
     'If nothing is readable or there is nothing to solve reply with an empty message.',
+  check:
+    'The image shows a student\'s handwritten solution to a mathematics or physics exercise on a Greek secondary-school classroom whiteboard, ' +
+    'usually several lines, each following from the previous one. Check it line by line. ' +
+    'Reply in Greek, in plain text (no LaTeX, no Markdown), with maths in Unicode (x², √, ·, ≤, ≠). ' +
+    'If every step and the final answer are correct, reply with exactly one line starting with "✓ " and a very short confirmation. ' +
+    'Otherwise reply with at most three short lines: the first starts with "✗ " and says in which line (counting from the top) the first mistake is; ' +
+    'the second says in a few words what went wrong; the third gives the correct form of that one line only. ' +
+    'Do not write out the rest of the solution and do not comment on handwriting or style. ' +
+    'If nothing is readable or it is not a worked solution reply with an empty message.',
 };
 
 async function toBase64(blob: Blob): Promise<string> {
@@ -99,7 +108,7 @@ export async function recognize(png: Blob, kind: AiTask, s: AiSettings): Promise
       },
       body: JSON.stringify({
         model,
-        max_tokens: kind === 'solve' ? 3000 : 1024,
+        max_tokens: kind === 'solve' ? 3000 : kind === 'check' ? 2000 : 1024,
         messages: [{
           role: 'user',
           content: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data } }, { type: 'text', text: PROMPT[kind] }],
@@ -116,7 +125,9 @@ export async function recognize(png: Blob, kind: AiTask, s: AiSettings): Promise
   }
   const json = await res.json();
   const parts: { text?: string }[] = s.provider === 'gemini' ? json.candidates?.[0]?.content?.parts ?? [] : json.content ?? [];
-  return clean(parts.map((p) => p.text ?? '').join(''));
+  const raw = parts.map((p) => p.text ?? '').join('');
+  // ο έλεγχος λύσης είναι σκέτο κείμενο: δεν έχει περιτύλιγμα LaTeX να καθαριστεί
+  return kind === 'check' ? raw.trim() : clean(raw);
 }
 
 // ---------- LaTeX → εικόνα ----------

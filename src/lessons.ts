@@ -10,6 +10,8 @@ export interface LessonMeta {
   /** Τελευταία αλλαγή (ms). */
   updated: number;
   pages: number;
+  /** Τμήμα ή τάξη στην οποία ανήκει (π.χ. «Β2»), αν έχει οριστεί. */
+  group?: string;
   /** Μικρογραφία της πρώτης σελίδας (data URL). */
   thumb?: string;
 }
@@ -36,6 +38,7 @@ interface SafeState {
   gone: string[];
 }
 const SAFE = 'grafida.safe';
+const GROUP = 'grafida.group';
 const DAY = 86400000;
 /** Μετά από τόσες μέρες χωρίς αντίγραφο το κουμπί των μαθημάτων δείχνει υπενθύμιση. */
 const REMIND_DAYS = 7;
@@ -79,6 +82,8 @@ export class Lessons {
   /** Όσο φορτώνουμε πίνακα, οι «αλλαγές» του δεν μετράνε ως επεξεργασία. */
   private loading = false;
   private safe = loadSafe();
+  /** Το τμήμα που φαίνεται στη βιβλιοθήκη· κενό = όλα. */
+  private filter = (() => { try { return localStorage.getItem(GROUP) ?? ''; } catch { return ''; } })();
   private busy = false;
 
   constructor(private host: LessonHost, parent: HTMLElement) {
@@ -100,6 +105,7 @@ export class Lessons {
           <button data-lib="cloud" class="go" title="Ανεβάζει στο δικό σου Google Drive όσα μαθήματα άλλαξαν">☁ Αντίγραφο στο Drive</button>
           <button data-lib="cloudGet" title="Φέρνει από το Google Drive μαθήματα που λείπουν ή είναι νεότερα εκεί">☁ Φέρε από το Drive</button>
         </div>
+        <div id="libGroups"></div>
         <div id="libGrid"></div>
         <input id="libFile" type="file" accept=".json,application/json" hidden />
       </div>`,
@@ -361,18 +367,35 @@ export class Lessons {
     this.el.classList.add('hidden');
   }
 
+  private get groups(): string[] {
+    return [...new Set(this.index.map((m) => m.group).filter((g): g is string => !!g))].sort((a, b) => a.localeCompare(b, 'el'));
+  }
+
+  private setFilter(g: string): void {
+    this.filter = g;
+    try { localStorage.setItem(GROUP, g); } catch { /* χωρίς αποθήκευση */ }
+  }
+
   private render(): void {
-    const list = [...this.index].sort((a, b) => b.updated - a.updated);
+    const groups = this.groups;
+    if (this.filter && !groups.includes(this.filter)) this.setFilter('');
+    const bar = this.el.querySelector<HTMLElement>('#libGroups')!;
+    bar.classList.toggle('hidden', groups.length === 0);
+    bar.innerHTML = `<span>Τμήμα</span>` + ['', ...groups]
+      .map((g) => `<button data-group="${esc(g)}" class="${g === this.filter ? 'on' : ''}">${g ? esc(g) : 'Όλα'} <small>${this.index.filter((m) => !g || m.group === g).length}</small></button>`)
+      .join('');
+    const list = [...this.index].filter((m) => !this.filter || m.group === this.filter).sort((a, b) => b.updated - a.updated);
     this.el.querySelector('#libGrid')!.innerHTML = list
       .map((m) => {
         const d = new Date(m.updated);
         const when = `${d.toLocaleDateString('el')} ${d.toLocaleTimeString('el', { hour: '2-digit', minute: '2-digit' })}`;
         return `<div class="card${m.id === this.cur ? ' on' : ''}" data-id="${m.id}">
           <div class="th">${m.thumb ? `<img src="${m.thumb}" alt="" />` : ''}</div>
-          <div class="nm">${esc(m.name)}</div>
+          <div class="nm">${m.group ? `<span class="grp">${esc(m.group)}</span>` : ''}${esc(m.name)}</div>
           <div class="info">${when} · ${m.pages} ${m.pages === 1 ? 'σελίδα' : 'σελίδες'}</div>
           <div class="acts">
             <button data-card="rename">Όνομα</button>
+            <button data-card="group">Τμήμα</button>
             <button data-card="copy">Αντίγραφο</button>
             <button data-card="file">Αρχείο</button>
             <button data-card="del" class="danger">Διαγραφή</button>
@@ -390,8 +413,18 @@ export class Lessons {
       const name = prompt('Όνομα μαθήματος (π.χ. Β2 Τριγωνομετρία)', this.defaultName())?.trim();
       if (!name) return;
       const meta = await this.add(newDoc(), name.slice(0, 60));
+      // μέσα σε τμήμα, το νέο μάθημα ανήκει σε αυτό
+      if (this.filter) {
+        meta.group = this.filter;
+        await kvSet(INDEX, this.index);
+      }
       await this.show(meta.id);
       return this.close();
+    }
+    const grp = t.closest<HTMLElement>('[data-group]');
+    if (grp) {
+      this.setFilter(grp.dataset.group ?? '');
+      return this.render();
     }
     if (top === 'backup') return void this.backup();
     if (top === 'cloud') return void this.cloudBackup();
@@ -412,9 +445,16 @@ export class Lessons {
       meta.name = name.slice(0, 60);
       await kvSet(INDEX, this.index);
       this.renderLabel();
+    } else if (act === 'group') {
+      const have = this.groups;
+      const g = prompt(`Τμήμα ή τάξη του μαθήματος (π.χ. Β2). Άφησέ το κενό για κανένα.${have.length ? `\nΥπάρχουν: ${have.join(', ')}` : ''}`, meta.group ?? this.filter);
+      if (g === null) return;
+      meta.group = g.trim().slice(0, 20) || undefined;
+      meta.updated = Date.now();
+      await kvSet(INDEX, this.index);
     } else if (act === 'copy') {
       const doc = await kvGet<Doc>(key(meta.id));
-      if (doc) (await this.add(doc, `${meta.name} (αντίγραφο)`)).thumb = meta.thumb;
+      if (doc) Object.assign(await this.add(doc, `${meta.name} (αντίγραφο)`), { thumb: meta.thumb, group: meta.group });
       await kvSet(INDEX, this.index);
     } else if (act === 'file') {
       const doc = await kvGet<Doc>(key(meta.id));
