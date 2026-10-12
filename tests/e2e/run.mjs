@@ -518,6 +518,15 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   // κυβάκια: όσο κρατάς πατημένο για να χτίσεις, το εργαλείο πρέπει να μένει στην οθόνη
   await page.click('#gadgetBtn');
   await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-kid="build"]');
+  // τα κυβάκια ανοίγουν σε όλη την οθόνη: χωρίς γραμμή εργαλείων, με πόρτα επιστροφής στο τέλος των υλικών
+  const fullOpen = await visible('#buildView');
+  const barHidden = await page.evaluate(() => document.elementFromPoint(innerWidth / 2, innerHeight - 30).closest('#buildView') !== null);
+  await drag(400, 300, 520, 300);
+  const fg = await page.evaluate(() => { const bar = Math.max(64, Math.min(120, innerHeight * 0.12)); const s = Math.min(innerWidth / 24, (innerHeight - bar) / 14); return { x: (innerWidth + s * 24) / 2 - 10, y: (s * 14 + innerHeight) / 2 }; });
+  await page.mouse.click(fg.x, fg.y);
+  const fullClosed = !(await visible('#buildView'));
+  const fullBuilt = (await items(pi)).find((i) => i.kind === 'stamp' && i.name === 'build');
+  const fullBlocks = fullBuilt ? fullBuilt.v.slice(1).filter((n) => n > 0).length : 0;
   const sky = () => page.evaluate(([x, y]) => {
     const cv = document.getElementById('base');
     const f = cv.width / cv.clientWidth;
@@ -533,8 +542,13 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   const blocks = built ? built.v.slice(1).filter((n) => n > 0).length : 0;
   await page.click('#undo');
   await page.click('#undo');
+  await page.click('#undo');
   await page.reload();
   await page.waitForSelector('#toolbar');
+  assert(fullOpen && barHidden, 'τα κυβάκια δεν άνοιξαν σε όλη την οθόνη ή φαίνεται ακόμα η γραμμή εργαλείων');
+  assert(fullBlocks >= 2, `σε όλη την οθόνη το σύρσιμο έχτισε ${fullBlocks} κυβάκια αντί για τουλάχιστον 2`);
+  assert(fullClosed, 'η πόρτα δεν γύρισε πίσω στον πίνακα');
+  assert(blocks > fullBlocks, 'μετά την επιστροφή, το χτίσιμο πάνω στη σελίδα δεν πρόσθεσε κυβάκια');
   assert(skyBefore === '224,242,254', `τα κυβάκια δεν ζωγραφίστηκαν εκεί που περίμενα (χρώμα ${skyBefore})`);
   assert(skyDuring === skyBefore, `όσο χτίζεις, το εργαλείο εξαφανίζεται από την οθόνη (χρώμα ${skyDuring})`);
   assert(blocks >= 2, `το σύρσιμο έχτισε ${blocks} κυβάκια αντί για τουλάχιστον 2`);

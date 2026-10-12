@@ -16,6 +16,8 @@ export interface KidEnv {
   ink: string;
   /** Το χρώμα του φόντου, για «κενά» γεμίσματα. */
   bg: string;
+  /** Το εργαλείο γεμίζει όλη την οθόνη (κυβάκια): το τελευταίο κουμπί του γίνεται «πόρτα» επιστροφής. */
+  full?: boolean;
 }
 
 const el = (n: number, d = 2): string => (+n.toFixed(d) || 0).toLocaleString('el', { maximumFractionDigits: d }).replace('-', '−');
@@ -310,10 +312,10 @@ function drawBlock(c: C, type: number, x: number, y: number, s: number): void {
   c.lineWidth = Math.max(1, s * 0.04);
   c.strokeRect(x, y, s, s);
 }
-/** Διάταξη του εργαλείου: πλέγμα επάνω, σειρά υλικών κάτω (υλικά, γόμα, καθάρισμα). */
+/** Διάταξη του εργαλείου: πλέγμα επάνω, σειρά υλικών κάτω (υλικά, γόμα, καθάρισμα, και στο τέλος «όλη η οθόνη» ή πόρτα επιστροφής). */
 function buildGeom(w: number, h: number): { s: number; gh: number; slots: number; sw: number; py: number; ps: number } {
   const s = w / BCOLS, gh = s * BROWS;
-  const slots = BLOCKS.length + 2, sw = w / slots;
+  const slots = BLOCKS.length + 3, sw = w / slots;
   return { s, gh, slots, sw, py: gh + (h - gh) / 2, ps: Math.min(sw * 0.74, (h - gh) * 0.7) };
 }
 
@@ -1052,7 +1054,33 @@ export const KIDS: Record<string, StampDef> = {
       for (let k = 0; k < g.slots; k++) {
         const cx = g.sw * (k + 0.5), x = cx - g.ps / 2, y = g.py - g.ps / 2;
         if (k < BLOCKS.length) drawBlock(c, k, x, y, g.ps);
-        else text(c, k === BLOCKS.length ? '🧽' : '🗑️', cx, g.py + 1, g.ps * 0.8);
+        else if (k < BLOCKS.length + 2) text(c, k === BLOCKS.length ? '🧽' : '🗑️', cx, g.py + 1, g.ps * 0.8);
+        else if (env.full) {
+          // πόρτα επιστροφής: μπλε κουμπί, για να ξεχωρίζει από τα υλικά
+          rrect(c, x - g.ps * 0.14, y - g.ps * 0.14, g.ps * 1.28, g.ps * 1.28, g.ps * 0.22);
+          c.save();
+          c.fillStyle = BLUE;
+          c.fill();
+          c.restore();
+          text(c, '🚪', cx, g.py + 1, g.ps * 0.8);
+        }
+        else {
+          // «όλη η οθόνη»: τέσσερις γωνίες που ανοίγουν
+          const r = g.ps * 0.38, q = g.ps * 0.2;
+          c.save();
+          c.strokeStyle = env.ink;
+          c.lineWidth = Math.max(2.5, g.ps * 0.09);
+          c.lineCap = 'round';
+          c.lineJoin = 'round';
+          c.beginPath();
+          for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+            c.moveTo(cx + sx * r, g.py + sy * (r - q));
+            c.lineTo(cx + sx * r, g.py + sy * r);
+            c.lineTo(cx + sx * (r - q), g.py + sy * r);
+          }
+          c.stroke();
+          c.restore();
+        }
         if (k === sel) {
           c.save();
           c.strokeStyle = env.ink;
@@ -1070,6 +1098,10 @@ export const KIDS: Record<string, StampDef> = {
       c.fillText(`${count} κυβάκια`, w - g.s * 0.2, g.s * 0.14);
       c.restore();
     },
+    fullAt(x, y, w, h) {
+      const g = buildGeom(w, h);
+      return y >= g.gh && y <= h && Math.floor(x / g.sw) === g.slots - 1;
+    },
     paint(v, x, y, w, h, st, first) {
       const g = buildGeom(w, h);
       const out = [v[0] ?? 0, ...bcells(v)];
@@ -1086,6 +1118,7 @@ export const KIDS: Record<string, StampDef> = {
       if (!first || y < g.gh || y > h) return null;
       st.pal = 1;
       const k = Math.max(0, Math.min(g.slots - 1, Math.floor(x / g.sw)));
+      if (k > BLOCKS.length + 1) return null;
       if (k === BLOCKS.length + 1) return [sel >= BLOCKS.length ? 0 : sel];
       out[0] = k;
       return out;

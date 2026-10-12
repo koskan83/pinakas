@@ -121,6 +121,8 @@ export class Board {
   onUi: () => void = () => {};
   /** Όταν άξονες με συναρτήσεις αφεθούν πάνω σε άλλους: επιστρέφει τους ενωμένους άξονες, ή null για απλή μετακίνηση. */
   /** Ερώτηση προς τον χρήστη από εργαλείο του Δημοτικού (π.χ. λέξη της κρεμάλας). */
+  /** Πατήθηκε το «όλη η οθόνη» ενός εργαλείου του Δημοτικού (κυβάκια). */
+  onKidFull: (it: StampItem) => void = () => {};
   onAsk: (q: KidAsk) => Promise<string | null> = () => Promise.resolve(null);
   onMergeAxes: (target: AxesItem, dropped: AxesItem) => AxesItem | null = () => null;
   onPointerInfo: (e: PointerEvent, count: number) => void = () => {};
@@ -392,13 +394,33 @@ export class Board {
     this.onUi();
   }
 
-  /** Οι επιλεγμένοι άξονες, αν η επιλογή είναι άξονες. */
+  /** Η κατάσταση ενός εργαλείου του Δημοτικού, ή null αν δεν υπάρχει στη σελίδα. */
+  kidState(id: string): number[] | null {
+    const it = this.page.items.find((x) => x.id === id);
+    return it && it.kind === 'stamp' ? it.v ?? STAMPS[it.name]?.init ?? [] : null;
+  }
+
+  /** Αλλάζει την κατάσταση ενός εργαλείου του Δημοτικού (με αναίρεση). */
+  setKidState(id: string, v: number[]): void {
+    const i = this.page.items.findIndex((x) => x.id === id);
+    const before = this.page.items[i];
+    if (!before || before.kind !== 'stamp') return;
+    const after: StampItem = { ...before, v };
+    this.page.items[i] = after;
+    this.push({ t: 'mod', p: this.cur, before, after });
+    this.redraw();
+  }
+
   /** Σύρσιμο πάνω σε εργαλείο του Δημοτικού που «ζωγραφίζεται» (κυβάκια, δείκτες ρολογιού). false αν το σημείο δεν το αφορά. */
   kidPaint(ps: PState, it: StampItem, wx: number, wy: number, first: boolean): boolean {
     const d = STAMPS[it.name];
     if (!d?.paint) return false;
     if (first) ps.kid = {};
     const [lx, ly] = unrot(it, wx, wy);
+    if (first && d.fullAt?.(lx - it.x, ly - it.y, it.w, it.h)) {
+      this.onKidFull(it);
+      return true;
+    }
     const v = d.paint(it.v ?? d.init ?? [], lx - it.x, ly - it.y, it.w, it.h, ps.kid!, first);
     if (!v) return false;
     this.page.items[this.page.items.indexOf(it)] = { ...it, v };

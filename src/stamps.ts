@@ -57,6 +57,8 @@ export interface StampDef {
    * το σύρσιμο μετακινεί το εργαλείο ως συνήθως. `st`: πρόχειρη μνήμη για όσο κρατά η κίνηση.
    */
   paint?(v: number[], x: number, y: number, w: number, h: number, st: Record<string, number>, first: boolean): number[] | null;
+  /** true αν το σημείο είναι το κουμπί «όλη η οθόνη» του εργαλείου (ή η πόρτα επιστροφής, όταν είναι ήδη σε όλη την οθόνη). */
+  fullAt?(x: number, y: number, w: number, h: number): boolean;
 }
 
 function path(c: C, pts: number[][], close = false): void {

@@ -8,6 +8,7 @@ import { isNative, isOverlay, nativeScreenshot, openOverlay } from './native';
 import { STAMPS } from './stamps';
 import { PEN_ICON, PenKind } from './ui';
 import { ask, confirmBox, notice } from './dialog';
+import { openBuildView } from './build-view';
 import { NEWS, VERSION, newsPending } from './news';
 import { BUILTIN, type Template } from './pages';
 import { $, HL_PALETTE, MORE_COLORS, PALETTE, SIZES, SIZE_NAME, app, board, curtain, curtainTop, download, fileName, layoutBar, spot, stamp, timer, toast } from './app';
@@ -367,6 +368,7 @@ function placeSelBar(): void {
   el.style.top = `${y}px`;
 }
 board.onUi = refreshUi;
+board.onKidFull = (it) => openBuildView(board, it.id);
 board.onAsk = (q) => ask(q.title, { hint: q.hint, secret: q.secret, max: 24 });
 board.onMergeAxes = (target, dropped) => {
   const pal = [...inkPalette().slice(1), '#ea580c', '#7c3aed'];
@@ -512,6 +514,8 @@ gadgetMenu.addEventListener('click', (e) => {
     closePopups();
     board.addStamp(kidTool);
     refreshUi();
+    // τα κυβάκια ανοίγουν κατευθείαν σε όλη την οθόνη· η πόρτα στο τέλος των υλικών γυρίζει στον πίνακα
+    if (kidTool === 'build' && board.selectionIds[0]) openBuildView(board, board.selectionIds[0]);
     return;
   }
   const shape = t.closest<HTMLElement>('[data-shape]')?.dataset.shape;
