@@ -12,7 +12,7 @@ import { closeOverlay, isNative, isOverlay, nativeSave, nativeScreenshot, openOv
 import { Curtain, Spotlight } from './overlays';
 import { STAMPS } from './stamps';
 import { Params, compile, fnOf, paramsOf } from './expr';
-import { fitScaleX, fitScaleY, pickAxesMode } from './analysis';
+import { crossings, enclosing, fitScaleX, fitScaleY, pickAxesMode } from './analysis';
 import { buildPdf } from './pdf';
 import { AiTask, MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage, parseGraphReply } from './ai';
 import { axesRange, itemBounds, uid, wrapText } from './model';
@@ -408,7 +408,16 @@ function toggleAnalysis(key: string): void {
   const newInt = { a: inX(1), b: inX(3) };
   if (key === 'int') {
     if (!an.int) an.int = newInt;
-    else if (!an.int.between && shown >= 2) an.int = { ...an.int, between: true };
+    else if (!an.int.between && shown >= 2) {
+      an.int = { ...an.int, between: true };
+      // το χωρίο ανάμεσα στις δύο καμπύλες ορίζεται από τα σημεία τομής τους: τα άκρα πάνε μόνα τους εκεί
+      const two = (ax.fns ?? []).filter((d) => !d.hidden).map((d) => fnOf(d)).filter((d) => !!d).map((d) => (x: number) => d!(x, ax.params ?? {}));
+      const pair = two.length >= 2 ? enclosing(crossings(two[0], two[1], r.xmin * sx, r.xmax * sx), (an.int.a + an.int.b) / 2) : null;
+      if (pair) {
+        an.int = { ...an.int, a: pair[0], b: pair[1] };
+        toast('Τα άκρα μπήκαν στα σημεία τομής των δύο καμπυλών. Σύρε τα για άλλο χωρίο.', 4500);
+      } else toast('Οι δύο καμπύλες δεν τέμνονται δύο φορές μέσα στους άξονες. Όρισε τα άκρα σέρνοντάς τα.', 4500);
+    }
     else delete an.int;
   } else if (key === 'sum') {
     const n = an.int?.n;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asymptotes, integrate, lineEq, nf, oneSided, riemann, slope, fitScaleX, fitScaleY, pickAxesMode } from '../src/analysis';
+import { asymptotes, integrate, lineEq, nf, oneSided, riemann, slope, crossings, enclosing, fitScaleX, fitScaleY, pickAxesMode } from '../src/analysis';
 import { parseGraphReply } from '../src/ai';
 import { domText, fnOf } from '../src/expr';
 
@@ -154,5 +154,24 @@ describe('fitScaleX', () => {
     expect(fitScaleX([[20, null]], 10)).toBe(5);
     expect(fitScaleX([undefined], 10)).toBe(1);
     expect(fitScaleX([[0, 50], undefined], 10)).toBe(1);
+  });
+});
+
+describe('σημεία τομής', () => {
+  it('παραβολή και ευθεία τέμνονται σε δύο σημεία', () => {
+    expect(crossings((x) => x * x, (x) => x + 2, -10, 10)).toEqual([-1, 2]);
+    expect(integrate((x) => x + 2 - x * x, -1, 2)).toBeCloseTo(4.5, 3);
+  });
+  it('ρίζες, όταν δεν υπάρχει δεύτερη συνάρτηση', () => {
+    const xs = crossings((x) => x * x - 2, null, -10, 10);
+    expect(xs).toHaveLength(2);
+    expect(xs[1]).toBeCloseTo(Math.SQRT2, 5);
+  });
+  it('η ασύμπτωτη δεν είναι σημείο τομής', () => expect(crossings((x) => 1 / x, null, -10, 10)).toEqual([]));
+  it('χωρίς τομή, κενό', () => expect(crossings((x) => x * x + 1, (x) => 0 * x, -10, 10)).toEqual([]));
+  it('διαλέγει το χωρίο πιο κοντά στο σημείο που δίνεται', () => {
+    expect(enclosing([-3, 0, 3], 2)).toEqual([0, 3]);
+    expect(enclosing([-3, 0, 3], -1)).toEqual([-3, 0]);
+    expect(enclosing([1], 0)).toBeNull();
   });
 });

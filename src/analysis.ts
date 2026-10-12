@@ -209,3 +209,49 @@ export function fitScaleX(doms: ([number | null, number | null] | undefined)[], 
   if (m <= nx && m > nx / 5) return 1;
   return niceStep(m / nx);
 }
+
+/** Οι τετμημένες όπου τέμνονται δύο καμπύλες (ή, με g = 0, οι ρίζες της f) μέσα στο [xmin, xmax], από αριστερά προς τα δεξιά. */
+export function crossings(f: G, g: G | null, xmin: number, xmax: number): number[] {
+  const d = (x: number): number => f(x) - (g ? g(x) : 0);
+  const N = 800;
+  const out: number[] = [];
+  const add = (x: number): void => {
+    // «στρογγυλές» τετμημένες (π.χ. 2 αντί για 1,9999999) και χωρίς διπλές
+    const r = Math.round(x * 1e6) / 1e6;
+    const v = Math.abs(r - Math.round(r * 100) / 100) < 1e-5 ? Math.round(r * 100) / 100 : r;
+    if (!out.some((o) => Math.abs(o - v) < (xmax - xmin) * 1e-4)) out.push(v);
+  };
+  let px = xmin, py = d(px);
+  for (let i = 1; i <= N; i++) {
+    const x = xmin + ((xmax - xmin) * i) / N, y = d(x);
+    if (Number.isFinite(py) && Number.isFinite(y)) {
+      if (py === 0) add(px);
+      else if (py < 0 !== y < 0 && y !== 0) {
+        let a = px, b = x, fa = py;
+        for (let k = 0; k < 50; k++) {
+          const m = (a + b) / 2, fm = d(m);
+          if (!Number.isFinite(fm)) break;
+          if (fm < 0 === fa < 0) { a = m; fa = fm; } else b = m;
+        }
+        // άλμα προσήμου χωρίς μηδενισμό (ασύμπτωτη) δεν είναι σημείο τομής
+        if (Math.abs(d((a + b) / 2)) < 1e-6 * (1 + Math.abs(py) + Math.abs(y))) add((a + b) / 2);
+      }
+    }
+    px = x;
+    py = y;
+  }
+  if (Number.isFinite(py) && py === 0) add(px);
+  return out.sort((a, b) => a - b);
+}
+
+/**
+ * Τα δύο διαδοχικά σημεία τομής που ορίζουν το χωρίο πιο κοντά στο `near`· null αν δεν υπάρχουν δύο.
+ */
+export function enclosing(xs: number[], near: number): [number, number] | null {
+  if (xs.length < 2) return null;
+  let best = 0;
+  for (let i = 1; i < xs.length - 1; i++) {
+    if (Math.abs((xs[i] + xs[i + 1]) / 2 - near) < Math.abs((xs[best] + xs[best + 1]) / 2 - near)) best = i;
+  }
+  return [xs[best], xs[best + 1]];
+}

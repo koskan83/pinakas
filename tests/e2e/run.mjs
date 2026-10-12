@@ -347,6 +347,13 @@ test('Δύο γραφικές παραστάσεις: σέρνεις τη μία
   assert(a.length === 1, `μετά το σύρσιμο έμειναν ${a.length} άξονες αντί για 1`);
   assert(a[0].fns.length === 2 && a[0].fns[0].expr === 'x²' && a[0].fns[1].expr === '2x', 'οι συναρτήσεις δεν ενώθηκαν');
   assert(a[0].fns[0].color !== a[0].fns[1].color, 'η δεύτερη συνάρτηση δεν άλλαξε χρώμα');
+  // εμβαδόν ανάμεσα στις δύο καμπύλες: τα άκρα πάνε μόνα τους στα σημεία τομής (x² = 2x → 0 και 2)
+  await page.evaluate(() => document.querySelector('[data-an="int"]').click());
+  await page.evaluate(() => document.querySelector('[data-an="int"]').click());
+  a = await allAxes();
+  assert(a[0].an && a[0].an.int && a[0].an.int.between && a[0].an.int.a === 0 && a[0].an.int.b === 2, `τα άκρα του χωρίου δεν πήγαν στα σημεία τομής: ${JSON.stringify(a[0].an)}`);
+  await page.click('#undo');
+  await page.click('#undo');
   await page.click('#undo');
   assert((await allAxes()).length === 2, 'η αναίρεση δεν τις χώρισε ξανά');
   for (let i = 0; i < 8 && (await allAxes()).length; i++) await page.click('#undo');

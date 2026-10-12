@@ -4,7 +4,7 @@ import {
   AngleItem, AxesAn, AxesItem, Doc, FnDef, Item, Page, Pic, Pt, Shape, StampItem, Stroke, TextItem, TrigItem, angleDegrees, angleEnds, axesRange, isDark, isPoly, itemRot, tableLines, textFont, textLines, trianglePts, unrot,
 } from './model';
 import { Fn, Params, compileCached, domText, fnOf, keyPoints } from './expr';
-import { Asymptotes, asymptotes, integrate, lineEq, nf, oneSided, riemann, slope } from './analysis';
+import { Asymptotes, asymptotes, integrate, lineEq, nf, oneSided, riemann, slope, crossings } from './analysis';
 import { STAMPS, SpringState } from './stamps';
 import { CM } from './gadgets';
 import { ANGLE_KEY, HL_ALPHA, angleSides, fmt, fmtU, hlFlat, measureAngles, measureSides, radText, sideText, trigPoint, unitsFor } from './measure';
@@ -392,8 +392,14 @@ export class Renderer {
     else if (key === 'tan.h' && an.tan) {
       const h = +((Math.round(((x - an.tan.x) / sx) * 20) / 20) * sx).toPrecision(10);
       an.tan = { ...an.tan, h: Math.abs(h) < 0.05 * sx ? (x < an.tan.x ? -0.05 : 0.05) * sx : h };
-    } else if (key === 'int.a' && an.int) an.int = { ...an.int, a: snap(x) };
-    else if (key === 'int.b' && an.int) an.int = { ...an.int, b: snap(x) };
+    } else if ((key === 'int.a' || key === 'int.b') && an.int) {
+      // τα άκρα «κουμπώνουν» στα σημεία τομής των δύο καμπυλών (ή στις ρίζες, όταν το χωρίο είναι ως τον άξονα x)
+      const { f, g } = this.axesFn(o);
+      const xs = f ? crossings(f, an.int.between && g ? g : null, xmin, xmax) : [];
+      const hit = xs.find((c) => Math.abs(c - x) < 0.3 * sx);
+      const v = hit ?? snap(x);
+      an.int = key === 'int.a' ? { ...an.int, a: v } : { ...an.int, b: v };
+    }
     return { ...o, an };
   }
 
@@ -520,6 +526,13 @@ export class Renderer {
         c.lineTo(X(x), Y(fin(f(x))));
       }
       c.stroke();
+      if (g) {
+        // τα σημεία τομής των δύο καμπυλών μέσα στο πλαίσιο, για να φαίνεται από πού ως πού είναι το χωρίο
+        for (const x of crossings(f, g, xmin, xmax)) {
+          const y = f(x);
+          if (Number.isFinite(y) && y >= ymin && y <= ymax) dot(x, y, ink, true);
+        }
+      }
       const what = g ? '(f − g)' : 'f(x)';
       const val = integrate(d, an.int.a, an.int.b);
       info.push([`∫ ${what}dx από ${nf(an.int.a)} έως ${nf(an.int.b)} = ${nf(val)}`, ink]);
