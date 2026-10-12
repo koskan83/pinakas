@@ -107,6 +107,8 @@ export class Board {
   private pivot: { key: string; i: number; p: Pt } | null = null;
   /** Διαφανές φόντο (γράψιμο πάνω από άλλα προγράμματα). */
   transparent = false;
+  /** Αν οι νέοι άξονες μπαίνουν με αριθμούς (θυμάται την τελευταία επιλογή). */
+  axesNums = true;
   /** Όσο ζωγραφίζεται σελίδα για το χαρτί: σκούρος πίνακας βγαίνει λευκός και τα ανοιχτά χρώματά του σκουραίνουν. */
   private paper = false;
   palmThreshold = 40;
@@ -366,7 +368,7 @@ export class Board {
 
   /** Εισαγωγή καρτεσιανών αξόνων στο κέντρο της οθόνης. */
   addAxes(mode: AxesMode): void {
-    const axes: AxesItem = { kind: 'axes', id: uid(), x: 0, y: 0, unit: CM, mode, nx: 10, ny: 10, color: this.color };
+    const axes: AxesItem = { kind: 'axes', id: uid(), x: 0, y: 0, unit: CM, mode, nx: 10, ny: 10, color: this.color, ...(this.axesNums ? {} : { nums: false }) };
     // μικραίνουμε τη μονάδα ώστε να χωράνε ολόκληροι στην οθόνη
     const full = itemBounds(axes);
     const k = this.page.view.k;

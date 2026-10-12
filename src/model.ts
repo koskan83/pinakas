@@ -133,6 +133,8 @@ export interface AxesItem {
   nx: number;
   ny: number;
   color: string;
+  /** false: χωρίς αριθμούς στις γραμμές, για να γράψεις δικές σου τιμές (π.χ. ανά 10 ή 20). */
+  nums?: boolean;
   /** Ονόματα αξόνων· αν λείπουν, x και y. */
   lx?: string;
   ly?: string;

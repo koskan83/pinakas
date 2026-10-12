@@ -322,10 +322,11 @@ export class Renderer {
     c.font = `${fs}px system-ui, "Segoe UI", Roboto, sans-serif`;
     c.textAlign = 'center';
     c.textBaseline = 'top';
-    for (let i = xmin; i <= xmax; i++) if (i !== 0) c.fillText(String(i), X(i), a.y + t + 3);
+    const nums = a.nums !== false;
+    for (let i = xmin; nums && i <= xmax; i++) if (i !== 0) c.fillText(String(i), X(i), a.y + t + 3);
     c.textAlign = 'right';
     c.textBaseline = 'middle';
-    for (let j = ymin; j <= ymax; j++) if (j !== 0) c.fillText(String(j), a.x - t - 4, Y(j));
+    for (let j = ymin; nums && j <= ymax; j++) if (j !== 0) c.fillText(String(j), a.x - t - 4, Y(j));
     c.textBaseline = 'top';
     c.fillText('O', a.x - t - 3, a.y + t + 3);
     c.font = `italic 600 ${fs * 1.25}px system-ui, "Segoe UI", Roboto, sans-serif`;

@@ -164,9 +164,11 @@ test('Πλήρης οθόνη: εμφανίζεται κουμπί εξόδου 
   await page.click('#menuBtn');
   await page.click('#menu [data-act="full"]');
   await page.waitForFunction(() => !!document.fullscreenElement);
+  await page.waitForSelector('#fsExit:not(.hidden)', { timeout: 3000 }).catch(() => {});
   assert(await visible('#fsExit'), 'δεν εμφανίστηκε κουμπί εξόδου από την πλήρη οθόνη');
   await page.click('#fsExit');
   await page.waitForFunction(() => !document.fullscreenElement);
+  await page.waitForSelector('#fsExit.hidden', { state: 'attached', timeout: 3000 }).catch(() => {});
   assert(!(await visible('#fsExit')), 'το κουμπί εξόδου έμεινε μετά την έξοδο');
 });
 
@@ -256,6 +258,35 @@ test('Πίνακας 3 × 3 ως ορίζουσα', async () => {
   await page.click('#tblGrid [data-r="3"][data-c="3"]');
   const t = (await items()).find((i) => i.shape === 'table');
   assert(t && t.grid.r === 3 && t.grid.c === 3 && t.grid.style === 'det', 'δεν μπήκε ορίζουσα 3 × 3');
+});
+
+test('Άξονες χωρίς αριθμούς: το «123» τους σβήνει και οι επόμενοι άξονες το θυμούνται', async () => {
+  const inked = () => page.evaluate(() => {
+    const cv = document.getElementById('base');
+    const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0 && d[i - 1] + d[i - 2] + d[i - 3] < 600) n++;
+    return n;
+  });
+  const add = async () => {
+    await page.click('#gadgetBtn');
+    await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-axes="full"]');
+  };
+  await add();
+  const withNums = await inked();
+  await page.click('#axNums');
+  const without = await inked();
+  assert(without < withNums, 'οι αριθμοί δεν έφυγαν από τους άξονες');
+  assert((await items()).find((i) => i.kind === 'axes').nums === false, 'οι άξονες δεν αποθηκεύτηκαν χωρίς αριθμούς');
+  await page.click('#undo');
+  await page.click('#undo');
+  await add();
+  assert((await items()).find((i) => i.kind === 'axes').nums === false, 'οι νέοι άξονες δεν θυμήθηκαν «χωρίς αριθμούς»');
+  await page.click('#axNums');
+  assert((await items()).find((i) => i.kind === 'axes').nums !== false, 'οι αριθμοί δεν ξαναμπήκαν');
+  await page.click('#undo');
+  await page.click('#undo');
+  assert(!(await items()).some((i) => i.kind === 'axes'), 'έμειναν άξονες στη σελίδα');
 });
 
 test('Άξονες, τριγωνομετρικός κύκλος και μετρήσεις σχεδιάζονται', async () => {

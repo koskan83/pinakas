@@ -198,12 +198,13 @@ try {
   }
   if (p.eraserMode === 'stroke' || p.eraserMode === 'partial') board.eraserMode = p.eraserMode;
   if (typeof p.customColor === 'string') customColor = p.customColor;
+  if (p.axesNums === false) board.axesNums = false;
 } catch {
   /* χωρίς αποθηκευμένες προτιμήσεις */
 }
 function savePrefs(): void {
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ sizes: board.sizes, eraserMode: board.eraserMode, customColor }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ sizes: board.sizes, eraserMode: board.eraserMode, customColor, axesNums: board.axesNums }));
   } catch {
     /* δεν πειράζει */
   }
@@ -346,6 +347,14 @@ $('axesOpts').addEventListener('click', (e) => {
   if (t.closest('#fnBtn')) {
     togglePopup(fnMenu, $('fnBtn'));
     renderFns();
+    return;
+  }
+  if (t.closest('#axNums')) {
+    const ax = board.selectedAxes;
+    if (!ax) return;
+    board.axesNums = ax.nums === false;
+    board.updateAxes({ nums: board.axesNums });
+    savePrefs();
     return;
   }
   const anKey = t.closest<HTMLElement>('[data-an]')?.dataset.an;
@@ -934,6 +943,7 @@ function refreshUi(): void {
   const anOn: Record<string, boolean> = { int: !!ax?.an?.int, sum: !!ax?.an?.int?.n, lim: !!ax?.an?.lim, tan: !!ax?.an?.tan, asym: !!ax?.an?.asym };
   document.querySelectorAll<HTMLElement>('[data-an]').forEach((b) => b.classList.toggle('on', anOn[b.dataset.an!]));
   $('axesOpts').querySelector('[data-an=sum] span')!.textContent = ax?.an?.int?.n ? `Σ${ax.an.int.n}` : 'Σ';
+  $('axNums').classList.toggle('on', ax?.nums !== false);
   $('axesOpts').querySelector('[data-axis=x] span')!.textContent = ax?.lx ?? 'x';
   $('axesOpts').querySelector('[data-axis=y] span')!.textContent = ax?.ly ?? 'y';
   if (!ax && !fnMenu.classList.contains('hidden')) {
