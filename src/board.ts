@@ -393,6 +393,21 @@ export class Board {
   }
 
   /** Οι επιλεγμένοι άξονες, αν η επιλογή είναι άξονες. */
+  /** true αν ήταν πάτημα πάνω σε εργαλείο του Δημοτικού (και όχι μετακίνησή του)· τότε εφαρμόζει ό,τι κάνει το πάτημα. */
+  private tapKid(before: StampItem, after: Item, at: Pt): boolean {
+    const d = STAMPS[before.name];
+    if (!d?.tap || after.kind !== 'stamp') return false;
+    if (Math.hypot(after.x - before.x, after.y - before.y) > 8 / this.page.view.k) return false;
+    const [lx, ly] = unrot(before, at[0], at[1]);
+    const v = d.tap(before.v ?? d.init ?? [], lx - before.x, ly - before.y, before.w, before.h);
+    // ακόμα κι αν το πάτημα δεν έπεσε σε κουμπί, το εργαλείο δεν μετακινείται από ένα απλό άγγιγμα
+    if (!v) return true;
+    const next: StampItem = { ...before, v };
+    this.page.items[this.page.items.indexOf(before)] = next;
+    this.push({ t: 'mod', p: this.cur, before, after: next });
+    return true;
+  }
+
   /**
    * Άξονες με συναρτήσεις που αφήνονται πάνω σε άλλους άξονες ενώνονται μαζί τους: οι συναρτήσεις περνούν στους πρώτους
    * και οι δεύτεροι φεύγουν. Μία αναίρεση τα χωρίζει ξανά.
@@ -468,7 +483,9 @@ export class Board {
     const d = STAMPS[name];
     if (!d) return;
     const [cx, cy] = this.center();
-    this.addAndSelect({ kind: 'stamp', id: uid(), name, x: cx - d.w / 2, y: cy - d.h / 2, w: d.w, h: d.h, color: this.color, width: 3 });
+    // τα μεγάλα εργαλεία του Δημοτικού μικραίνουν ώστε να χωράνε στην οθόνη
+    const f = d.kid ? Math.min(1, (this.W * 0.9) / this.page.view.k / d.w, (Math.max(this.H - this.bottomInset, 100) * 0.85) / this.page.view.k / d.h) : 1;
+    this.addAndSelect({ kind: 'stamp', id: uid(), name, x: cx - (d.w * f) / 2, y: cy - (d.h * f) / 2, w: d.w * f, h: d.h * f, color: this.color, width: 3, ...(d.init ? { v: [...d.init] } : {}) });
   }
 
   /** Κενός πίνακας (πλέγμα, ορίζουσα ή μήτρα) στο κέντρο της οθόνης· γράφεις μέσα στα κελιά με το στυλό. */
@@ -2423,6 +2440,13 @@ export class Board {
         const after = ps.preview!;
         if (ps.mode === 'rotate' && ps.tap) this.nextPivot(itemBounds(before), before);
         const i = this.page.items.findIndex((x) => x.id === before.id);
+        // πάτημα (χωρίς σύρσιμο) πάνω σε εργαλείο του Δημοτικού: αλλάζει η κατάστασή του
+        if (i >= 0 && ps.mode === 'move' && before.kind === 'stamp' && this.tapKid(before, after, ps.start!)) {
+          ps.orig = undefined;
+          ps.preview = undefined;
+          this.redraw();
+          return;
+        }
         if (i >= 0 && ps.mode === 'move' && after.kind === 'axes' && after !== before && this.mergeAxes(before as AxesItem, after)) {
           ps.orig = undefined;
           ps.preview = undefined;

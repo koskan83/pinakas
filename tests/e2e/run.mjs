@@ -480,6 +480,34 @@ test('Λάσο σε συνάρτηση → «Γραφική»: μπαίνουν 
   await page.mouse.click(1200, 300);
 });
 
+test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεία που αλλάζουν με πάτημα, και επιστροφή σε Γυμνάσιο – Λύκειο', async () => {
+  const pi = Number((await page.textContent('#pageLabel')).split('/')[0]) - 1;
+  const level = async () => { await page.click('#menuBtn'); await page.click('#menu [data-act="level"]'); };
+  assert(await visible('#tools [data-tool="measure"]'), 'στο Γυμνάσιο – Λύκειο λείπει η Μέτρηση');
+  await level();
+  assert(!(await visible('#tools [data-tool="measure"]')), 'στο Δημοτικό η Μέτρηση έπρεπε να κρυφτεί');
+  await page.click('#gadgetBtn');
+  assert(await visible('#gadgetMenu [data-kid="balance"]'), 'δεν φαίνονται τα εργαλεία του Δημοτικού');
+  assert(!(await visible('#gadgetMenu .tiles:not(#recentTiles) [data-axes="full"]')), 'οι άξονες έπρεπε να κρυφτούν στο Δημοτικό');
+  await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-kid="fracbar"]');
+  let it = (await items(pi)).find((i) => i.kind === 'stamp' && i.name === 'fracbar');
+  assert(it && it.v[0] === 4 && it.v[1] === 0, 'δεν μπήκε η μπάρα κλασμάτων');
+  // πάτημα πάνω στο εργαλείο (κομμάτι της μπάρας ή κουμπί −): αλλάζει η κατάστασή του χωρίς να μετακινηθεί
+  const k = await page.evaluate(() => Number(document.getElementById('zoomFit').textContent.replace('%', '')) / 100);
+  const mid = await page.evaluate(() => ({ x: innerWidth / 2, y: innerHeight / 2 }));
+  await page.mouse.click(mid.x - (it.w * k) / 2 + (it.w * k) / 8, mid.y - 60);
+  it = (await items(pi)).find((i) => i.kind === 'stamp' && i.name === 'fracbar');
+  const changed = it.v.join() !== '4,0';
+  await page.click('#undo');
+  await page.click('#undo');
+  await page.reload();
+  await page.waitForSelector('#toolbar');
+  assert(!(await visible('#tools [data-tool="measure"]')), 'η επιλογή «Δημοτικό» δεν έμεινε μετά το ξανάνοιγμα');
+  await level();
+  assert(await visible('#tools [data-tool="measure"]'), 'η Μέτρηση δεν επέστρεψε στο Γυμνάσιο – Λύκειο');
+  assert(changed, 'το πάτημα πάνω στο εργαλείο δεν άλλαξε την κατάστασή του');
+});
+
 test('Μαθήματα: νέο μάθημα, τμήμα, μετονομασία από το όνομα, και όλα μένουν μετά από κλείσιμο', async () => {
   page.once('dialog', (d) => d.accept('Δοκιμή Β2'));
   await page.click('#libOpen');

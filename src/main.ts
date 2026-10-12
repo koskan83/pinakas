@@ -842,6 +842,53 @@ function plotReply(out: string): void {
   toast('Η γραφική παράσταση μπήκε. Έλεγξε ότι ο τύπος διαβάστηκε σωστά.', 5000);
 }
 
+/** Διαβάζει φωναχτά το επιλεγμένο κείμενο με τη φωνή του browser· το χειρόγραφο το αναγνωρίζει πρώτα το AI. */
+async function speakSelection(): Promise<void> {
+  const synth = window.speechSynthesis;
+  if (!synth) {
+    toast('Αυτός ο browser δεν μπορεί να διαβάσει φωναχτά');
+    return;
+  }
+  if (synth.speaking) {
+    synth.cancel();
+    return;
+  }
+  const ids = new Set(board.selectionIds);
+  const picked = board.page.items.filter((it) => ids.has(it.id));
+  let words = picked.filter((it): it is TextItem => it.kind === 'text').map((t) => t.text).join('. ');
+  if (!words) {
+    // χειρόγραφο ή κομμάτι εικόνας: χρειάζεται πρώτα αναγνώριση
+    if (!ai.keys[ai.provider]) {
+      toast('Για χειρόγραφο χρειάζεται το κλειδί της αναγνώρισης. Κείμενο γραμμένο με το «Κείμενο» διαβάζεται χωρίς κλειδί.', 6000);
+      return;
+    }
+    const img = board.hasRegion ? await board.regionImage() : await board.inkImage(board.selectionIds);
+    if (!img) return;
+    aiBusy++;
+    toast('✨ Το διαβάζω…', 0);
+    try {
+      words = await recognize(img.blob, 'text', ai);
+    } catch (err) {
+      toast(`Η ανάγνωση απέτυχε: ${(err as Error).message}`, 6000);
+      return;
+    } finally {
+      aiBusy--;
+    }
+    $('toast').classList.add('hidden');
+  }
+  if (!words.trim()) {
+    toast('Δεν βρήκα κάτι να διαβάσω');
+    return;
+  }
+  const u = new SpeechSynthesisUtterance(words);
+  u.lang = 'el-GR';
+  u.rate = 0.85;
+  const voice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith('el'));
+  if (voice) u.voice = voice;
+  else if (synth.getVoices().length) toast('Δεν βρέθηκε ελληνική φωνή σε αυτή τη συσκευή· η ανάγνωση μπορεί να μην ακούγεται σωστά.', 6000);
+  synth.speak(u);
+}
+
 async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
   if (!ai.keys[ai.provider]) {
     openAi();
@@ -853,7 +900,7 @@ async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
   const img = kind !== 'text' && kind !== 'math' && board.hasRegion ? await board.regionImage() : await board.inkImage(ids);
   if (!img) return;
   aiBusy++;
-  toast(kind === 'graph' ? '✨ Γραφική παράσταση…' : kind === 'solve' ? '✨ Λύνεται…' : kind === 'check' ? '✨ Ελέγχεται…' : '✨ Αναγνώριση…', 0);
+  toast(kind === 'spell' ? '✨ Ορθογραφία…' : kind === 'graph' ? '✨ Γραφική παράσταση…' : kind === 'solve' ? '✨ Λύνεται…' : kind === 'check' ? '✨ Ελέγχεται…' : '✨ Αναγνώριση…', 0);
   try {
     const out = await recognize(img.blob, kind, ai);
     if (kind === 'graph') {
@@ -871,11 +918,11 @@ async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
     }
     const { box, color } = img;
     const bh = box.y1 - box.y0;
-    if (kind === 'check') {
+    if (kind === 'check' || kind === 'spell') {
       // η κρίση μπαίνει κάτω από τη λύση του μαθητή: πράσινη αν είναι σωστή, κόκκινη αν έχει λάθος
       const ok = out.startsWith('✓');
       aiNote(box, out, ok ? 'ok' : 'bad');
-      toast(ok ? 'Δεν βρέθηκε λάθος. Ρίξε κι εσύ μια ματιά.' : 'Βρέθηκε πιθανό λάθος. Έλεγξέ το πριν το πεις στον μαθητή.', 5000);
+      toast(ok ? 'Δεν βρέθηκε λάθος. Ρίξε κι εσύ μια ματιά.' : kind === 'spell' ? 'Βρέθηκαν λέξεις για διόρθωση. Ρίξε κι εσύ μια ματιά.' : 'Βρέθηκε πιθανό λάθος. Έλεγξέ το πριν το πεις στον μαθητή.', 5000);
       return;
     }
     if (kind === 'solve') {
@@ -915,6 +962,7 @@ async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
 $('selOpts').addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-rec]');
   if (b) void runRecognition(board.selectionIds, b.dataset.rec as AiTask);
+  else if ((e.target as HTMLElement).closest('[data-speak]')) void speakSelection();
 });
 
 // αυτόματη αναγνώριση: ό,τι γράφεται στέλνεται μόλις η γραφίδα μείνει σηκωμένη για λίγο
@@ -1004,7 +1052,7 @@ function refreshUi(): void {
   // η αναγνώριση έχει νόημα μόνο όταν στην επιλογή υπάρχει χειρόγραφο
   const ink = board.selectionHasInk;
   const writing = board.selectionHasWriting;
-  document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', b.dataset.rec === 'text' || b.dataset.rec === 'math' ? !ink : !(writing || region)));
+  document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', b.dataset.speak ? !(writing || region) : b.dataset.rec === 'text' || b.dataset.rec === 'math' ? !ink : !(writing || region)));
   $('selOpts').querySelector('.recSep')!.classList.toggle('hidden', !(writing || region) || !board.hasSelection);
   show('sumBtn', !!board.resultantSource);
   show('axesOpts', !!ax);
@@ -1323,7 +1371,7 @@ function togglePopup(popup: HTMLElement, anchor: HTMLElement): void {
 }
 // ό,τι χρησιμοποιήθηκε τελευταία από τα Όργανα μένει πρώτο στη λίστα
 const RECENT = 'grafida.recent';
-const TILE_ATTRS = ['shape', 'axes', 'ins', 'anq', 'gadget', 'view'];
+const TILE_ATTRS = ['shape', 'axes', 'ins', 'anq', 'gadget', 'view', 'kid'];
 const tileKey = (b: HTMLElement): string => {
   const a = TILE_ATTRS.find((k) => b.dataset[k] !== undefined);
   return a ? `${a}=${b.dataset[a]}` : '';
@@ -1381,6 +1429,13 @@ gadgetMenu.addEventListener('click', (e) => {
       renderFns();
       toast('Γράψε πρώτα τη συνάρτηση. Μετά, τα ∫, Σ, lim, f′ είναι στη σειρά πάνω από τη μπάρα.', 6000);
     }
+    return;
+  }
+  const kidTool = t.closest<HTMLElement>('[data-kid]')?.dataset.kid;
+  if (kidTool) {
+    closePopups();
+    board.addStamp(kidTool);
+    refreshUi();
     return;
   }
   const shape = t.closest<HTMLElement>('[data-shape]')?.dataset.shape;
@@ -1450,6 +1505,7 @@ impMenu.addEventListener('click', (e) => {
 // ---------- σχήματα φυσικής ----------
 
 for (const [name, d] of Object.entries(STAMPS)) {
+  if (d.kid) continue;
   const b = document.createElement('button');
   b.dataset.stamp = name;
   b.title = d.label;
@@ -1580,6 +1636,9 @@ const onMenu = async (e: Event): Promise<void> => {
     setPdfLogo(!pdfLogo);
   } else if (act === 'labels') {
     setLabels(!$('toolbar').classList.contains('labels'));
+  } else if (act === 'level') {
+    setLevel(!primary);
+    toast(primary ? 'Δημοτικό: απλή γραμμή εργαλείων. Τα εργαλεία του είναι στα Όργανα.' : 'Γυμνάσιο – Λύκειο: όλα τα εργαλεία.', 4000);
   } else if (act === 'lib') {
     void lessons?.open();
   } else if (act === 'help') {
@@ -1996,6 +2055,27 @@ $('sendBig').onclick = showBigQr;
 $('qrBig').onclick = () => $('qrBig').classList.add('hidden');
 
 // ---------- οθόνη πρώτης χρήσης ----------
+
+// ---------- Δημοτικό ή Γυμνάσιο–Λύκειο: ποια εργαλεία φαίνονται ----------
+const LEVEL = 'grafida.level';
+let primary = false;
+function setLevel(pri: boolean, save = true): void {
+  primary = pri;
+  document.body.classList.toggle('primary', pri);
+  // εργαλείο που δεν υπάρχει στο Δημοτικό δεν μένει ενεργό
+  if (pri && board.tool === 'measure') board.setTool('select');
+  const label = document.querySelector('#menu [data-act="level"]')?.lastChild;
+  if (label) label.textContent = pri ? 'Αλλαγή σε Γυμνάσιο – Λύκειο' : 'Αλλαγή σε Δημοτικό';
+  document.querySelectorAll<HTMLElement>('#wLevel [data-level]').forEach((b) => b.classList.toggle('on', (b.dataset.level === 'primary') === pri));
+  if (save) { try { localStorage.setItem(LEVEL, pri ? 'primary' : 'secondary'); } catch { /* χωρίς αποθήκευση */ } }
+  renderColors();
+  refreshUi();
+}
+setLevel((() => { try { return localStorage.getItem(LEVEL) === 'primary'; } catch { return false; } })(), false);
+$('wLevel').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>('[data-level]');
+  if (b) setLevel(b.dataset.level === 'primary');
+});
 
 const WELCOME = 'grafida.welcome';
 function openWelcome(): void {

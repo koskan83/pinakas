@@ -187,6 +187,8 @@ export interface StampItem {
   /** Ελατήρια: η ταλάντωση σβήνει σιγά σιγά. */
   damp?: boolean;
   rot?: number;
+  /** Εργαλεία του Δημοτικού: η κατάστασή τους (π.χ. ώρα του ρολογιού, χρωματισμένα κομμάτια του κλάσματος). */
+  v?: number[];
 }
 
 /** Τριγωνομετρικός κύκλος με κέντρο (x, y), ακτίνα r και γωνία a (rad, αντίθετα από το ρολόι). */
@@ -213,7 +215,7 @@ export interface Page {
   view: View;
 }
 
-export type Background = 'white' | 'grid' | 'lines' | 'dark' | 'dark-grid' | 'dark-lines';
+export type Background = 'white' | 'grid' | 'lines' | 'dark' | 'dark-grid' | 'dark-lines' | 'write' | 'squares';
 
 export function isDark(bg: Background): boolean {
   return bg.startsWith('dark');

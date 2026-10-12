@@ -3,7 +3,7 @@
 export type Provider = 'gemini' | 'claude';
 export type RecKind = 'text' | 'math';
 /** Τι ζητάμε από την υπηρεσία: μεταγραφή (κείμενο ή τύπος) ή λύση της άσκησης. */
-export type AiTask = RecKind | 'solve' | 'check' | 'graph';
+export type AiTask = RecKind | 'solve' | 'check' | 'graph' | 'spell';
 
 export interface AiSettings {
   provider: Provider;
@@ -75,6 +75,13 @@ const PROMPT: Record<AiTask, string> = {
     'otherwise "✗ " plus which option was marked, then a second line with the correct option, then a third line with a reason of at most 15 words. ' +
     'If no option is marked, reply with "✗ Δεν έχει σημειωθεί απάντηση" and on the second line the correct option. ' +
     'If nothing is readable or there is nothing to check reply with an empty message.',
+  spell:
+    'The image shows Greek words or sentences handwritten by a primary-school pupil on a classroom whiteboard (or printed text). ' +
+    'Check the spelling, including accents (τόνοι) and final sigma. Ignore handwriting quality, capitalisation style and punctuation. ' +
+    'Reply in Greek, in plain text only. If everything is spelled correctly reply with exactly one line starting with "✓ " and a two-word praise. ' +
+    'Otherwise the first line starts with "✗ " and says how many words need fixing, followed by one line per wrong word ' +
+    '(at most 5), in the form: wrong → correct. No explanations, no grammar rules. ' +
+    'If nothing is readable reply with an empty message.',
   graph:
     'The image shows a function or an equation in two variables from a Greek secondary-school classroom whiteboard, handwritten or printed ' +
     '(for example f(x) = x² − 3x + 2, y = −200x, υ = 10 − 2t with 0 ≤ t ≤ 5, or a piecewise function). It will be plotted by a program. ' +
@@ -148,7 +155,7 @@ export async function recognize(png: Blob, kind: AiTask, s: AiSettings): Promise
   const parts: { text?: string }[] = s.provider === 'gemini' ? json.candidates?.[0]?.content?.parts ?? [] : json.content ?? [];
   const raw = parts.map((p) => p.text ?? '').join('');
   // ο έλεγχος λύσης είναι σκέτο κείμενο: δεν έχει περιτύλιγμα LaTeX να καθαριστεί
-  return kind === 'check' || kind === 'graph' ? raw.trim() : clean(raw);
+  return kind === 'check' || kind === 'graph' || kind === 'spell' ? raw.trim() : clean(raw);
 }
 
 export interface GraphReply {

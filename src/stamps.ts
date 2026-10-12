@@ -1,5 +1,7 @@
 /** Έτοιμα σχήματα φυσικής. Κάθε σχήμα ζωγραφίζεται μέσα σε κουτί w × h με το τρέχον χρώμα του c. */
 
+import { KIDS, type KidEnv } from './kids';
+
 type C = CanvasRenderingContext2D;
 
 /** Κατάσταση ταλάντωσης ενός ελατηρίου τη στιγμή που ζωγραφίζεται. */
@@ -34,6 +36,13 @@ export interface StampDef {
   draw(c: C, w: number, h: number, st?: SpringState): void;
   /** Μόνο για ελατήρια: το σώμα μπορεί να τραβηχτεί και να ταλαντωθεί. */
   spring?(w: number, h: number): SpringGeom;
+  /** Εργαλείο του Δημοτικού (βλ. kids.ts): ζωγραφίζεται από την κατάστασή του και αλλάζει με πάτημα. */
+  kid?: boolean;
+  /** Αρχική κατάσταση. */
+  init?: number[];
+  drawKid?(c: C, w: number, h: number, v: number[], env: KidEnv): void;
+  /** Πάτημα στο σημείο (x, y) του κουτιού: η νέα κατάσταση, ή null αν δεν έπεσε πουθενά. */
+  tap?(v: number[], x: number, y: number, w: number, h: number): number[] | null;
 }
 
 function path(c: C, pts: number[][], close = false): void {
@@ -317,3 +326,5 @@ export const STAMPS: Record<string, StampDef> = {
   ammeter: { label: 'Αμπερόμετρο', w: 160, h: 80, draw: meter('A') },
   voltmeter: { label: 'Βολτόμετρο', w: 160, h: 80, draw: meter('V') },
 };
+
+Object.assign(STAMPS, KIDS);

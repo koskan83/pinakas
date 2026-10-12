@@ -33,6 +33,28 @@ export class Renderer {
       c.fillStyle = dark ? '#14201b' : '#ffffff';
       c.fillRect(x0, y0, x1 - x0, y1 - y0);
     }
+    if (bg === 'write' || bg === 'squares') {
+      // τετράδια του Δημοτικού: γραμμές γραφής με βοηθητική διακεκομμένη για τα μικρά γράμματα, ή μεγάλα τετράγωνα αριθμητικής
+      const step = bg === 'write' ? 130 : 80;
+      if (step * k < 10) return;
+      c.save();
+      c.strokeStyle = 'rgba(37,99,235,0.42)';
+      c.lineWidth = 1.6 / k;
+      c.beginPath();
+      for (let y = Math.floor(y0 / step) * step; y <= y1; y += step) { c.moveTo(x0, y); c.lineTo(x1, y); }
+      for (let x = Math.floor(x0 / step) * step; bg === 'squares' && x <= x1; x += step) { c.moveTo(x, y0); c.lineTo(x, y1); }
+      c.stroke();
+      if (bg === 'write') {
+        c.strokeStyle = 'rgba(37,99,235,0.3)';
+        c.lineWidth = 1.2 / k;
+        c.setLineDash([10 / k, 9 / k]);
+        c.beginPath();
+        for (let y = Math.floor(y0 / step) * step - 45; y <= y1; y += step) { c.moveTo(x0, y); c.lineTo(x1, y); }
+        c.stroke();
+      }
+      c.restore();
+      return;
+    }
     const grid = bg.endsWith('grid');
     if (!grid && !bg.endsWith('lines')) return;
     // πλέγμα ανά 1 cm, γραμμές τετραδίου ανά 2 cm
@@ -608,7 +630,8 @@ export class Renderer {
     c.lineWidth = s.width;
     c.lineCap = 'round';
     c.lineJoin = 'round';
-    d.draw(c, s.w, s.h, d.spring ? this.b.springState(s) : undefined);
+    if (d.drawKid) d.drawKid(c, s.w, s.h, s.v ?? d.init ?? [], { ink: this.b.ink(s.color), bg: isDark(this.b.doc.bg) ? '#14201b' : '#ffffff' });
+    else d.draw(c, s.w, s.h, d.spring ? this.b.springState(s) : undefined);
     c.restore();
   }
 
