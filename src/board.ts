@@ -60,6 +60,8 @@ interface Gesture {
   c0: Pt;
   d0: number;
   v0: View;
+  /** Το zoom «ξεκλειδώνει» μόνο όταν τα δάχτυλα ανοίξουν ή κλείσουν αισθητά· ως τότε η κίνηση είναι καθαρή μετακίνηση. */
+  zoom: boolean;
 }
 
 export type SizedTool = 'pen' | 'highlighter' | 'eraser';
@@ -1964,6 +1966,7 @@ export class Board {
       a: a.id, b: b.id, c0,
       d0: Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1),
       v0: { ...this.page.view },
+      zoom: false,
     };
     this.redraw();
   }
@@ -2090,7 +2093,20 @@ export class Board {
       const cx = (a.x + b.x) / 2;
       const cy = (a.y + b.y) / 2;
       const d = Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1);
-      const k = Math.min(8, Math.max(0.1, g.v0.k * (d / g.d0)));
+      if (!g.zoom) {
+        // δύο δάχτυλα που σέρνονται μαζί δεν κρατούν ποτέ ακριβώς την ίδια απόσταση: μικρές αλλαγές δεν είναι zoom.
+        // Αν η σελίδα έχει ήδη μετακινηθεί αρκετά, είναι φανερά μετακίνηση και το zoom θέλει ακόμα πιο καθαρό άνοιγμα.
+        const moved = Math.hypot(cx - g.c0[0], cy - g.c0[1]);
+        const need = moved > 60 ? Math.max(90, g.d0 * 0.3) : Math.max(36, g.d0 * 0.14);
+        if (Math.abs(d - g.d0) > need) {
+          g.zoom = true;
+          // το zoom ξεκινά από εδώ, χωρίς πήδημα
+          g.d0 = d;
+          g.c0 = [cx, cy];
+          g.v0 = { ...this.page.view };
+        }
+      }
+      const k = g.zoom ? Math.min(8, Math.max(0.1, g.v0.k * (d / g.d0))) : g.v0.k;
       const wx = (g.c0[0] - g.v0.x) / g.v0.k;
       const wy = (g.c0[1] - g.v0.y) / g.v0.k;
       const v = this.page.view;

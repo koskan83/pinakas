@@ -408,6 +408,32 @@ test('Αντίγραφο μαθημάτων στο Drive', async () => {
   await page.click('#lib [data-lib="close"]');
 });
 
+test('Δύο δάχτυλα: το σύρσιμο δεν αλλάζει το zoom, το άνοιγμα των δαχτύλων το αλλάζει', async () => {
+  const zoom = () => page.evaluate(() => document.getElementById('zoomFit').textContent);
+  // αγγίγματα μέσω του ίδιου του browser: δύο δάχτυλα σε απόσταση 200, που σέρνονται μαζί ενώ η απόστασή τους «παίζει» ±20
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], id) => ({ x, y, id, radiusX: 8, radiusY: 8, force: 1 })) });
+  const z0 = await zoom();
+  await touch('touchStart', [[500, 300], [700, 300]]);
+  for (let i = 1; i <= 20; i++) {
+    const wob = (i % 2 ? 1 : -1) * 10;
+    await touch('touchMove', [[500 + i * 12 - wob, 300 + i * 6], [700 + i * 12 + wob, 300 + i * 6]]);
+  }
+  await sleep(100);
+  const z1 = await zoom();
+  // τώρα ανοίγουν καθαρά: από 200 σε 420
+  for (let i = 1; i <= 11; i++) await touch('touchMove', [[740 - i * 10, 420], [940 + i * 10, 420]]);
+  await sleep(100);
+  const z2 = await zoom();
+  await touch('touchEnd', []);
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+  await cdp.detach();
+  await page.click('#zoomFit');
+  assert(z1 === z0, `το σύρσιμο με δύο δάχτυλα άλλαξε το zoom από ${z0} σε ${z1}`);
+  assert(parseInt(z2) > parseInt(z1), `το άνοιγμα των δαχτύλων δεν μεγέθυνε (${z1} → ${z2})`);
+});
+
 await page.goto(URL_);
 await page.waitForSelector('#toolbar');
 await sleep(600);
