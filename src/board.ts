@@ -62,6 +62,19 @@ export interface PState {
   kidOrig?: StampItem;
 }
 
+export interface Twist {
+  ids: Set<string>;
+  /** Τα στοιχεία της σελίδας πριν από την περιστροφή. */
+  before: Item[];
+  /** Κέντρο περιστροφής (κέντρο της επιλογής). */
+  pivot: Pt;
+  /** Πού ήταν κάθε δάχτυλο όταν μετρήθηκε τελευταία φορά η βάση. */
+  p0: Map<number, Pt>;
+  /** Γωνία που έχει μαζευτεί πριν από την τωρινή βάση (όταν προστέθηκε ή σηκώθηκε δάχτυλο). */
+  acc: number;
+  changed: boolean;
+}
+
 interface Gesture {
   a: number;
   b: number;
@@ -70,6 +83,8 @@ interface Gesture {
   v0: View;
   /** Το zoom «ξεκλειδώνει» μόνο όταν τα δάχτυλα ανοίξουν ή κλείσουν αισθητά· ως τότε η κίνηση είναι καθαρή μετακίνηση. */
   zoom: boolean;
+  /** Όλο το χέρι πάνω στον πίνακα (4+ δάχτυλα) με κάτι επιλεγμένο: το στρίψιμο του χεριού περιστρέφει την επιλογή. */
+  twist?: Twist;
 }
 
 export type SizedTool = 'pen' | 'highlighter' | 'eraser';
@@ -134,6 +149,8 @@ export class Board {
   imgs = new Map<string, HTMLImageElement>();
   ptrs = new Map<number, PState>();
   gesture: Gesture | null = null;
+  /** Η επιλογή τη στιγμή που ακούμπησε το πρώτο δάχτυλο: το ίδιο το άγγιγμα μπορεί να την αλλάξει πριν φτάσουν τα υπόλοιπα. */
+  touchSel: { selected: string | null; multi: string[] } | null = null;
   eraserAt: { x: number; y: number } | null = null;
   lasers: Laser[] = [];
   private laserRaf = 0;
@@ -681,7 +698,7 @@ export class Board {
     return true;
   }
 
-  private selectedIds(): Set<string> {
+  selectedIds(): Set<string> {
     return new Set(this.multi.length ? this.multi : this.selected ? [this.selected] : []);
   }
 

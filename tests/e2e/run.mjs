@@ -658,6 +658,44 @@ test('Δύο δάχτυλα: το σύρσιμο δεν αλλάζει το zoom
   assert(parseInt(z2) > parseInt(z1), `το άνοιγμα των δαχτύλων δεν μεγέθυνε (${z1} → ${z2})`);
 });
 
+test('Όλο το χέρι (5 δάχτυλα) πάνω στον πίνακα: το στρίψιμο περιστρέφει το επιλεγμένο', async () => {
+  const pi = Number((await page.textContent('#pageLabel')).split('/')[0]) - 1;
+  await pen();
+  await drag(540, 380, 740, 380);
+  await page.click('#tools [data-tool="select"]');
+  await page.mouse.click(640, 380);
+  const size = async () => {
+    const st = (await items(pi)).at(-1);
+    const xs = st.pts.map((p) => p[0]), ys = st.pts.map((p) => p[1]);
+    return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+  };
+  const s0 = await size();
+  const z0 = await page.textContent('#zoomFit');
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  // πέντε δάχτυλα σε κύκλο ακτίνας 120 γύρω από ένα σημείο μακριά από τη γραμμή, που στρίβουν 90°
+  const hand = (deg) => [0, 72, 144, 216, 288].map((a, id) => {
+    const r = ((a + deg) * Math.PI) / 180;
+    return { x: 640 + 120 * Math.cos(r), y: 300 + 120 * Math.sin(r), id, radiusX: 8, radiusY: 8, force: 1 };
+  });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: hand(0) });
+  for (let d = 5; d <= 90; d += 5) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: hand(d) });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+  await cdp.detach();
+  await sleep(100);
+  const s1 = await size();
+  const z1 = await page.textContent('#zoomFit');
+  await page.click('#undo');
+  const s2 = await size();
+  await page.click('#undo');
+  const flat = (q) => q.w > 5 * Math.max(q.h, 1), tall = (q) => q.h > 5 * Math.max(q.w, 1);
+  assert(flat(s0), 'η γραμμή της δοκιμής δεν γράφτηκε οριζόντια');
+  assert(tall(s1), `το στρίψιμο του χεριού κατά 90° δεν έκανε τη γραμμή κατακόρυφη (${Math.round(s1.w)} × ${Math.round(s1.h)})`);
+  assert(z1 === z0, 'το στρίψιμο του χεριού άλλαξε το zoom');
+  assert(flat(s2), 'η αναίρεση δεν γύρισε τη γραμμή όπως ήταν');
+});
+
 await page.goto(URL_);
 await page.waitForSelector('#toolbar');
 await sleep(600);

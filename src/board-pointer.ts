@@ -2,7 +2,7 @@
 
 import { AxesItem, Item, Pt, inLasso, itemBounds, reboxShape, recognizeShape, rotateItem, roundAngle, scaleItem, translateItem, uid, unrot } from './model';
 import { STAMPS } from './stamps';
-import type { Board, PState } from './board';
+import type { Board, PState, Twist } from './board';
 
 export function down(bd: Board, e: PointerEvent): void {
   e.preventDefault();
@@ -15,6 +15,14 @@ export function down(bd: Board, e: PointerEvent): void {
   const hadRegion = !!bd.region;
   bd.region = null;
   if (hadRegion) bd.onUi();
+
+  const touches = [...bd.ptrs.values()].filter((p) => p.type === 'touch');
+  if (e.pointerType === 'touch' && touches.length === 1) bd.touchSel = { selected: bd.selected, multi: bd.multi.slice() };
+  // Όλο το χέρι (4+ δάχτυλα) με κάτι επιλεγμένο: το στρίψιμο του χεριού το περιστρέφει
+  if (e.pointerType === 'touch' && bd.gesture) {
+    if (bd.gesture.twist) rebaseTwist(bd, bd.gesture.twist);
+    else if (touches.length >= 4) startTwist(bd);
+  }
 
   // Χειρονομία δύο δαχτύλων: pan / zoom
   if (e.pointerType === 'touch' && !bd.gesture) {
@@ -236,6 +244,72 @@ export function down(bd: Board, e: PointerEvent): void {
   }
 }
 
+const touchPts = (bd: Board): Map<number, Pt> =>
+  new Map([...bd.ptrs.values()].filter((p) => p.type === 'touch').map((p) => [p.id, [p.x, p.y] as Pt]));
+
+/** Πόσο έχει στρίψει το χέρι από τη βάση: μέση στροφή των δαχτύλων γύρω από το κέντρο τους. */
+function twistAngle(bd: Board, t: Twist): number {
+  const now = touchPts(bd);
+  const ids = [...t.p0.keys()].filter((id) => now.has(id));
+  if (ids.length < 2) return 0;
+  let c0x = 0, c0y = 0, cx = 0, cy = 0;
+  for (const id of ids) {
+    c0x += t.p0.get(id)![0]; c0y += t.p0.get(id)![1];
+    cx += now.get(id)![0]; cy += now.get(id)![1];
+  }
+  c0x /= ids.length; c0y /= ids.length; cx /= ids.length; cy /= ids.length;
+  let cross = 0, dot = 0;
+  for (const id of ids) {
+    const ax = t.p0.get(id)![0] - c0x, ay = t.p0.get(id)![1] - c0y;
+    const bx = now.get(id)![0] - cx, by = now.get(id)![1] - cy;
+    cross += ax * by - ay * bx;
+    dot += ax * bx + ay * by;
+  }
+  return Math.atan2(cross, dot);
+}
+
+/** Άλλαξαν τα δάχτυλα που ακουμπούν: η γωνία ως εδώ κρατιέται και η μέτρηση ξεκινά από τις τωρινές θέσεις. */
+function rebaseTwist(bd: Board, t: Twist): void {
+  t.acc += twistAngle(bd, t);
+  t.p0 = touchPts(bd);
+}
+
+function startTwist(bd: Board): void {
+  const g = bd.gesture!;
+  const items = bd.page.items;
+  // το πρώτο δάχτυλο μπορεί να «ξε-επέλεξε» ακουμπώντας σε κενό: ισχύει η επιλογή που υπήρχε πριν ακουμπήσει το χέρι
+  let ids = bd.selectedIds();
+  if (!ids.size && bd.touchSel) ids = new Set(bd.touchSel.multi.length ? bd.touchSel.multi : bd.touchSel.selected ? [bd.touchSel.selected] : []);
+  const sel = items.filter((it) => ids.has(it.id) && bd.rotatable(it));
+  if (!sel.length) return;
+  if (!bd.selectedIds().size && bd.touchSel) {
+    bd.selected = bd.touchSel.selected;
+    bd.multi = bd.touchSel.multi.slice();
+  }
+  // ό,τι μετακίνηση ή zoom έκαναν τα δύο πρώτα δάχτυλα πριν φτάσουν τα υπόλοιπα, αναιρείται
+  Object.assign(bd.page.view, g.v0);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const it of sel) {
+    const b = itemBounds(it);
+    x0 = Math.min(x0, b.x0); y0 = Math.min(y0, b.y0); x1 = Math.max(x1, b.x1); y1 = Math.max(y1, b.y1);
+  }
+  g.twist = { ids: new Set(sel.map((it) => it.id)), before: items.slice(), pivot: [(x0 + x1) / 2, (y0 + y1) / 2], p0: touchPts(bd), acc: 0, changed: false };
+  bd.redraw();
+  bd.onUi();
+}
+
+function moveTwist(bd: Board, t: Twist): void {
+  let deg = ((t.acc + twistAngle(bd, t)) * 180) / Math.PI;
+  // μικρό τρέμουλο του χεριού δεν είναι στροφή· κοντά σε πολλαπλάσια των 15° «κουμπώνει»
+  if (!t.changed && Math.abs(deg) < 4) return;
+  const near = Math.round(deg / 15) * 15;
+  if (Math.abs(near - deg) <= 3) deg = near;
+  const ang = (deg * Math.PI) / 180;
+  bd.page.items = t.before.map((it) => (t.ids.has(it.id) ? rotateItem(it, t.pivot[0], t.pivot[1], ang) : it));
+  t.changed = true;
+  bd.redraw();
+}
+
 export function startGesture(bd: Board, a: PState, b: PState): void {
   a.mode = 'none';
   b.mode = 'none';
@@ -313,6 +387,10 @@ export function move(bd: Board, e: PointerEvent): void {
 export function moveOne(bd: Board, ps: PState, e: PointerEvent): void {
   ps.x = e.clientX;
   ps.y = e.clientY;
+  if (bd.gesture?.twist) {
+    moveTwist(bd, bd.gesture.twist);
+    return;
+  }
   if (bd.gesture) {
     const g = bd.gesture;
     const a = bd.ptrs.get(g.a);
@@ -519,6 +597,24 @@ export function up(bd: Board, e: PointerEvent): void {
   bd.ptrs.delete(e.pointerId);
   bd.onPointerInfo(e, bd.ptrs.size);
 
+  if (bd.gesture?.twist) {
+    const t = bd.gesture.twist;
+    if (touchPts(bd).size >= 2) {
+      // σηκώθηκε ένα δάχτυλο αλλά το χέρι είναι ακόμα πάνω: συνεχίζει από εκεί που ήταν
+      t.p0.set(ps.id, t.p0.get(ps.id) ?? [ps.x, ps.y]);
+      bd.ptrs.set(ps.id, ps);
+      t.acc += twistAngle(bd, t);
+      bd.ptrs.delete(ps.id);
+      t.p0 = touchPts(bd);
+      return;
+    }
+    if (t.changed) bd.push({ t: 'set', p: bd.cur, before: t.before, after: bd.page.items.slice() });
+    bd.gesture = null;
+    bd.redraw();
+    bd.onUi();
+    bd.onChange();
+    return;
+  }
   if (bd.gesture && (bd.gesture.a === e.pointerId || bd.gesture.b === e.pointerId)) {
     bd.gesture = null;
     bd.onChange();
