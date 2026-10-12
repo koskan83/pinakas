@@ -159,6 +159,17 @@ test('Γράφοντας, η μπάρα δεν ξεθωριάζει παρά μ�
   await page.click('#undo');
 });
 
+test('Πλήρης οθόνη: εμφανίζεται κουμπί εξόδου δίπλα στο zoom', async () => {
+  assert(!(await visible('#fsExit')), 'το κουμπί εξόδου φαίνεται χωρίς πλήρη οθόνη');
+  await page.click('#menuBtn');
+  await page.click('#menu [data-act="full"]');
+  await page.waitForFunction(() => !!document.fullscreenElement);
+  assert(await visible('#fsExit'), 'δεν εμφανίστηκε κουμπί εξόδου από την πλήρη οθόνη');
+  await page.click('#fsExit');
+  await page.waitForFunction(() => !document.fullscreenElement);
+  assert(!(await visible('#fsExit')), 'το κουμπί εξόδου έμεινε μετά την έξοδο');
+});
+
 test('Γόμα ολόκληρης γραμμής', async () => {
   await tool('eraser');
   await page.click('[data-eraser="stroke"]');

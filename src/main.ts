@@ -1868,6 +1868,14 @@ $('welcome').addEventListener('pointerdown', (e) => {
 $('zoomOut').onclick = () => board.zoomBy(1 / 1.25);
 $('zoomIn').onclick = () => board.zoomBy(1.25);
 $('zoomFit').onclick = () => board.fitView();
+// σε πλήρη οθόνη ο browser λέει «πάτα Esc»· ο πίνακας δεν έχει πλήκτρα, άρα η έξοδος θέλει δικό της κουμπί
+$('fsExit').onclick = () => void document.exitFullscreen().catch(() => {});
+document.addEventListener('fullscreenchange', () => {
+  const on = !!document.fullscreenElement;
+  $('fsExit').classList.toggle('hidden', !on);
+  const label = document.querySelector('#menu [data-act="full"]')?.lastChild;
+  if (label) label.textContent = on ? 'Έξοδος από πλήρη οθόνη' : 'Πλήρης οθόνη';
+});
 board.onView = () => {
   placeSelBar();
   const t = `${Math.round(board.zoom * 100)}%`;

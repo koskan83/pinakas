@@ -24,6 +24,7 @@ const I = {
   screen: IC('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>'),
   spark: P('M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z'),
   full: P('M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5'),
+  fullExit: P('M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5'),
   target: IC('<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8.5"/>'),
   check: P('M4 6.5l1.500 1.500 3-3M4 12.5l1.5 1.5 3-3M4 18.5l1.5 1.5 3-3M12 7h8M12 13h8M12 19h8'),
   tag: P('M4 5h16M7 5v7M17 5v7M4 16h16M4 20h10'),
@@ -108,6 +109,7 @@ export function mountUi(app: HTMLElement): void {
     <button id="zoomOut" title="Σμίκρυνση">${I.minus}</button>
     <button id="zoomFit" title="Προσαρμογή: όλη η σελίδα στην οθόνη">100%</button>
     <button id="zoomIn" title="Μεγέθυνση">${I.plus}</button>
+    <button id="fsExit" class="hidden" title="Έξοδος από πλήρη οθόνη">${I.fullExit}</button>
   </div>
   <div id="toolbarWrap">
   <div id="toolbar">
