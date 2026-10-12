@@ -99,6 +99,12 @@ async function lasso(x0, y0, x1, y1) {
 }
 const tool = (name) => page.click(`#tools [data-tool="${name}"], [data-tool="${name}"]`);
 const pen = () => page.click('#penBtn');
+/** Απαντά στο παράθυρο ερώτησης της εφαρμογής. */
+async function answer(text) {
+  await page.waitForSelector('#ask input');
+  await page.fill('#ask input', text);
+  await page.click('#ask .go');
+}
 async function download(action) {
   const [d] = await Promise.all([page.waitForEvent('download'), action()]);
   // με το πραγματικό όνομα, για να έχει το αρχείο τη σωστή κατάληξη όταν το ξαναδώσουμε στην εφαρμογή
@@ -499,6 +505,14 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   it = (await items(pi)).find((i) => i.kind === 'stamp' && i.name === 'fracbar');
   const changed = it.v.join() !== '4,0';
   const barAfterTap = await visible('#selOpts');
+  // και με το στυλό στο χέρι: το πάτημα σε κουμπί του εργαλείου το αλλάζει και δεν αφήνει τελεία στον πίνακα
+  await pen();
+  const nPen = (await items(pi)).length;
+  await page.mouse.click(mid.x - (it.w * k) / 2 + (it.w * k) / 8, mid.y - 60);
+  const it2 = (await items(pi)).find((i) => i.kind === 'stamp' && i.name === 'fracbar');
+  const penTap = it2.v.join() !== it.v.join() && (await items(pi)).length === nPen;
+  await page.click('#tools [data-tool="select"]');
+  await page.click('#undo');
   await page.click('#undo');
   await page.click('#undo');
   // κυβάκια: όσο κρατάς πατημένο για να χτίσεις, το εργαλείο πρέπει να μένει στην οθόνη
@@ -528,14 +542,15 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   await level();
   assert(await visible('#tools [data-tool="measure"]'), 'η Μέτρηση δεν επέστρεψε στο Γυμνάσιο – Λύκειο');
   assert(changed, 'το πάτημα πάνω στο εργαλείο δεν άλλαξε την κατάστασή του');
+  assert(penTap, 'με το στυλό, το πάτημα σε κουμπί εργαλείου του Δημοτικού δεν δούλεψε ή άφησε σημάδι');
   assert(!barAfterTap, 'μετά από πάτημα σε κουμπί του εργαλείου εμφανίστηκε η μπάρα «Διαγραφή / ×2»');
 });
 
 test('Μαθήματα: νέο μάθημα, τμήμα, μετονομασία από το όνομα, και όλα μένουν μετά από κλείσιμο', async () => {
-  page.once('dialog', (d) => d.accept('Δοκιμή Β2'));
   await page.click('#libOpen');
   await page.waitForSelector('#lib:not(.hidden)');
   await page.click('#lib [data-lib="new"]');
+  await answer('Δοκιμή Β2');
   await page.waitForFunction(() => document.getElementById('lessonName').textContent === 'Δοκιμή Β2');
   await pen();
   await drag(300, 300, 500, 340);
@@ -544,8 +559,8 @@ test('Μαθήματα: νέο μάθημα, τμήμα, μετονομασία 
   await page.click('#libOpen');
   await page.waitForSelector('#lib:not(.hidden)');
   assert((await page.locator('#libGrid .card').count()) === 2, 'η βιβλιοθήκη δεν έχει δύο μαθήματα');
-  page.once('dialog', (d) => d.accept('Β2'));
   await page.click('#libGrid .card.on [data-card="group"]');
+  await answer('Β2');
   await page.waitForSelector('#libGroups [data-group="Β2"]');
   await page.click('#libGroups [data-group="Β2"]');
   assert((await page.locator('#libGrid .card').count()) === 1, 'το φίλτρο τμήματος δεν δούλεψε');
@@ -556,8 +571,8 @@ test('Μαθήματα: νέο μάθημα, τμήμα, μετονομασία 
   await page.waitForFunction(() => document.getElementById('lessonName').textContent === 'Δοκιμή Β2');
   const n1 = (await items()).length;
   assert(n1 === 1, `μετά το ξανάνοιγμα βρέθηκαν ${n1} στοιχεία αντί για 1`);
-  page.once('dialog', (d) => d.accept('Δοκιμή Β2 νέο'));
   await page.click('#lessonName span');
+  await answer('Δοκιμή Β2 νέο');
   await page.waitForFunction(() => document.getElementById('lessonName').textContent === 'Δοκιμή Β2 νέο');
   await sleep(300);
   await page.reload();

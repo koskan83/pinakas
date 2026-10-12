@@ -2,7 +2,7 @@ import {
   AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TableStyle, TextItem, Tool, View, angleEnds, cloneItem, distToSeg, erasePartial, hitItem, inLasso, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, pointInPolygon, reboxShape, recognizeShape, rotateItem, roundAngle, scaleItem, translateItem, trianglePts, uid, unrot,
 } from './model';
 import { Params } from './expr';
-import { STAMPS, SpringState } from './stamps';
+import { STAMPS, SpringState, type KidAsk } from './stamps';
 import { CM, GadgetDrag, GadgetKind, Gadgets } from './gadgets';
 import { ANGLE_KEY, angleSides, eraseMeasures, fmt, measureAngles, measureSides, trigPoint, sideLen, sideText, unitsFor } from './measure';
 import { Renderer } from './render';
@@ -126,6 +126,8 @@ export class Board {
   onChange: () => void = () => {};
   onUi: () => void = () => {};
   /** Όταν άξονες με συναρτήσεις αφεθούν πάνω σε άλλους: επιστρέφει τους ενωμένους άξονες, ή null για απλή μετακίνηση. */
+  /** Ερώτηση προς τον χρήστη από εργαλείο του Δημοτικού (π.χ. λέξη της κρεμάλας). */
+  onAsk: (q: KidAsk) => Promise<string | null> = () => Promise.resolve(null);
   onMergeAxes: (target: AxesItem, dropped: AxesItem) => AxesItem | null = () => null;
   onPointerInfo: (e: PointerEvent, count: number) => void = () => {};
   /** Καλείται όταν ολοκληρωθεί μια γραμμή του στυλό (για την αυτόματη αναγνώριση). */
@@ -409,21 +411,47 @@ export class Board {
     return true;
   }
 
-  /** true αν ήταν πάτημα πάνω σε εργαλείο του Δημοτικού (και όχι μετακίνησή του)· τότε εφαρμόζει ό,τι κάνει το πάτημα. */
-  private tapKid(before: StampItem, after: Item, at: Pt): boolean {
-    const d = STAMPS[before.name];
-    if (!d?.tap || after.kind !== 'stamp') return false;
-    if (Math.hypot(after.x - before.x, after.y - before.y) > 8 / this.page.view.k) return false;
-    const [lx, ly] = unrot(before, at[0], at[1]);
-    const v = d.tap(before.v ?? d.init ?? [], lx - before.x, ly - before.y, before.w, before.h);
-    // ακόμα κι αν το πάτημα δεν έπεσε σε κουμπί, το εργαλείο δεν μετακινείται από ένα απλό άγγιγμα
-    if (!v) return true;
-    const next: StampItem = { ...before, v };
-    this.page.items[this.page.items.indexOf(before)] = next;
-    this.push({ t: 'mod', p: this.cur, before, after: next });
+  /**
+   * Πάτημα στο σημείο `at` ενός εργαλείου του Δημοτικού. true αν έπεσε σε κουμπί του (και έγινε ό,τι κάνει το κουμπί).
+   */
+  private pressKid(it: StampItem, at: Pt): boolean {
+    const d = STAMPS[it.name];
+    if (!d?.kid) return false;
+    const [lx, ly] = unrot(it, at[0], at[1]);
+    const cur = it.v ?? d.init ?? [];
+    const apply = (v: number[]): void => {
+      const before = this.page.items.find((x) => x.id === it.id);
+      if (!before || before.kind !== 'stamp') return;
+      const next: StampItem = { ...before, v };
+      this.page.items[this.page.items.indexOf(before)] = next;
+      this.push({ t: 'mod', p: this.cur, before, after: next });
+      this.redraw();
+    };
+    const q = d.ask?.(cur, lx - it.x, ly - it.y, it.w, it.h);
+    if (q) {
+      const page = this.cur;
+      void this.onAsk(q).then((text) => {
+        const v = text == null || page !== this.cur ? null : q.apply(text);
+        if (v) apply(v);
+      });
+    } else {
+      const v = d.tap?.(cur, lx - it.x, ly - it.y, it.w, it.h);
+      if (!v) return false;
+      apply(v);
+    }
     // πάτημα σε κουμπί του εργαλείου (γράμμα, +, κομμάτι κλάσματος) δεν το επιλέγει: αλλιώς η μπάρα «Διαγραφή / ×2» πέφτει πάνω στο παιχνίδι
     this.selected = null;
     this.onUi();
+    return true;
+  }
+
+  /** true αν ήταν πάτημα πάνω σε εργαλείο του Δημοτικού (και όχι μετακίνησή του)· τότε εφαρμόζει ό,τι κάνει το πάτημα. */
+  private tapKid(before: StampItem, after: Item, at: Pt): boolean {
+    const d = STAMPS[before.name];
+    if (!d?.kid || (!d.tap && !d.ask) || after.kind !== 'stamp') return false;
+    if (Math.hypot(after.x - before.x, after.y - before.y) > 8 / this.page.view.k) return false;
+    // ακόμα κι αν το πάτημα δεν έπεσε σε κουμπί, το εργαλείο δεν μετακινείται από ένα απλό άγγιγμα
+    this.pressKid(before, at);
     return true;
   }
 
@@ -1871,6 +1899,20 @@ export class Board {
 
     let tool = this.tool;
     if (e.pointerType === 'touch' && Math.max(e.width, e.height) > this.palmThreshold) tool = 'eraser';
+
+    // τα εργαλεία του Δημοτικού δουλεύουν με ό,τι κι αν κρατάς: πάτημα σε κουμπί τους ή χτίσιμο με κυβάκια δεν γράφει στον πίνακα
+    if (tool === 'pen' || tool === 'highlighter' || tool === 'shape' || tool === 'text' || tool === 'laser') {
+      const hit = this.hitTest(wx, wy);
+      if (hit && hit.kind === 'stamp' && STAMPS[hit.name]?.kid) {
+        if (this.kidPaint(ps, hit, wx, wy, true)) {
+          ps.mode = 'kid';
+          ps.kidOrig = hit;
+          this.redraw();
+          return;
+        }
+        if (this.pressKid(hit, [wx, wy])) return;
+      }
+    }
 
     switch (tool) {
       case 'pen':

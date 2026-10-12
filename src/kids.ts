@@ -1167,6 +1167,19 @@ export const KIDS: Record<string, StampDef> = {
         text(c, label as string, x + g.bw / 2, g.by + g.bh / 2 + 1, g.bh * 0.42, '#ffffff', 700);
       });
     },
+    ask(_v, x, y, w, h) {
+      const g = hangGeom(w, h);
+      if (y < g.by || y > g.by + g.bh || x < g.bx[1] || x > g.bx[1] + g.bw) return null;
+      return {
+        title: 'Λέξη για την κρεμάλα',
+        hint: 'Από 2 έως 16 γράμματα. Φαίνεται ως κουκκίδες, για να μη τη δουν οι μαθητές.',
+        secret: true,
+        apply(typed) {
+          const next = hangStart(typed);
+          return next.length > 1 ? next : null;
+        },
+      };
+    },
     tap(v, x, y, w, h) {
       const st = hangState(v), g = hangGeom(w, h);
       if (y >= g.by && y <= g.by + g.bh) {
@@ -1174,13 +1187,6 @@ export const KIDS: Record<string, StampDef> = {
           let word = HANG_WORDS[Math.floor(Math.random() * HANG_WORDS.length)];
           if (word === st.word) word = HANG_WORDS[(HANG_WORDS.indexOf(word) + 1) % HANG_WORDS.length];
           return hangStart(word);
-        }
-        if (x >= g.bx[1] && x <= g.bx[1] + g.bw) {
-          // η λέξη γράφεται σε παράθυρο του browser: οι μαθητές κλείνουν τα μάτια
-          const typed = typeof prompt === 'function' ? prompt('Γράψε τη λέξη (οι μαθητές να μη βλέπουν). Από 2 έως 16 γράμματα.') : null;
-          if (!typed) return null;
-          const next = hangStart(typed);
-          return next.length > 1 ? next : null;
         }
         return null;
       }

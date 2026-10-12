@@ -3,6 +3,7 @@
 import { Doc, newDoc, uid } from './model';
 import { backupLesson, driveClientId, driveConnect, driveReady, listLessonBackups, readBackup, trashBackup } from './drive';
 import { kvDel, kvGet, kvSet, loadDoc } from './storage';
+import { ask, confirmBox } from './dialog';
 
 export interface LessonMeta {
   id: string;
@@ -213,7 +214,7 @@ export class Lessons {
 
   private async rename(meta: LessonMeta | undefined): Promise<void> {
     if (!meta) return;
-    const name = prompt('Όνομα μαθήματος', meta.name)?.trim();
+    const name = (await ask('Όνομα μαθήματος', { value: meta.name }))?.trim();
     if (!name || name === meta.name) return;
     meta.name = name.slice(0, 60);
     meta.updated = Date.now();
@@ -423,7 +424,7 @@ export class Lessons {
     const top = t.closest<HTMLElement>('[data-lib]')?.dataset.lib;
     if (top === 'close') return this.close();
     if (top === 'new') {
-      const name = prompt('Όνομα μαθήματος (π.χ. Β2 Τριγωνομετρία)', this.defaultName())?.trim();
+      const name = (await ask('Όνομα νέου μαθήματος', { value: this.defaultName(), hint: 'π.χ. Β2 Τριγωνομετρία' }))?.trim();
       if (!name) return;
       const meta = await this.add(newDoc(), name.slice(0, 60));
       // μέσα σε τμήμα, το νέο μάθημα ανήκει σε αυτό
@@ -456,7 +457,7 @@ export class Lessons {
       await this.rename(meta);
     } else if (act === 'group') {
       const have = this.groups;
-      const g = prompt(`Τμήμα ή τάξη του μαθήματος (π.χ. Β2). Άφησέ το κενό για κανένα.${have.length ? `\nΥπάρχουν: ${have.join(', ')}` : ''}`, meta.group ?? this.filter);
+      const g = await ask('Τμήμα ή τάξη του μαθήματος', { value: meta.group ?? this.filter, hint: 'π.χ. Β2. Άφησέ το κενό για κανένα.', picks: have, max: 20 });
       if (g === null) return;
       meta.group = g.trim().slice(0, 20) || undefined;
       meta.updated = Date.now();
@@ -469,7 +470,7 @@ export class Lessons {
       const doc = await kvGet<Doc>(key(meta.id));
       if (doc) this.host.download(new Blob([JSON.stringify(doc)], { type: 'application/json' }), `${meta.name.replace(/[\\/:*?"<>|]/g, '_')}.json`);
     } else if (act === 'del') {
-      if (!confirm(`Να διαγραφεί το μάθημα «${meta.name}»; Δεν αναιρείται.`)) return;
+      if (!(await confirmBox(`Να διαγραφεί το μάθημα «${meta.name}»;`, 'Διαγραφή', true, 'Δεν αναιρείται.'))) return;
       this.index = this.index.filter((m) => m.id !== meta.id);
       await kvDel(key(meta.id));
       // αν έχει αντίγραφο στο Drive, θα πάει στον κάδο του στο επόμενο αντίγραφο και δεν θα ξαναέρθει από εκεί

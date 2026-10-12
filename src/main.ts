@@ -17,6 +17,7 @@ import { buildPdf } from './pdf';
 import { AiTask, MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage, parseGraphReply } from './ai';
 import { axesRange, itemBounds, uid, wrapText } from './model';
 import { PEN_ICON, PenKind, mountUi } from './ui';
+import { ask, confirmBox } from './dialog';
 
 /** Βασικά χρώματα ανά φόντο· ίδια θέση = αντίστοιχο χρώμα στο άλλο φόντο. */
 const PALETTE = {
@@ -433,11 +434,12 @@ function toggleAnalysis(key: string): void {
   } else if (key === 'asym') an.asym = !an.asym;
   board.updateAxes({ an });
 }
-$('labelMenu').addEventListener('click', (e) => {
+$('labelMenu').addEventListener('click', async (e) => {
   const t = e.target as HTMLElement;
   let label = t.closest<HTMLElement>('[data-label]')?.dataset.label;
-  if (t.closest('#labelOther')) label = prompt('Όνομα άξονα:')?.trim().slice(0, 12) || undefined;
+  const other = !!t.closest('#labelOther');
   closePopups();
+  if (other) label = (await ask('Όνομα άξονα', { max: 12 }))?.trim() || undefined;
   if (label) board.setAxisLabel(labelAxis, label);
 });
 
@@ -1113,6 +1115,7 @@ function placeSelBar(): void {
   el.style.top = `${y}px`;
 }
 board.onUi = refreshUi;
+board.onAsk = (q) => ask(q.title, { hint: q.hint, secret: q.secret, max: 24 });
 board.onMergeAxes = (target, dropped) => {
   const pal = [...inkPalette().slice(1), '#ea580c', '#7c3aed'];
   const fns = [...(target.fns ?? [])];
@@ -1595,7 +1598,7 @@ function renderTemplates(): void {
     BUILTIN.map((t, i) => `<div class="tplItem"><button data-tpl="b${i}">📄 ${esc(t.name)}</button></div>`).join('') +
     templates.map((t, i) => `<div class="tplItem"><button data-tpl="u${i}">📄 ${esc(t.name)}</button><button data-tpldel="${i}" title="Διαγραφή προτύπου">✕</button></div>`).join('');
 }
-tplMenu.addEventListener('click', (e) => {
+tplMenu.addEventListener('click', async (e) => {
   const t = e.target as HTMLElement;
   const del = t.closest<HTMLElement>('[data-tpldel]');
   if (del) {
@@ -1609,7 +1612,7 @@ tplMenu.addEventListener('click', (e) => {
       toast('Η σελίδα είναι κενή');
       return;
     }
-    const name = prompt('Όνομα προτύπου:', `Πρότυπο ${templates.length + 1}`)?.trim();
+    const name = (await ask('Όνομα προτύπου', { value: `Πρότυπο ${templates.length + 1}` }))?.trim();
     if (!name) return;
     templates.push({ name, items: JSON.parse(JSON.stringify(board.page.items)) as Item[] });
     void kvSet('templates', templates);
@@ -1673,7 +1676,7 @@ const onMenu = async (e: Event): Promise<void> => {
   } else if (act === 'clear') {
     board.clearPage();
   } else if (act === 'delpage') {
-    if (confirm('Να διαγραφεί η σελίδα;')) board.deletePage();
+    void confirmBox('Να διαγραφεί η σελίδα;', 'Διαγραφή', true).then((y) => y && board.deletePage());
   } else if (act === 'full') {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await document.documentElement.requestFullscreen().catch(() => {});

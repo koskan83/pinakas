@@ -28,6 +28,13 @@ export interface SpringGeom {
   r: number;
 }
 
+export interface KidAsk {
+  title: string;
+  hint?: string;
+  secret?: boolean;
+  apply(text: string): number[] | null;
+}
+
 export interface StampDef {
   label: string;
   /** Αρχικό μέγεθος σε μονάδες πίνακα. */
@@ -43,6 +50,8 @@ export interface StampDef {
   drawKid?(c: C, w: number, h: number, v: number[], env: KidEnv): void;
   /** Πάτημα στο σημείο (x, y) του κουτιού: η νέα κατάσταση, ή null αν δεν έπεσε πουθενά. */
   tap?(v: number[], x: number, y: number, w: number, h: number): number[] | null;
+  /** Πάτημα που χρειάζεται κείμενο από τον χρήστη (π.χ. λέξη της κρεμάλας): τι να ρωτηθεί και πώς γίνεται κατάσταση. */
+  ask?(v: number[], x: number, y: number, w: number, h: number): KidAsk | null;
   /**
    * Σύρσιμο πάνω στο εργαλείο (χτίσιμο με κυβάκια, δείκτες ρολογιού). `first`: η αρχή της κίνησης· αν τότε επιστρέψει null,
    * το σύρσιμο μετακινεί το εργαλείο ως συνήθως. `st`: πρόχειρη μνήμη για όσο κρατά η κίνηση.
