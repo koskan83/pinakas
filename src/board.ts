@@ -421,6 +421,9 @@ export class Board {
     const next: StampItem = { ...before, v };
     this.page.items[this.page.items.indexOf(before)] = next;
     this.push({ t: 'mod', p: this.cur, before, after: next });
+    // πάτημα σε κουμπί του εργαλείου (γράμμα, +, κομμάτι κλάσματος) δεν το επιλέγει: αλλιώς η μπάρα «Διαγραφή / ×2» πέφτει πάνω στο παιχνίδι
+    this.selected = null;
+    this.onUi();
     return true;
   }
 
@@ -2003,8 +2006,8 @@ export class Board {
         this.multi = [];
         // πάνω σε μη επιλεγμένη εικόνα (π.χ. σελίδα PDF) το σύρσιμο κάνει λάσο· το απλό άγγιγμα την επιλέγει
         if (hit && hit.kind === 'stamp' && this.kidPaint(ps, hit, wx, wy, true)) {
-          // χτίσιμο με κυβάκια ή δείκτης ρολογιού: το σύρσιμο δουλεύει πάνω στο εργαλείο, δεν το μετακινεί
-          this.selected = hit.id;
+          // χτίσιμο με κυβάκια ή δείκτης ρολογιού: το σύρσιμο δουλεύει πάνω στο εργαλείο, δεν το μετακινεί ούτε το επιλέγει
+          this.selected = null;
           ps.mode = 'kid';
           // όχι στο ps.orig: ό,τι είναι εκεί θεωρείται «υπό μετακίνηση» και δεν ζωγραφίζεται στη σελίδα
           ps.kidOrig = hit;

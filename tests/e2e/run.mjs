@@ -498,6 +498,7 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   await page.mouse.click(mid.x - (it.w * k) / 2 + (it.w * k) / 8, mid.y - 60);
   it = (await items(pi)).find((i) => i.kind === 'stamp' && i.name === 'fracbar');
   const changed = it.v.join() !== '4,0';
+  const barAfterTap = await visible('#selOpts');
   await page.click('#undo');
   await page.click('#undo');
   // κυβάκια: όσο κρατάς πατημένο για να χτίσεις, το εργαλείο πρέπει να μένει στην οθόνη
@@ -527,6 +528,7 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   await level();
   assert(await visible('#tools [data-tool="measure"]'), 'η Μέτρηση δεν επέστρεψε στο Γυμνάσιο – Λύκειο');
   assert(changed, 'το πάτημα πάνω στο εργαλείο δεν άλλαξε την κατάστασή του');
+  assert(!barAfterTap, 'μετά από πάτημα σε κουμπί του εργαλείου εμφανίστηκε η μπάρα «Διαγραφή / ×2»');
 });
 
 test('Μαθήματα: νέο μάθημα, τμήμα, μετονομασία από το όνομα, και όλα μένουν μετά από κλείσιμο', async () => {
