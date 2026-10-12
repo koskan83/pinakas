@@ -65,6 +65,22 @@ interface Gesture {
 export type SizedTool = 'pen' | 'highlighter' | 'eraser';
 export type EraserMode = 'stroke' | 'partial';
 
+/** Τα ανοιχτά χρώματα του σκούρου πίνακα και τα αντίστοιχά τους για λευκό χαρτί. */
+const PAPER_INK: Record<string, string> = {
+  '#ffffff': '#111111', '#fb7185': '#e11d48', '#7dd3fc': '#2563eb', '#86efac': '#16a34a',
+  '#34d399': '#059669', '#f87171': '#dc2626', '#5eead4': '#0f766e', '#d1d5db': '#6b7280', '#fde047': '#ca8a04', '#a3e635': '#65a30d',
+};
+
+/** Λογότυπο στην κάτω δεξιά γωνία, μικρό σε σχέση με τη σελίδα. */
+function stampMark(cv: HTMLCanvasElement, mark: HTMLImageElement): void {
+  const s = Math.max(40, Math.min(cv.width, cv.height) * 0.07);
+  const c = cv.getContext('2d')!;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.globalAlpha = 0.9;
+  c.drawImage(mark, cv.width - s * 1.25, cv.height - s * 1.25, s, s);
+  c.globalAlpha = 1;
+}
+
 export class Board {
   /** Η σχεδίαση των στοιχείων στον καμβά ζει στο render.ts. */
   private r = new Renderer(this);
@@ -89,6 +105,8 @@ export class Board {
   private pivot: { key: string; i: number; p: Pt } | null = null;
   /** Διαφανές φόντο (γράψιμο πάνω από άλλα προγράμματα). */
   transparent = false;
+  /** Όσο ζωγραφίζεται σελίδα για το χαρτί: σκούρος πίνακας βγαίνει λευκός και τα ανοιχτά χρώματά του σκουραίνουν. */
+  private paper = false;
   palmThreshold = 40;
   /** Ύψος (px) που καλύπτει η γραμμή εργαλείων στο κάτω μέρος. */
   bottomInset = 110;
@@ -138,7 +156,8 @@ export class Board {
   }
 
   /** Το χρώμα όπως φαίνεται στο τρέχον φόντο: το μαύρο γίνεται λευκό σε σκούρο πίνακα και αντίστροφα. */
-  ink(color: string): string {
+  ink(color: string, hl = false): string {
+    if (this.paper) return hl ? color : PAPER_INK[color] ?? color;
     const dark = isDark(this.doc.bg);
     if (dark && color === '#111111') return '#ffffff';
     if (!dark && color === '#ffffff') return '#111111';
@@ -1535,6 +1554,24 @@ export class Board {
 
   /** Ζωγραφίζει ολόκληρη μια σελίδα (όλα τα στοιχεία της με περιθώριο) σε νέο καμβά. */
   private async pageCanvas(pi: number, opaque: boolean): Promise<HTMLCanvasElement> {
+    await this.loadImages(pi);
+    return this.drawPage(pi, opaque, false);
+  }
+
+  /** Περιμένει να φορτωθούν οι εικόνες μιας σελίδας (ή όλων, χωρίς όρισμα). */
+  async loadImages(pi?: number): Promise<void> {
+    const pages = pi === undefined ? this.doc.pages : [this.doc.pages[pi]];
+    await Promise.all(
+      pages.flatMap((pg) => pg.items).filter((i): i is Pic => i.kind === 'image').map((p) => {
+        this.getImg(p);
+        const img = this.imgs.get(p.id)!;
+        return img.complete ? Promise.resolve() : new Promise<void>((r) => { img.addEventListener('load', () => r()); img.addEventListener('error', () => r()); });
+      })
+    );
+  }
+
+  /** Σύγχρονη σχεδίαση σελίδας με όσες εικόνες έχουν ήδη φορτωθεί. `paper`: για εκτύπωση, πάντα σε λευκό φόντο. */
+  private drawPage(pi: number, opaque: boolean, paper: boolean): HTMLCanvasElement {
     const items = this.doc.pages[pi].items;
     let x0 = 0, y0 = 0, x1 = this.W, y1 = this.H;
     if (items.length > 0) {
@@ -1553,16 +1590,16 @@ export class Board {
     cv.width = Math.max(1, Math.round(bw * s));
     cv.height = Math.max(1, Math.round(bh * s));
     const c = cv.getContext('2d')!;
-    await Promise.all(
-      items.filter((i): i is Pic => i.kind === 'image').map((p) => {
-        this.getImg(p);
-        const img = this.imgs.get(p.id)!;
-        return img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = () => r(); img.onerror = () => r(); });
-      })
-    );
-    // η σχεδίαση διαβάζει την τρέχουσα σελίδα· την αλλάζουμε προσωρινά (σύγχρονα)
+    // η σχεδίαση διαβάζει την τρέχουσα σελίδα και το φόντο· τα αλλάζουμε προσωρινά (σύγχρονα)
     const keep = this.cur;
+    const bg = this.doc.bg;
+    const clear = this.transparent;
     this.cur = pi;
+    if (paper) {
+      this.paper = isDark(bg);
+      this.doc.bg = bg.replace(/^dark-?/, '') as Background || 'white';
+      this.transparent = false;
+    }
     try {
       if (opaque && this.transparent) {
         c.fillStyle = '#ffffff';
@@ -1576,8 +1613,23 @@ export class Board {
       }
     } finally {
       this.cur = keep;
+      this.doc.bg = bg;
+      this.transparent = clear;
+      this.paper = false;
     }
     return cv;
+  }
+
+  /**
+   * Οι σελίδες για τον εκτυπωτή (JPEG data URL), πάντα σε λευκό φόντο. Σύγχρονη, γιατί ο browser δεν περιμένει όταν πατηθεί «Εκτύπωση»·
+   * οι εικόνες πρέπει να έχουν φορτωθεί από πριν με loadImages().
+   */
+  printPages(mark?: HTMLImageElement | null): string[] {
+    return this.doc.pages.map((_, pi) => {
+      const cv = this.drawPage(pi, true, true);
+      if (mark) stampMark(cv, mark);
+      return cv.toDataURL('image/jpeg', 0.9);
+    });
   }
 
   /** Μικρογραφία της πρώτης σελίδας (JPEG data URL), για τη βιβλιοθήκη μαθημάτων. */
@@ -1615,15 +1667,7 @@ export class Board {
     for (let i = 0; i < n; i++) {
       onProgress(i, n);
       const cv = await this.pageCanvas(list[i], true);
-      if (mark) {
-        // λογότυπο στην κάτω δεξιά γωνία, μικρό σε σχέση με τη σελίδα
-        const s = Math.max(40, Math.min(cv.width, cv.height) * 0.07);
-        const c = cv.getContext('2d')!;
-        c.setTransform(1, 0, 0, 1, 0, 0);
-        c.globalAlpha = 0.9;
-        c.drawImage(mark, cv.width - s * 1.25, cv.height - s * 1.25, s, s);
-        c.globalAlpha = 1;
-      }
+      if (mark) stampMark(cv, mark);
       const blob = await new Promise<Blob>((res, rej) => cv.toBlob((b) => (b ? res(b) : rej(new Error('JPEG'))), 'image/jpeg', 0.9));
       out.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), w: cv.width, h: cv.height });
     }

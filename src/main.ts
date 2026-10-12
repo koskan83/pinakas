@@ -1665,7 +1665,35 @@ function loadLogo(): Promise<HTMLImageElement | null> {
   return logoImg;
 }
 
-/** Το PDF του μαθήματος· με πάνω από μία σελίδα ρωτά ποιες θα μπουν. null αν ο χρήστης ακύρωσε. */
+// ---------- εκτύπωση από το μενού του browser (δεξί πλήκτρο ή παρατεταμένο πάτημα) ----------
+// Στο χαρτί πάνε μόνο οι σελίδες του μαθήματος, πάντα σε λευκό φόντο, χωρίς γραμμή εργαλείων.
+const printView = document.createElement('div');
+printView.id = 'printView';
+document.body.append(printView);
+let printMark: HTMLImageElement | null = null;
+/** Ο browser δεν περιμένει όταν πατηθεί «Εκτύπωση»: εικόνες και λογότυπο φορτώνονται από τη στιγμή που ανοίγει το μενού. */
+async function printReady(): Promise<void> {
+  [printMark] = await Promise.all([loadLogo(), board.loadImages()]);
+}
+document.addEventListener('contextmenu', () => void printReady(), true);
+window.addEventListener('beforeprint', () => {
+  void loadLogo().then((m) => { printMark = m; });
+  printView.innerHTML = '';
+  for (const src of board.printPages(pdfLogo ? printMark : null)) {
+    const img = new Image();
+    img.src = src;
+    printView.append(img);
+  }
+});
+window.addEventListener('afterprint', () => { printView.innerHTML = ''; });
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+    e.preventDefault();
+    void printReady().then(() => window.print());
+  }
+});
+void loadLogo().then((m) => { printMark = m; });
+
 /** Το PDF του μαθήματος. `all`: όλες οι σελίδες, χωρίς ερώτηση. */
 async function lessonPdf(all = false): Promise<Blob | null> {
   const total = board.doc.pages.length;

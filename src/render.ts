@@ -18,7 +18,7 @@ export interface RenderHost {
   paramPreview: Params | null;
   transparent: boolean;
   lctx: CanvasRenderingContext2D;
-  ink(color: string): string;
+  ink(color: string, hl?: boolean): string;
   getImg(p: Pic): HTMLImageElement | null;
   springState(s: StampItem): SpringState;
 }
@@ -56,7 +56,7 @@ export class Renderer {
   drawStroke(c: CanvasRenderingContext2D, s: Stroke): void {
     const pts = s.pts;
     c.save();
-    c.strokeStyle = c.fillStyle = this.b.ink(s.color);
+    c.strokeStyle = c.fillStyle = this.b.ink(s.color, s.hl);
     c.lineCap = 'round';
     c.lineJoin = 'round';
     const w = s.hl ? s.width * 4 : s.width;
@@ -64,7 +64,7 @@ export class Renderer {
       // Πάνω στη σελίδα το υπογραμμιστικό «βάφει» μόνο ό,τι είναι πιο ανοιχτό από το χρώμα του (πιο σκούρο, σε σκούρο φόντο):
       // δεύτερο πέρασμα στο ίδιο σημείο δεν το σκουραίνει και η γραφή από κάτω μένει καθαρή.
       const dark = isDark(this.b.doc.bg);
-      const flat = c !== this.b.lctx && !this.b.transparent ? hlFlat(this.b.ink(s.color), dark ? [20, 32, 27] : [255, 255, 255]) : null;
+      const flat = c !== this.b.lctx && !this.b.transparent ? hlFlat(this.b.ink(s.color, true), dark ? [20, 32, 27] : [255, 255, 255]) : null;
       if (flat) {
         c.strokeStyle = c.fillStyle = flat;
         c.globalCompositeOperation = dark ? 'lighten' : 'darken';

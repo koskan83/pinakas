@@ -188,6 +188,37 @@ test('Σκούρος πίνακας: το μαύρο από την παλέτα 
   assert(!(await visible('#menu')), 'το μενού έμεινε ανοιχτό');
 });
 
+test('Εκτύπωση από το μενού του browser: λευκό χαρτί, σκούρα χρώματα, χωρίς γραμμή εργαλείων', async () => {
+  await page.click('#menuBtn');
+  await page.click('#menu [data-act="bg-dark"]');
+  await page.click('#menuBtn');
+  await pen();
+  await page.click('#colors [data-color="#ffffff"]');
+  await drag(300, 200, 620, 200);
+  await page.emulateMedia({ media: 'print' });
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+  await page.waitForFunction(() => { const i = document.querySelector('#printView img'); return i && i.complete && i.naturalWidth > 0; });
+  const r = await page.evaluate(() => {
+    const img = document.querySelector('#printView img');
+    const cv = document.createElement('canvas');
+    cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+    const c = cv.getContext('2d');
+    c.drawImage(img, 0, 0);
+    const px = (x, y) => [...c.getImageData(Math.round(x), Math.round(y), 1, 1).data].slice(0, 3);
+    return { n: document.querySelectorAll('#printView img').length, app: getComputedStyle(document.getElementById('app')).display, corner: px(4, 4), darkest: Math.min(...Array.from({ length: cv.height }, (_, y) => Math.max(...px(cv.width / 2, y)))), lightInk: (() => { const d = c.getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 60 && d[i + 1] < 60 && d[i + 2] < 60) n++; return n; })() };
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  await page.emulateMedia({ media: null });
+  await page.click('#undo');
+  await page.click('#menuBtn');
+  await page.click('#menu [data-act="bg-white"]');
+  await page.click('#menuBtn');
+  assert(r.n === 1, `έπρεπε να τυπωθεί 1 σελίδα, βγήκαν ${r.n}`);
+  assert(r.app === 'none', 'η γραμμή εργαλείων θα τυπωνόταν μαζί');
+  assert(r.corner.every((v) => v > 240), `το χαρτί δεν είναι λευκό: ${r.corner}`);
+  assert(r.lightInk > 50, `η λευκή γραφή δεν έγινε σκούρα στο χαρτί (σκούρα pixel: ${r.lightInk}, πιο σκούρο στη μέση: ${r.darkest})`);
+});
+
 test('Γόμα ολόκληρης γραμμής', async () => {
   await tool('eraser');
   await page.click('[data-eraser="stroke"]');
