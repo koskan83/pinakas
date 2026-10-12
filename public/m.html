@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Το μάθημα – PrismaBoard</title>
+<link rel="icon" href="./favicon.svg" />
+<style>
+  :root { color-scheme: light dark; --bg: #f8fafc; --card: #fff; --fg: #111827; --mut: #6b7280; --line: #e5e7eb; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f172a; --card: #1e293b; --fg: #f1f5f9; --mut: #94a3b8; --line: #334155; } }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; display: flex; flex-direction: column; background: var(--bg); color: var(--fg); font: 17px/1.4 system-ui, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--card); border-bottom: 1px solid var(--line); }
+  header img { width: 38px; height: 38px; }
+  header b { font-size: 19px; }
+  header span { display: block; font-size: 13px; color: var(--mut); }
+  header div { flex: 1; min-width: 0; }
+  a.btn { flex-shrink: 0; padding: 11px 16px; border-radius: 12px; background: #2563eb; color: #fff; font-weight: 600; text-decoration: none; }
+  a.btn.sec { background: none; color: inherit; border: 1px solid var(--line); font-weight: 400; }
+  iframe { flex: 1; width: 100%; border: 0; background: var(--bg); }
+  #none { margin: auto; padding: 24px; max-width: 520px; text-align: center; color: var(--mut); }
+  @media (max-width: 520px) { a.btn.sec { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <img src="./logo.svg" alt="" />
+  <div><b>Το μάθημα</b><span>PrismaBoard</span></div>
+  <a class="btn sec" id="open" target="_blank" rel="noopener">Άνοιγμα στο Drive</a>
+  <a class="btn" id="get">Λήψη PDF</a>
+</header>
+<div id="none" hidden>Ο σύνδεσμος δεν είναι σωστός. Σκάναρε ξανά το QR από τον πίνακα.</div>
+<script>
+// Το αναγνωριστικό του αρχείου είναι μετά το # και δεν στέλνεται σε κανέναν διακομιστή εκτός από το Google Drive που το προβάλλει.
+const id = decodeURIComponent(location.hash.slice(1));
+if (/^[\w-]{10,100}$/.test(id)) {
+  document.getElementById('open').href = 'https://drive.google.com/file/d/' + id + '/view';
+  document.getElementById('get').href = 'https://drive.google.com/uc?export=download&id=' + id;
+  const f = document.createElement('iframe');
+  f.src = 'https://drive.google.com/file/d/' + id + '/preview';
+  f.title = 'Οι σελίδες του μαθήματος';
+  f.allow = 'autoplay';
+  document.body.append(f);
+} else {
+  document.getElementById('none').hidden = false;
+  document.getElementById('open').hidden = true;
+  document.getElementById('get').hidden = true;
+}
+</script>
+</body>
+</html>

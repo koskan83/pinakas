@@ -127,6 +127,20 @@ export function pickPages(title: string, okText: string, n: number, thumb: (i: n
   });
 }
 
+/** Η δημόσια διεύθυνση της εφαρμογής: εκεί ζει η σελίδα του μαθητή όταν ο πίνακας τρέχει τοπικά ή ως πρόγραμμα. */
+const SITE = 'https://koskan83.github.io/prismaboard/';
+
+/**
+ * Ο σύνδεσμος που σκανάρουν οι μαθητές: η δική μας σελίδα (λογότυπο, προβολή για κινητό, κουμπί λήψης) που δείχνει το αρχείο του Drive.
+ * Αν το αρχείο δεν μοιράζεται με σύνδεσμο, η σελίδα δεν θα μπορούσε να το δείξει: μένει ο σύνδεσμος του Drive.
+ */
+function studentUrl(up: { url: string; shared: boolean }): string {
+  const id = /\/d\/([\w-]+)/.exec(up.url)?.[1];
+  if (!up.shared || !id) return up.url;
+  const online = location.protocol === 'https:' && !/^(localhost$|127\.|\[::1\])/.test(location.hostname);
+  return `${new URL('m.html', online ? location.href : SITE).href}#${id}`;
+}
+
 function drawQr(cv: HTMLCanvasElement, text: string): void {
   const qr = qrcode(0, 'M');
   qr.addData(text);
@@ -178,11 +192,11 @@ $('sendDrive').onclick = async () => {
     if (!pdf) return;
     toast('Ανεβαίνει στο Google Drive…', 0);
     const up = await uploadToDrive(pdf, name);
-    sendUrl = up.url;
-    drawQr($('sendQr') as HTMLCanvasElement, up.url);
-    $('sendUrl').textContent = up.url;
+    sendUrl = studentUrl(up);
+    drawQr($('sendQr') as HTMLCanvasElement, sendUrl);
+    $('sendUrl').textContent = sendUrl;
     $('sendNote').textContent = up.shared
-      ? 'Το αρχείο είναι στον φάκελο «PrismaBoard» του Drive. Όποιος έχει τον σύνδεσμο ή το QR μπορεί να το δει.'
+      ? 'Το αρχείο είναι στον φάκελο «PrismaBoard» του Drive. Όποιος έχει τον σύνδεσμο ή το QR το βλέπει σε σελίδα του PrismaBoard, με κουμπί λήψης.'
       : 'Το αρχείο ανέβηκε στον φάκελο «PrismaBoard», αλλά ο λογαριασμός δεν επιτρέπει κοινή χρήση με σύνδεσμο. Άνοιξέ το στο Drive και μοίρασέ το από εκεί.';
     $('sendOut').classList.remove('hidden');
     showSend();
@@ -205,7 +219,7 @@ export async function endLesson(): Promise<void> {
     if (!pdf) return;
     toast('Ανεβαίνει στο Google Drive…', 0);
     const up = await uploadToDrive(pdf, name);
-    sendUrl = up.url;
+    sendUrl = studentUrl(up);
     if (up.shared) {
       showBigQr();
       toast('Έτοιμο: οι μαθητές σκανάρουν το QR');

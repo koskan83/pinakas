@@ -428,7 +428,7 @@ test('Αποστολή με επιλογή σελίδων: το QR εμφανί�
   await page.click('#ppOk');
   await page.waitForSelector('#sendMenu:not(.hidden) #sendOut:not(.hidden) #sendQr', { timeout: 15000 });
   assert(drive.uploads >= 1 && drive.perms >= 1, 'δεν έγινε ανέβασμα και κοινή χρήση');
-  assert((await page.textContent('#sendUrl')).includes('drive.google.com/file/d/file1'), 'λείπει ο σύνδεσμος');
+  assert((await page.textContent('#sendUrl')).endsWith('/prismaboard/m.html#file1'), 'λείπει ο σύνδεσμος');
   await page.click('#sendClose');
 });
 
@@ -601,6 +601,21 @@ test('Αντίγραφο μαθημάτων στο Drive', async () => {
   await page.waitForFunction(() => document.getElementById('libSafeMsg').textContent.startsWith('Όλα τα μαθήματα έχουν αντίγραφο'), null, { timeout: 20000 });
   assert(drive.uploads - before >= 1, 'δεν ανέβηκε αντίγραφο');
   await page.click('#lib [data-lib="close"]');
+});
+
+test('Σελίδα μαθητή (QR): δείχνει το αρχείο του Drive με κουμπί λήψης· λάθος σύνδεσμος δίνει μήνυμα', async () => {
+  const p2 = await ctx.newPage();
+  await p2.route('https://drive.google.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<p>drive</p>' }));
+  await p2.goto(`${URL_}m.html#file1ABCDEFGHIJ`);
+  const src = await p2.getAttribute('iframe', 'src');
+  const get = await p2.getAttribute('#get', 'href');
+  await p2.goto(`${URL_}m.html#<script>`);
+  await p2.reload();
+  const bad = (await p2.locator('iframe').count()) === 0 && (await p2.locator('#none').isVisible());
+  await p2.close();
+  assert(src === 'https://drive.google.com/file/d/file1ABCDEFGHIJ/preview', `η προβολή δείχνει σε λάθος διεύθυνση: ${src}`);
+  assert(get.endsWith('id=file1ABCDEFGHIJ'), 'το κουμπί λήψης δεν δείχνει στο αρχείο');
+  assert(bad, 'με λάθος σύνδεσμο η σελίδα έπρεπε να δείξει μήνυμα και όχι προβολή');
 });
 
 test('Δύο δάχτυλα: το σύρσιμο δεν αλλάζει το zoom, το άνοιγμα των δαχτύλων το αλλάζει', async () => {
