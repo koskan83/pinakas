@@ -175,8 +175,8 @@ describe('εργαλεία Δημοτικού', () => {
 });
 
 describe('χτίσιμο με κυβάκια', () => {
-  const d = KIDS.build, s = d.w / 16;
-  it('σύρσιμο χτίζει με το επιλεγμένο υλικό, και πάνω σε ίδιο κυβάκι σβήνει', () => {
+  const d = KIDS.build, s = d.w / 24, slots = 19;
+  it('σύρσιμο χτίζει με το επιλεγμένο υλικό· σβήνει μόνο το σφουγγάρι', () => {
     const st = {};
     let v = d.paint!([2], s * 0.5, s * 0.5, d.w, d.h, st, true)!;
     expect(v[1]).toBe(3);
@@ -184,16 +184,26 @@ describe('χτίσιμο με κυβάκια', () => {
     expect(v.slice(1, 4)).toEqual([3, 3, 0]);
     // το ίδιο κουτί ξανά στην ίδια κίνηση: καμία αλλαγή
     expect(d.paint!(v, s * 1.5, s * 0.5, d.w, d.h, st, false)).toBeNull();
-    // νέα κίνηση που ξεκινά πάνω σε κυβάκι του ίδιου υλικού: το βγάζει
-    expect(d.paint!(v, s * 0.5, s * 0.5, d.w, d.h, {}, true)![1]).toBe(0);
+    // νέα κίνηση πάνω σε κυβάκι του ίδιου υλικού: μένει, δεν σβήνει
+    expect(d.paint!(v, s * 0.5, s * 0.5, d.w, d.h, {}, true)![1]).toBe(3);
+    // άλλο υλικό πάνω του: το αντικαθιστά
+    expect(d.paint!([6, ...v.slice(1)], s * 0.5, s * 0.5, d.w, d.h, {}, true)![1]).toBe(7);
+    // σφουγγάρι (η θέση αμέσως μετά τα υλικά): σβήνει
+    expect(d.paint!([slots - 2, ...v.slice(1)], s * 0.5, s * 0.5, d.w, d.h, {}, true)![1]).toBe(0);
   });
   it('η σειρά υλικών διαλέγει υλικό, και ο κάδος αδειάζει το χτίσιμο', () => {
-    const y = s * 10 + (d.h - s * 10) / 2, sw = d.w / 13;
+    const y = s * 14 + (d.h - s * 14) / 2, sw = d.w / slots;
     expect(d.paint!([0, 1, 1], sw * 5.5, y, d.w, d.h, {}, true)![0]).toBe(5);
-    expect(d.paint!([4, 1, 1], sw * 12.5, y, d.w, d.h, {}, true)).toEqual([4]);
+    expect(d.paint!([4, 1, 1], sw * (slots - 0.5), y, d.w, d.h, {}, true)).toEqual([4]);
     // σύρσιμο που ξεκίνησε από τα υλικά δεν χτίζει
     const st = {};
     d.paint!([0], sw * 5.5, y, d.w, d.h, st, true);
     expect(d.paint!([5], s * 0.5, s * 0.5, d.w, d.h, st, false)).toBeNull();
+  });
+  it('χτίσιμο από το παλιό, μικρότερο πλέγμα δεν χάνεται', () => {
+    const old = [0, ...new Array(160).fill(0)];
+    old[1 + 9 * 16] = 2; // κάτω αριστερά στο 16 × 10
+    const v = d.paint!(old, s * 5.5, s * 0.5, d.w, d.h, {}, true)!;
+    expect(v[1 + 13 * 24]).toBe(2);
   });
 });

@@ -484,6 +484,6 @@ body.primary #toolbar span[data-em] { font-size: 0; }
 body.primary #toolbar span[data-em] > * { display: none; }
 body.primary #toolbar span[data-em]::before { content: attr(data-em); font-size: 25px; line-height: 26px; display: block; height: 26px; font-family: "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif; }
 body.primary #toolbar button:disabled span[data-em]::before { opacity: .35; filter: grayscale(1); }
-.tiles.small { grid-template-columns: repeat(10, 1fr); }
+.tiles.small { grid-template-columns: repeat(11, 1fr); }
 .tile.pic { min-height: 0; padding: 6px 0; }
 .tile.pic span b.em { font-size: 24px; }
