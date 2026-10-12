@@ -148,11 +148,19 @@ describe('εργαλεία Δημοτικού', () => {
     expect(d.paint!([180, 1], c, d.h - 10, d.w, d.h, {}, true)).toBeNull();
     expect(d.tap!([180, 1], c, d.h - 10, d.w, d.h)).toEqual([180, 0]);
   });
-  it('υλικό δεκάδων: + και − ανά στήλη, χωρίς να περνά το 9', () => {
-    const d = KIDS.blocks, r = d.h * 0.15 * 0.3;
-    expect(d.tap!([234, 1], d.w * 0.5 - r * 1.6, d.h * 0.075, d.w, d.h)).toEqual([334, 1]);
-    expect(d.tap!([294, 1], d.w * 0.8 - r * 1.6, d.h * 0.075, d.w, d.h)).toBeNull();
-    expect(d.tap!([234, 1], d.w * 0.8 + r * 1.6, d.h * 0.075, d.w, d.h)).toEqual([233, 1]);
+  it('υλικό δεκάδων: πάνω από 9 μηδενίζει και περνά ένα στην επόμενη στήλη', () => {
+    const d = KIDS.blocks, head = d.h * 0.24, r = head * 0.2, ky = head * 0.68;
+    const plus = (k: number): [number, number] => [[0.44, 0.72, 1][k] * d.w - r * 1.5, ky];
+    const minus = (k: number): [number, number] => [[0, 0.44, 0.72][k] * d.w + r * 1.5, ky];
+    expect(d.tap!([234, 1], ...plus(0), d.w, d.h)).toEqual([334, 1]);
+    // 9 μονάδες + 1: οι μονάδες μηδενίζουν και οι δεκάδες γίνονται 4
+    expect(d.tap!([239, 1], ...plus(2), d.w, d.h)).toEqual([240, 1]);
+    // 9 δεκάδες + 1: περνά στις εκατοντάδες
+    expect(d.tap!([294, 1], ...plus(1), d.w, d.h)).toEqual([304, 1]);
+    // 0 μονάδες − 1: δανείζεται από τις δεκάδες
+    expect(d.tap!([240, 1], ...minus(2), d.w, d.h)).toEqual([239, 1]);
+    expect(d.tap!([999, 1], ...plus(2), d.w, d.h)).toBeNull();
+    expect(d.tap!([0, 1], ...minus(2), d.w, d.h)).toBeNull();
   });
   it('πίνακας του 100 και προπαίδεια: το πάτημα σημειώνει το σωστό κουτί', () => {
     expect(tap('hundred', [0, 0, 0, 0], 0.05, 0.05)).toEqual([1, 0, 0, 0]);

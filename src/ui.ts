@@ -249,7 +249,7 @@ export function mountUi(app: HTMLElement): void {
     <div class="gHead" data-lv="pri">Αριθμοί</div>
     <div class="tiles" data-lv="pri">
       ${tile('data-kid="numline"', '<b class="sm">0–10</b>', 'Αριθμογρ.', 'Αριθμογραμμή: το ⟳ αλλάζει από πού ως πού')}
-      ${tile('data-kid="blocks"', '<b class="em">🔢</b>', 'Ε Δ Μ', 'Εκατοντάδες, δεκάδες, μονάδες με κυβάκια')}
+      ${tile('data-kid="blocks"', '<b class="em">🔢</b>', 'Ε Δ Μ', 'Εκατοντάδες, δεκάδες, μονάδες με κυβάκια: πάνω από 9 περνά ένα στην επόμενη στήλη')}
       ${tile('data-kid="hundred"', '<b class="sm">100</b>', 'Πίν. 100', 'Πίνακας του 100: πατάς αριθμούς και χρωματίζονται')}
       ${tile('data-kid="times"', '<b>×</b>', 'Προπαίδεια', 'Προπαίδεια: πατάς ένα κουτί και φαίνεται το γινόμενο')}
       ${tile('data-kid="colops"', '<b class="sm">Ε Δ Μ</b>', 'Κάθ. πράξη', 'Πλέγμα για κάθετη πράξη με κρατούμενα')}

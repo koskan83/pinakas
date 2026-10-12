@@ -96,6 +96,9 @@ function fracTap(v: number[], x: number, y: number, w: number, sy: number, hh: n
 }
 const ones = (m: number): number => { let k = 0; for (let i = 0; i < 25; i++) if (m & (1 << i)) k++; return k; };
 
+/** Υλικό δεκάδων: όρια των τριών στηλών (ως κλάσμα του πλάτους) και ύψος της κεφαλίδας. */
+const BCOL = [0, 0.44, 0.72, 1], BHEAD = 0.24;
+
 // ---------- χρήματα ----------
 /** Αξία σε λεπτά και όψη κάθε χαρτονομίσματος ή κέρματος. */
 const MONEY: { c: number; label: string; note?: boolean; fill: string; rim?: string }[] = [
@@ -401,13 +404,13 @@ export const KIDS: Record<string, StampDef> = {
   }),
 
   blocks: kid({
-    label: 'Εκατοντάδες, δεκάδες, μονάδες', w: 600, h: 360, init: [234, 1],
+    label: 'Εκατοντάδες, δεκάδες, μονάδες', w: 620, h: 400, init: [234, 1],
     drawKid(c, w, h, v, env) {
       const n = Math.max(0, Math.min(999, v[0] ?? 0));
       const digits = [Math.floor(n / 100), Math.floor(n / 10) % 10, n % 10];
-      const cols = [0, w * 0.5, w * 0.8, w];
-      const head = h * 0.15, foot = h * 0.16;
-      const names = ['Ε', 'Δ', 'Μ'], fills = [GREEN, BLUE, YELLOW];
+      const cols = BCOL.map((q) => q * w);
+      const head = h * BHEAD, foot = h * 0.16;
+      const names = ['Εκατοντάδες', 'Δεκάδες', 'Μονάδες'], fills = [GREEN, BLUE, YELLOW];
       c.lineWidth = 1.5;
       for (let k = 0; k < 3; k++) {
         const x0 = cols[k], x1 = cols[k + 1], mid = (x0 + x1) / 2;
@@ -415,10 +418,13 @@ export const KIDS: Record<string, StampDef> = {
         c.globalAlpha = 0.35;
         c.strokeRect(x0, 0, x1 - x0, h - foot);
         c.restore();
-        const r = head * 0.3;
-        knob(c, x0 + r * 1.6, head / 2, r, '−', env);
-        knob(c, x1 - r * 1.6, head / 2, r, '+', env);
-        text(c, names[k], mid, head / 2, head * 0.6, env.ink, 700);
+        // επάνω το όνομα της στήλης· από κάτω − και +, με το ψηφίο της ανάμεσα
+        const r = head * 0.2, ky = head * 0.68;
+        text(c, names[k], mid, head * 0.22, Math.min(head * 0.3, ((x1 - x0) * 1.5) / names[k].length), env.ink, 700);
+        knob(c, x0 + r * 1.5, ky, r, '−', env);
+        knob(c, x1 - r * 1.5, ky, r, '+', env);
+        // όταν ο αριθμός είναι κρυμμένος («Ποιος αριθμός είναι;») κρύβονται και τα ψηφία
+        text(c, v[1] ? String(digits[k]) : '?', mid, ky + 1, head * 0.36, env.ink, 800);
         const top = head + 6, room = h - foot - top - 6;
         c.save();
         c.fillStyle = fills[k];
@@ -462,12 +468,13 @@ export const KIDS: Record<string, StampDef> = {
     },
     tap(v, x, y, w, h) {
       const n = Math.max(0, Math.min(999, v[0] ?? 0));
-      const cols = [0, w * 0.5, w * 0.8, w], head = h * 0.15, foot = h * 0.16, r = head * 0.3;
+      const cols = BCOL.map((q) => q * w), head = h * BHEAD, foot = h * 0.16, r = head * 0.2, ky = head * 0.68;
       if (y > h - foot && y <= h) return [n, v[1] ? 0 : 1];
       for (let k = 0; k < 3; k++) {
-        const unit = [100, 10, 1][k], digit = Math.floor(n / unit) % 10;
-        if (inR(x, y, cols[k] + r * 1.6, head / 2, r * 1.2)) return digit > 0 ? [n - unit, v[1] ?? 1] : null;
-        if (inR(x, y, cols[k + 1] - r * 1.6, head / 2, r * 1.2)) return digit < 9 ? [n + unit, v[1] ?? 1] : null;
+        // πάνω από 9 η στήλη μηδενίζει και περνά ένα στην αριστερή της (κρατούμενο)· κάτω από 0 «δανείζεται» από εκεί
+        const unit = [100, 10, 1][k];
+        if (inR(x, y, cols[k] + r * 1.5, ky, r * 1.2)) return n - unit >= 0 ? [n - unit, v[1] ?? 1] : null;
+        if (inR(x, y, cols[k + 1] - r * 1.5, ky, r * 1.2)) return n + unit <= 999 ? [n + unit, v[1] ?? 1] : null;
       }
       return null;
     },
