@@ -542,6 +542,19 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   await level();
   assert(await visible('#tools [data-tool="measure"]'), 'η Μέτρηση δεν επέστρεψε στο Γυμνάσιο – Λύκειο');
   assert(changed, 'το πάτημα πάνω στο εργαλείο δεν άλλαξε την κατάστασή του');
+  // έτοιμη σελίδα του Γυμνασίου – Λυκείου από τα πρότυπα
+  await page.click('#importBtn');
+  await page.click('[data-ins="tpl"]');
+  assert(!(await visible('#tplList [data-tpl="b3"]')), 'τα πρότυπα του Δημοτικού φαίνονται στο Γυμνάσιο – Λύκειο');
+  await page.click('#tplList [data-tpl="b2"]');
+  const last = (await doc()).pages.at(-1).items;
+  assert(last.some((i) => i.kind === 'axes') && last.some((i) => i.kind === 'text' && i.text === 'Ασύμπτωτες'), 'το πρότυπο «Μελέτη συνάρτησης» δεν έφτιαξε τη σελίδα του');
+  await page.click('#menuBtn');
+  await page.click('#menu [data-act="more"]');
+  assert(/Έκδοση \d{4}-\d\d-\d\d/.test(await page.textContent('#verLine')), 'δεν φαίνεται η έκδοση στις ρυθμίσεις');
+  await page.click('#setMenu [data-act="news"]');
+  assert((await page.locator('#ask li').count()) >= 3, 'το «Τι νέο» δεν άνοιξε');
+  await page.click('#ask .go');
   assert(penTap, 'με το στυλό, το πάτημα σε κουμπί εργαλείου του Δημοτικού δεν δούλεψε ή άφησε σημάδι');
   assert(!barAfterTap, 'μετά από πάτημα σε κουμπί του εργαλείου εμφανίστηκε η μπάρα «Διαγραφή / ×2»');
 });

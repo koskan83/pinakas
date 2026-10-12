@@ -14,6 +14,7 @@ function precacheList(): Plugin {
 
 export default defineConfig({
   base: './',
+  define: { __BUILD__: JSON.stringify(new Date().toLocaleDateString('sv')) },
   build: { target: 'es2022' },
   server: { port: 5173, strictPort: true },
   clearScreen: false,

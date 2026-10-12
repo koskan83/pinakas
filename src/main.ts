@@ -17,7 +17,8 @@ import { buildPdf } from './pdf';
 import { AiTask, MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage, parseGraphReply } from './ai';
 import { axesRange, itemBounds, uid, wrapText } from './model';
 import { PEN_ICON, PenKind, mountUi } from './ui';
-import { ask, confirmBox } from './dialog';
+import { ask, confirmBox, notice } from './dialog';
+import { NEWS, VERSION, newsPending } from './news';
 
 /** Βασικά χρώματα ανά φόντο· ίδια θέση = αντίστοιχο χρώμα στο άλλο φόντο. */
 const PALETTE = {
@@ -1576,7 +1577,11 @@ stampMenu.addEventListener('click', (e) => {
 
 // ---------- πρότυπα σελίδων ----------
 
-interface Template { name: string; items: Item[] }
+interface Template { name: string; items: Item[]; lv?: 'pri' | 'sec' }
+const kidItem = (name: string, x: number, y: number, scale = 1): Item => {
+  const d = STAMPS[name];
+  return { kind: 'stamp', id: '', name, x, y, w: d.w * scale, h: d.h * scale, color: '#111111', width: 3, v: d.init?.slice() };
+};
 const text = (x: number, y: number, t: string, size = 34): Item => ({ kind: 'text', id: '', x, y, text: t, size, color: '#111111' });
 const rule = (x0: number, y0: number, x1: number, y1: number): Item =>
   ({ kind: 'shape', id: '', shape: 'line', x0, y0, x1, y1, color: '#111111', width: 2 });
@@ -1590,12 +1595,35 @@ const BUILTIN: Template[] = [
     name: 'Δύο στήλες',
     items: [rule(640, 80, 640, 660)],
   },
+  {
+    name: 'Μελέτη συνάρτησης', lv: 'sec',
+    items: [text(60, 90, 'f(x) ='), rule(60, 140, 600, 140),
+      text(60, 165, 'Πεδίο ορισμού', 26), text(60, 285, 'Μονοτονία – ακρότατα', 26), text(60, 415, 'Κυρτότητα – σημεία καμπής', 26), text(60, 545, 'Ασύμπτωτες', 26),
+      rule(640, 90, 640, 640),
+      { kind: 'axes', id: '', x: 930, y: 375, unit: 30, mode: 'full', nx: 8, ny: 8, color: '#111111' }],
+  },
+  {
+    name: 'Κλάσματα', lv: 'pri',
+    items: [text(60, 85, 'Κλάσματα', 44), kidItem('fracpie', 80, 190, 0.95), kidItem('fracpie', 400, 190, 0.95), kidItem('fracbar', 730, 200, 0.85), kidItem('fracbar', 730, 400, 0.85)],
+  },
+  {
+    name: 'Αριθμοί ως το 1000', lv: 'pri',
+    items: [text(60, 85, 'Εκατοντάδες, Δεκάδες, Μονάδες', 40), kidItem('blocks', 60, 160, 0.85), kidItem('balance', 680, 170, 0.75), kidItem('numline', 60, 530)],
+  },
+  {
+    name: 'Τι ώρα είναι;', lv: 'pri',
+    items: [text(60, 85, 'Τι ώρα είναι;', 44), kidItem('clock', 150, 190), kidItem('clock', 760, 190), rule(640, 170, 640, 600)],
+  },
+  {
+    name: 'Προπαίδεια', lv: 'pri',
+    items: [text(60, 85, 'Προπαίδεια', 44), kidItem('times', 60, 160, 0.9), kidItem('hundred', 680, 165, 0.9)],
+  },
 ];
 let templates: Template[] = [];
 void kvGet<Template[]>('templates').then((t) => { templates = t ?? []; });
 function renderTemplates(): void {
   $('tplList').innerHTML =
-    BUILTIN.map((t, i) => `<div class="tplItem"><button data-tpl="b${i}">📄 ${esc(t.name)}</button></div>`).join('') +
+    BUILTIN.map((t, i) => `<div class="tplItem"${t.lv ? ` data-lv="${t.lv}"` : ''}><button data-tpl="b${i}">📄 ${esc(t.name)}</button></div>`).join('') +
     templates.map((t, i) => `<div class="tplItem"><button data-tpl="u${i}">📄 ${esc(t.name)}</button><button data-tpldel="${i}" title="Διαγραφή προτύπου">✕</button></div>`).join('');
 }
 tplMenu.addEventListener('click', async (e) => {
@@ -1688,6 +1716,8 @@ const onMenu = async (e: Event): Promise<void> => {
     $('diag').classList.toggle('hidden');
   } else if (act === 'end') {
     void endLesson();
+  } else if (act === 'news') {
+    void showNews();
   } else if (act === 'more') {
     const m = $('setMenu');
     m.classList.remove('hidden');
@@ -2103,6 +2133,8 @@ function closeWelcome(): void {
   try { localStorage.setItem(WELCOME, '1'); } catch { /* χωρίς αποθήκευση */ }
 }
 $('wGo').onclick = closeWelcome;
+const showNews = (): Promise<void> => notice('Τι νέο στο PrismaBoard', NEWS, `Έκδοση ${VERSION}`);
+$('verLine').textContent = `Έκδοση ${VERSION}`;
 $('wHelp').onclick = () => window.open('./odigies.pdf', '_blank');
 $('welcome').addEventListener('pointerdown', (e) => {
   if (e.target === $('welcome')) closeWelcome();
@@ -2153,6 +2185,8 @@ void (async () => {
   let seen = true;
   try { seen = localStorage.getItem(WELCOME) === '1'; } catch { /* χωρίς αποθήκευση: δεν ενοχλούμε */ }
   if (!seen && !isOverlay) openWelcome();
+  // μετά από ενημέρωση, μία φορά σε κάθε συσκευή: τι άλλαξε
+  if (newsPending(seen) && !isOverlay) void showNews();
 })();
 
 if (import.meta.env.PROD && !isNative && 'serviceWorker' in navigator) {

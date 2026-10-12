@@ -69,11 +69,12 @@ export function mountUi(app: HTMLElement): void {
   <button id="menuBtn" class="fab" title="Μενού">☰</button>
   <button id="overlayClose" class="fab hidden" title="Κλείσιμο και επιστροφή στον πίνακα">✕</button>
   <div id="menu" class="popup hidden">
+    <div class="gHead">Μάθημα</div>
     ${mi('data-act="lib"', I.lib, 'Μαθήματα…')}
     ${mi('data-act="end" class="end"', I.send, 'Τέλος μαθήματος: QR για τους μαθητές')}
     ${mi('data-act="send"', I.send, 'Αποστολή με επιλογή σελίδων…')}
     ${mi('data-act="pdf"', I.doc, 'Εξαγωγή σε PDF…')}
-    <hr />
+    <div class="gHead">Σελίδα</div>
     <div class="bgRow">
       <span>Φόντο</span>
       <button data-act="bg-white" class="bgSw" title="Λευκό"></button>
@@ -85,11 +86,10 @@ export function mountUi(app: HTMLElement): void {
       <button data-act="bg-write" class="bgSw write" data-lv="pri" title="Τετράδιο γραφής: γραμμές με βοηθητική για τα μικρά γράμματα"></button>
       <button data-act="bg-squares" class="bgSw squares" data-lv="pri" title="Τετράδιο αριθμητικής: μεγάλα τετράγωνα"></button>
     </div>
-    <hr />
     ${mi('data-act="fit"', I.fit, 'Προσαρμογή προβολής')}
     ${mi('data-act="clear"', I.clear, 'Καθαρισμός σελίδας')}
     ${mi('data-act="delpage"', I.delpage, 'Διαγραφή σελίδας')}
-    <hr />
+    <div class="gHead">Εφαρμογή</div>
     ${mi('data-act="full"', I.full, 'Πλήρης οθόνη')}
     ${mi('data-act="overlay" id="overlayAct" class="hidden"', I.screen, 'Γράψιμο πάνω από άλλα προγράμματα')}
     ${mi('data-act="level"', I.target, 'Αλλαγή σε Δημοτικό')}
@@ -105,9 +105,11 @@ export function mountUi(app: HTMLElement): void {
     ${mi('data-act="open"', I.folder, 'Άνοιγμα αρχείου ως νέο μάθημα…')}
     ${mi('data-act="save"', I.save, 'Αποθήκευση του μαθήματος σε αρχείο')}
     ${mi('data-act="png"', I.image, 'Εξαγωγή σελίδας σε PNG')}
-    <div class="gHead">Έλεγχος της οθόνης</div>
+    <div class="gHead">Για προχωρημένους</div>
     ${mi('data-act="diag"', I.target, 'Διάγνωση αφής/γραφίδας')}
     ${mi('data-act="test"', I.check, 'Λίστα δοκιμής στην τάξη')}
+    ${mi('data-act="news"', I.spark, 'Τι νέο')}
+    <div id="verLine"></div>
   </div>
 
   <div id="zoomCtl">
@@ -132,36 +134,38 @@ export function mountUi(app: HTMLElement): void {
         <button data-auto="math" class="rec" data-lv="sec"><span>√x</span>Αυτόματη αναγνώριση τύπων: ό,τι γράφεις γίνεται τυπωμένος τύπος μόλις σταματήσεις</button>
       </div>
       <div class="group" id="shapes">
-        <button data-shape="line"><span>╱</span>Ευθεία</button>
-        <button data-shape="arrow"><span>➚</span>Βέλος</button>
-        <button data-shape="rect"><span>▭</span>Ορθογώνιο</button>
-        <button data-shape="ellipse"><span>◯</span>Έλλειψη</button>
-        <button data-shape="triangle"><span>△</span>Τρίγωνο</button>
-        <button data-shape="rhombus"><span>◇</span>Ρόμβος</button>
-        <button data-shape="para"><span>▱</span>Παραλληλόγραμμο</button>
-        <button data-shape="angle"><span>∠</span>Γωνία με μοίρες</button>
+        <button data-shape="line"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20L20 4"/></svg></span>Ευθεία</button>
+        <button data-shape="arrow"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20L20 4M11 4h9v9"/></svg></span>Βέλος</button>
+        <button data-shape="rect"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="1"/></svg></span>Ορθογώνιο</button>
+        <button data-shape="ellipse"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="12" rx="9" ry="7"/></svg></span>Έλλειψη</button>
+        <button data-shape="triangle"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3z"/></svg></span>Τρίγωνο</button>
+        <button data-shape="rhombus"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 9-8 9-8-9z"/></svg></span>Ρόμβος</button>
+        <button data-shape="para"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13l-5 12H3z"/></svg></span>Παραλληλόγραμμο</button>
+        <button data-shape="angle"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 19H4L16 5"/><path d="M11 19a7 7 0 0 0-2.400-5.300"/></svg></span>Γωνία με μοίρες</button>
       </div>
       <div class="group" id="eraserOpts">
-        <button data-eraser="partial"><span>◌</span>Σβήνει μόνο ό,τι είναι μέσα στον κύκλο</button>
+        <button data-eraser="partial"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8" stroke-dasharray="2.5 3"/></svg></span>Σβήνει μόνο ό,τι είναι μέσα στον κύκλο</button>
         <button data-eraser="stroke"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14c3-7 5 5 8-1s5 5 10-3"/><path d="M5 5l14 14" stroke="#f87171"/></svg></span>Σβήνει ολόκληρη τη γραμμή</button>
         <button id="eraseAll"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/><path d="M10 11l4 5M14 11l-4 5"/></svg></span>Σβήσιμο όλων</button>
       </div>
       <div class="group" id="axesOpts">
-        <button data-axis="x"><span>x</span>Όνομα οριζόντιου άξονα</button>
-        <button data-axis="y"><span>y</span>Όνομα κατακόρυφου άξονα</button>
-        <button id="axScale"><span class="txt">×1</span>Κλίμακα οριζόντιου άξονα: κάθε πάτημα αλλάζει πόσο αξίζει μια γραμμή (1, 2, 5, 10, 20, 50, 100). Ο κατακόρυφος προσαρμόζεται μόνος του</button>
-        <button id="axNums"><span class="txt">123</span>Αριθμοί στους άξονες: σβήσε τους για να γράψεις δικές σου τιμές (π.χ. ανά 10 ή 20)</button>
-        <button id="fnBtn"><span class="txt">f(x)</span>Γραφική παράσταση συνάρτησης</button>
-        <button data-an="int"><span class="txt">∫</span>Ορισμένο ολοκλήρωμα ως εμβαδόν (δεύτερο πάτημα: χωρίο ανάμεσα σε δύο συναρτήσεις)</button>
-        <button data-an="sum"><span class="txt">Σ</span>Αθροίσματα Riemann: κάθε πάτημα διπλασιάζει τα ορθογώνια (4, 8, 16, 32)</button>
-        <button data-an="lim"><span class="txt">lim</span>Όριο σε σημείο: σύρε το σημείο πάνω στην καμπύλη προς το x₀</button>
-        <button data-an="tan"><span class="txt">f′</span>Εφαπτομένη και παράγωγος (δεύτερο πάτημα: και η τέμνουσα)</button>
-        <button data-an="asym"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v18M3 17h18" stroke-dasharray="2.5 3"/><path d="M11 4c.5 7 3 10.500 10 11"/></svg></span>Ασύμπτωτες</button>
+        <button data-axis="x" data-l="Άξονας x"><span>x</span>Όνομα οριζόντιου άξονα</button>
+        <button data-axis="y" data-l="Άξονας y"><span>y</span>Όνομα κατακόρυφου άξονα</button>
+        <button id="axScale" data-l="Κλίμακα"><span class="txt">×1</span>Κλίμακα οριζόντιου άξονα: κάθε πάτημα αλλάζει πόσο αξίζει μια γραμμή (1, 2, 5, 10, 20, 50, 100). Ο κατακόρυφος προσαρμόζεται μόνος του</button>
+        <button id="axNums" data-l="Αριθμοί"><span class="txt">123</span>Αριθμοί στους άξονες: σβήσε τους για να γράψεις δικές σου τιμές (π.χ. ανά 10 ή 20)</button>
+        <i class="sep"></i>
+        <button id="fnBtn" data-l="Συνάρτ."><span class="txt">f(x)</span>Γραφική παράσταση συνάρτησης</button>
+        <i class="sep"></i>
+        <button data-an="int" data-l="Εμβαδόν"><span class="txt">∫</span>Ορισμένο ολοκλήρωμα ως εμβαδόν (δεύτερο πάτημα: χωρίο ανάμεσα σε δύο συναρτήσεις)</button>
+        <button data-an="sum" data-l="Riemann"><span class="txt">Σ</span>Αθροίσματα Riemann: κάθε πάτημα διπλασιάζει τα ορθογώνια (4, 8, 16, 32)</button>
+        <button data-an="lim" data-l="Όριο"><span class="txt">lim</span>Όριο σε σημείο: σύρε το σημείο πάνω στην καμπύλη προς το x₀</button>
+        <button data-an="tan" data-l="Εφαπτ."><span class="txt">f′</span>Εφαπτομένη και παράγωγος (δεύτερο πάτημα: και η τέμνουσα)</button>
+        <button data-an="asym" data-l="Ασύμπτ."><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v18M3 17h18" stroke-dasharray="2.5 3"/><path d="M11 4c.5 7 3 10.500 10 11"/></svg></span>Ασύμπτωτες</button>
       </div>
       <div class="group" id="springOpts">
-        <button id="spMarks"><span class="txt">ΘΦΜ</span>Εμφάνιση θέσης φυσικού μήκους, θέσης ισορροπίας και ±A</button>
-        <button id="spDamp"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.500-9 3.500-9 5 0s3 6 4.500 0 2.500-4 3.500 0 2 2.500 3 0 1.500-1 2 0h1.500"/></svg></span>Απόσβεση: η ταλάντωση σβήνει σιγά σιγά</button>
-        <button id="spStop"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg></span>Σταμάτημα ταλάντωσης</button>
+        <button id="spMarks" data-l="Θέσεις"><span class="txt">ΘΦΜ</span>Εμφάνιση θέσης φυσικού μήκους, θέσης ισορροπίας και ±A</button>
+        <button id="spDamp" data-l="Απόσβ."><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.500-9 3.500-9 5 0s3 6 4.500 0 2.500-4 3.500 0 2 2.500 3 0 1.500-1 2 0h1.500"/></svg></span>Απόσβεση: η ταλάντωση σβήνει σιγά σιγά</button>
+        <button id="spStop" data-l="Στοπ"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg></span>Σταμάτημα ταλάντωσης</button>
       </div>
       <div class="group" id="widths"></div>
     </div>

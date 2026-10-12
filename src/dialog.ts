@@ -142,3 +142,32 @@ export function confirmBox(title: string, ok = 'Ναι', danger = false, hint?: 
     yes.focus();
   });
 }
+
+/** Ενημερωτικό παράθυρο με λίστα (π.χ. «Τι νέο»). */
+export function notice(title: string, lines: string[], hint?: string): Promise<void> {
+  return new Promise((res) => {
+    const { back, box } = shell(title, hint);
+    const ul = document.createElement('ul');
+    for (const l of lines) {
+      const li = document.createElement('li');
+      li.textContent = l;
+      ul.append(li);
+    }
+    const acts = document.createElement('div');
+    acts.className = 'askActs';
+    const yes = button('Εντάξει', 'go');
+    acts.append(yes);
+    box.append(ul, acts);
+    const done = (): void => {
+      if (open !== done) return;
+      open = null;
+      back.remove();
+      res();
+    };
+    open = done;
+    yes.onclick = done;
+    back.addEventListener('pointerdown', (e) => {
+      if (e.target === back) done();
+    });
+  });
+}
