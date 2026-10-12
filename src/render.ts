@@ -208,10 +208,14 @@ export class Renderer {
   }
 
   private drawAxes(c: CanvasRenderingContext2D, a: AxesItem): void {
-    const { xmin, xmax, ymin, ymax } = axesRange(a);
+    const lines = axesRange(a);
+    const { xmin, xmax } = lines;
+    // ο κατακόρυφος άξονας μπορεί να έχει άλλη κλίμακα: κάθε γραμμή του αξίζει sy
+    const sy = a.sy ?? 1;
+    const ymin = lines.ymin * sy, ymax = lines.ymax * sy;
     const u = a.unit;
     const X = (v: number) => a.x + v * u;
-    const Y = (v: number) => a.y - v * u;
+    const Y = (v: number) => a.y - (v / sy) * u;
     c.save();
     c.strokeStyle = c.fillStyle = this.b.ink(a.color);
     c.lineCap = 'round';
@@ -222,7 +226,7 @@ export class Renderer {
     c.lineWidth = 1;
     c.beginPath();
     for (let i = xmin; i <= xmax; i++) { c.moveTo(X(i), Y(ymin)); c.lineTo(X(i), Y(ymax)); }
-    for (let j = ymin; j <= ymax; j++) { c.moveTo(X(xmin), Y(j)); c.lineTo(X(xmax), Y(j)); }
+    for (let j = lines.ymin; j <= lines.ymax; j++) { c.moveTo(X(xmin), Y(j * sy)); c.lineTo(X(xmax), Y(j * sy)); }
     c.stroke();
     c.globalAlpha = 1;
 
@@ -236,7 +240,7 @@ export class Renderer {
     if (fns.length) {
       c.save();
       c.beginPath();
-      c.rect(X(xmin), Y(ymax), (xmax - xmin) * u, (ymax - ymin) * u);
+      c.rect(X(xmin), Y(ymax), (xmax - xmin) * u, (lines.ymax - lines.ymin) * u);
       c.clip();
       c.lineWidth = 3;
       const n = Math.max(80, Math.min(1500, Math.round(((xmax - xmin) * u) / 1.5)));
@@ -248,7 +252,7 @@ export class Renderer {
         let pen = false, py = 0;
         for (let i = 0; i <= n; i++) {
           const xv = xmin + ((xmax - xmin) * i) / n;
-          const yv = Math.max(-1e5, Math.min(1e5, fn(xv, prm)));
+          const yv = Math.max(-1e5 * sy, Math.min(1e5 * sy, fn(xv, prm)));
           if (!Number.isFinite(yv)) {
             pen = false;
             continue;
@@ -297,7 +301,8 @@ export class Renderer {
     // άξονες με βέλη
     const ext = 0.6;
     const xa = xmin < 0 ? xmin - ext : 0;
-    const ya = ymin < 0 ? ymin - ext : 0;
+    const ey = ext * sy;
+    const ya = ymin < 0 ? ymin - ey : 0;
     const ah = Math.max(8, u * 0.22);
     c.lineWidth = 2.5;
     c.beginPath();
@@ -307,14 +312,14 @@ export class Renderer {
     c.lineTo(X(xmax + ext), a.y);
     c.lineTo(X(xmax + ext) - ah, a.y + ah * 0.55);
     c.moveTo(a.x, Y(ya));
-    c.lineTo(a.x, Y(ymax + ext));
-    c.moveTo(a.x - ah * 0.55, Y(ymax + ext) + ah);
-    c.lineTo(a.x, Y(ymax + ext));
-    c.lineTo(a.x + ah * 0.55, Y(ymax + ext) + ah);
+    c.lineTo(a.x, Y(ymax + ey));
+    c.moveTo(a.x - ah * 0.55, Y(ymax + ey) + ah);
+    c.lineTo(a.x, Y(ymax + ey));
+    c.lineTo(a.x + ah * 0.55, Y(ymax + ey) + ah);
     // υποδιαιρέσεις
     const t = Math.max(3, u * 0.1);
     for (let i = xmin; i <= xmax; i++) if (i !== 0) { c.moveTo(X(i), a.y - t); c.lineTo(X(i), a.y + t); }
-    for (let j = ymin; j <= ymax; j++) if (j !== 0) { c.moveTo(a.x - t, Y(j)); c.lineTo(a.x + t, Y(j)); }
+    for (let j = lines.ymin; j <= lines.ymax; j++) if (j !== 0) { c.moveTo(a.x - t, Y(j * sy)); c.lineTo(a.x + t, Y(j * sy)); }
     c.stroke();
 
     // αριθμοί και ονόματα αξόνων
@@ -326,7 +331,7 @@ export class Renderer {
     for (let i = xmin; nums && i <= xmax; i++) if (i !== 0) c.fillText(String(i), X(i), a.y + t + 3);
     c.textAlign = 'right';
     c.textBaseline = 'middle';
-    for (let j = ymin; nums && j <= ymax; j++) if (j !== 0) c.fillText(String(j), a.x - t - 4, Y(j));
+    for (let j = lines.ymin; nums && j <= lines.ymax; j++) if (j !== 0) c.fillText(String(+(j * sy).toPrecision(10)), a.x - t - 4, Y(j * sy));
     c.textBaseline = 'top';
     c.fillText('O', a.x - t - 3, a.y + t + 3);
     c.font = `italic 600 ${fs * 1.25}px system-ui, "Segoe UI", Roboto, sans-serif`;
@@ -335,7 +340,7 @@ export class Renderer {
     c.fillText(a.lx ?? 'x', X(xmax + ext), a.y + t + 4);
     c.textAlign = 'right';
     c.textBaseline = 'middle';
-    c.fillText(a.ly ?? 'y', a.x - t - 6, Y(ymax + ext) + 4);
+    c.fillText(a.ly ?? 'y', a.x - t - 6, Y(ymax + ey) + 4);
     c.restore();
   }
 
@@ -351,11 +356,13 @@ export class Renderer {
     const an = a.an;
     const { f } = this.axesFn(a);
     if (!an || !f) return [];
-    const { ymin, ymax } = axesRange(a);
+    const lines = axesRange(a);
+    const sy = a.sy ?? 1;
+    const ymin = lines.ymin * sy, ymax = lines.ymax * sy;
     const X = (v: number) => a.x + v * a.unit;
     const on = (x: number): Pt => {
       const y = f(x);
-      return [X(x), a.y - (Number.isFinite(y) ? Math.max(ymin, Math.min(ymax, y)) : 0) * a.unit];
+      return [X(x), a.y - ((Number.isFinite(y) ? Math.max(ymin, Math.min(ymax, y)) : 0) / sy) * a.unit];
     };
     const out: { k: string; p: Pt }[] = [];
     if (an.lim) out.push({ k: 'lim.x', p: on(an.lim.x) }, { k: 'lim.x0', p: [X(an.lim.x0), a.y] });
@@ -395,10 +402,13 @@ export class Renderer {
    */
   private drawAnalysis(c: CanvasRenderingContext2D, a: AxesItem, fns: FnDef[], prm: Params): [string, string][] {
     const an = a.an!;
-    const { xmin, xmax, ymin, ymax } = axesRange(a);
+    const lines = axesRange(a);
+    const { xmin, xmax } = lines;
+    const sy = a.sy ?? 1;
+    const ymin = lines.ymin * sy, ymax = lines.ymax * sy;
     const u = a.unit;
     const X = (v: number) => a.x + v * u;
-    const Y = (v: number) => a.y - Math.max(-1e5, Math.min(1e5, v)) * u;
+    const Y = (v: number) => a.y - Math.max(-1e5, Math.min(1e5, v / sy)) * u;
     const dark = isDark(this.b.doc.bg);
     const ink = this.b.ink(a.color);
     const ok = fns.map((d) => ({ d, fn: compileCached(d.expr) })).filter((o): o is { d: FnDef; fn: Fn } => !!o.fn);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asymptotes, integrate, lineEq, nf, oneSided, riemann, slope } from '../src/analysis';
+import { asymptotes, integrate, lineEq, nf, oneSided, riemann, slope, fitScaleY } from '../src/analysis';
 
 describe('ολοκλήρωμα και Riemann', () => {
   it('∫ x²/2−1 από 1 έως 3 = 7/3', () => {
@@ -95,4 +95,19 @@ describe('μορφοποίηση', () => {
     expect(lineEq(-1, 2.5)).toBe('y = −x + 2,5');
     expect(lineEq(0, 3)).toBe('y = 3');
   });
+});
+
+describe('fitScaleY', () => {
+  const fit = (g: (x: number) => number, up = 10, down = 10, xmin = -10): number => fitScaleY([g], xmin, 10, up, down);
+  it('η y = −200x θέλει 200 ανά γραμμή', () => expect(fit((x) => -200 * x)).toBe(200));
+  it('γνώριμες καμπύλες μένουν στο 1', () => {
+    expect(fit((x) => x * x)).toBe(1);
+    expect(fit((x) => 1 / x)).toBe(1);
+    expect(fit(Math.sin)).toBe(1);
+    expect(fit((x) => 2 * x - 1)).toBe(1);
+  });
+  it('πολύ μικρές τιμές μεγεθύνονται', () => expect(fit((x) => 0.001 * x)).toBe(0.001));
+  it('στο 1ο τεταρτημόριο τα αρνητικά δεν μετράνε', () => expect(fit((x) => 50 * x, 10, 0, 0)).toBe(50));
+  it('χωρίς συναρτήσεις, 1', () => expect(fitScaleY([], -10, 10, 10, 10)).toBe(1));
+  it('με δύο συναρτήσεις χωράνε και οι δύο', () => expect(fitScaleY([(x) => x, (x) => -200 * x], -10, 10, 10, 10)).toBe(200));
 });

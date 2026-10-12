@@ -128,3 +128,40 @@ export function asymptotes(g: G, xmin: number, xmax: number): Asymptotes {
   }
   return { vx, lines };
 }
+
+/**
+ * Κλίμακα του κατακόρυφου άξονα (τιμή ανά γραμμή) ώστε να φαίνονται οι συναρτήσεις: π.χ. η y = −200x θέλει 200 ανά γραμμή.
+ * Μένει 1 όταν οι καμπύλες φαίνονται ήδη αρκετά (π.χ. x², 1/x, ημx), για να μην αλλάζει η γνώριμη εικόνα τους.
+ * `up`, `down`: πόσες γραμμές έχει ο άξονας πάνω και κάτω από το μηδέν.
+ */
+export function fitScaleY(fns: G[], xmin: number, xmax: number, up: number, down: number): number {
+  const N = 400;
+  // πόσες γραμμές θα χρειαζόταν κάθε σημείο με κλίμακα 1· όσα πέφτουν σε πλευρά που δεν υπάρχει (π.χ. αρνητικά στο 1ο τεταρτημόριο) δεν μετράνε
+  const need: number[] = [];
+  let worst = 1;
+  for (const g of fns) {
+    const mine: number[] = [];
+    for (let i = 0; i <= N; i++) {
+      const y = g(xmin + ((xmax - xmin) * i) / N);
+      if (!Number.isFinite(y)) continue;
+      if (y >= 0) mine.push(y / up);
+      else if (down > 0) mine.push(-y / down);
+    }
+    if (!mine.length) continue;
+    need.push(...mine);
+    worst = Math.min(worst, mine.filter((v) => v <= 1).length / mine.length);
+  }
+  if (!need.length) return 1;
+  need.sort((a, b) => a - b);
+  const p95 = need[Math.min(need.length - 1, Math.floor(need.length * 0.95))];
+  // φαίνεται ήδη αρκετό κομμάτι κάθε καμπύλης και καμία δεν είναι «πλακωμένη» πάνω στον άξονα
+  if (worst >= 0.25 && p95 >= 0.08) return 1;
+  if (!(p95 > 0)) return 1;
+  // το μικρότερο «στρογγυλό» βήμα (1, 2, 5 × δύναμη του 10) που χωράει το 95% των σημείων
+  const e = Math.floor(Math.log10(p95));
+  for (const m of [1, 2, 5, 10]) {
+    const s = m * 10 ** e;
+    if (s >= p95 * 0.999) return +s.toPrecision(6);
+  }
+  return +(10 ** (e + 1)).toPrecision(6);
+}

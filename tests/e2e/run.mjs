@@ -289,6 +289,32 @@ test('Άξονες χωρίς αριθμούς: το «123» τους σβήνε
   assert(!(await items()).some((i) => i.kind === 'axes'), 'έμειναν άξονες στη σελίδα');
 });
 
+test('Συνάρτηση που δεν χωράει (y = −200x): ο κατακόρυφος άξονας αλλάζει κλίμακα μόνος του', async () => {
+  const type = async (v) => {
+    if (!(await visible('#fnAdd'))) await page.click('#fnBtn');
+    await page.evaluate((v) => { const i = document.getElementById('fnInput'); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); }, v);
+    await page.click('#fnAdd');
+  };
+  const del = async () => {
+    if (!(await visible('#fnAdd'))) await page.click('#fnBtn');
+    await page.click('#fnList [data-fndel="0"]');
+  };
+  const axes = async () => (await items()).find((i) => i.kind === 'axes');
+  await page.click('#gadgetBtn');
+  await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-axes="full"]');
+  await type('x²');
+  assert((await axes()).sy === undefined, 'η x² δεν έπρεπε να αλλάξει την κλίμακα');
+  await del();
+  await type('-200x');
+  const sy = (await axes()).sy;
+  assert(sy === 200, `η κλίμακα για την y = −200x βγήκε ${sy} αντί για 200`);
+  await del();
+  assert((await axes()).sy === undefined, 'χωρίς συναρτήσεις η κλίμακα έπρεπε να γυρίσει στο 1');
+  await page.mouse.click(1200, 300);
+  for (let i = 0; i < 6 && (await axes()); i++) await page.click('#undo');
+  assert(!(await axes()), 'έμειναν άξονες στη σελίδα');
+});
+
 test('Άξονες, τριγωνομετρικός κύκλος και μετρήσεις σχεδιάζονται', async () => {
   const inked = () => page.evaluate(() => {
     const cv = document.getElementById('base');

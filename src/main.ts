@@ -1,6 +1,6 @@
 import './style.css';
 import { Board, EraserMode, SizedTool } from './board';
-import { AxesAn, AxesMode, Background, Doc, Item, MeasOpts, ShapeKind, TableStyle, TextItem, Tool, isDark, isPoly, newDoc } from './model';
+import { AxesAn, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, ShapeKind, TableStyle, TextItem, Tool, isDark, isPoly, newDoc } from './model';
 import { blobToPic, captureScreen, clipboardImage, openDocx, openPdf } from './importers';
 import { kvGet, kvSet } from './storage';
 import { Lessons } from './lessons';
@@ -11,7 +11,8 @@ import { GadgetKind } from './gadgets';
 import { closeOverlay, isNative, isOverlay, nativeSave, nativeScreenshot, openOverlay } from './native';
 import { Curtain, Spotlight } from './overlays';
 import { STAMPS } from './stamps';
-import { compile, paramsOf } from './expr';
+import { Params, compile, compileCached, paramsOf } from './expr';
+import { fitScaleY } from './analysis';
 import { buildPdf } from './pdf';
 import { AiTask, MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage } from './ai';
 import { axesRange, itemBounds, uid, wrapText } from './model';
@@ -522,8 +523,15 @@ function addFn(): void {
   board.paramPreview = null;
   fnEdit = null;
   fnInput.value = '';
-  board.updateAxes({ fns: next, params });
+  board.updateAxes({ fns: next, params, sy: fitY(ax, next, params) });
   renderFns();
+}
+/** Η κλίμακα του κατακόρυφου άξονα που ταιριάζει στις ορατές συναρτήσεις (undefined = 1 ανά γραμμή). */
+function fitY(ax: AxesItem, fns: FnDef[], params: Params | undefined): number | undefined {
+  const r = axesRange(ax);
+  const ok = fns.filter((f) => !f.hidden).map((f) => compileCached(f.expr)).filter((f) => !!f).map((f) => (x: number) => f!(x, params ?? {}));
+  const sy = fitScaleY(ok, r.xmin, r.xmax, r.ymax, -r.ymin);
+  return sy === 1 ? undefined : sy;
 }
 $('fnAdd').onclick = addFn;
 $('spMarks').onclick = () => board.updateSpring({ marks: !board.selectedSpring?.marks });
@@ -570,9 +578,11 @@ $('fnList').addEventListener('click', (e) => {
   const del = idx('fndel'), vis = idx('fnvis'), ed = idx('fnedit');
   if (del !== null) {
     resetFnDraft();
-    board.updateAxes({ fns: fns.filter((_, i) => i !== del) });
+    const left = fns.filter((_, i) => i !== del);
+    board.updateAxes({ fns: left, sy: fitY(ax, left, ax.params) });
   } else if (vis !== null) {
-    board.updateAxes({ fns: fns.map((f, i) => (i === vis ? { ...f, hidden: !f.hidden } : f)) });
+    const seen = fns.map((f, i) => (i === vis ? { ...f, hidden: !f.hidden } : f));
+    board.updateAxes({ fns: seen, sy: fitY(ax, seen, ax.params) });
   } else if (ed !== null) {
     fnEdit = fnEdit === ed ? null : ed;
     fnInput.value = fnEdit === null ? '' : fns[ed].expr;
@@ -593,7 +603,7 @@ $('fnParams').addEventListener('change', () => {
   if (!ax || !board.paramPreview) return;
   const params = { ...ax.params, ...board.paramPreview };
   board.paramPreview = null;
-  board.updateAxes({ params });
+  board.updateAxes({ params, sy: fitY(ax, ax.fns ?? [], params) });
 });
 $('fnPts').onclick = () => {
   const ax = board.selectedAxes;
