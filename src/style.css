@@ -43,7 +43,7 @@ button:disabled { opacity: .35; cursor: default; }
   display: flex; justify-content: center; pointer-events: none; transition: opacity .15s;
 }
 #toolbarWrap.moved { right: auto; bottom: auto; }
-body.inking #toolbarWrap { opacity: .25; }
+#toolbarWrap.under { opacity: .25; }
 body.inking #toolbar { pointer-events: none; }
 
 #toolbar {
@@ -298,7 +298,8 @@ body.dark #toolbar, body.dark #subbar, body.dark .popup, body.dark .fab { box-sh
 /* ---------- βιβλιοθήκη μαθημάτων ---------- */
 #lessonName { left: 80px; width: auto; max-width: 38vw; padding: 0 18px; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
 #lessonName:empty { display: none; }
-body.inking #lessonName { opacity: .25; }
+#lessonName.under { opacity: .25; }
+body.inking #lessonName { pointer-events: none; }
 #lib { position: fixed; inset: 0; z-index: 40; background: var(--bar); color: var(--fg); display: flex; flex-direction: column; }
 #libHead { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--bar-2); flex-wrap: wrap; }
 #libHead b { font-size: 24px; margin-right: 10px; }
@@ -341,7 +342,8 @@ body.inking #lessonName { opacity: .25; }
 #zoomCtl button svg { width: 22px; height: 22px; }
 #zoomCtl #zoomFit { width: 58px; font-size: 14px; font-weight: 600; }
 #zoomCtl button:hover { background: var(--bar-2); }
-body.inking #zoomCtl { opacity: .25; pointer-events: none; }
+#zoomCtl.under { opacity: .25; }
+body.inking #zoomCtl { pointer-events: none; }
 
 /* ---------- ονόματα κάτω από τα εικονίδια της μπάρας ---------- */
 #toolbar.labels > .group > button[data-l] { width: 52px; height: 54px; flex-direction: column; gap: 2px; }

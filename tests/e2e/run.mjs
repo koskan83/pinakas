@@ -144,6 +144,21 @@ test('Γραφή, αναίρεση, επανάληψη', async () => {
   assert((await items()).length === 2, 'η επανάληψη δεν την έφερε πίσω');
 });
 
+test('Γράφοντας, η μπάρα δεν ξεθωριάζει παρά μόνο όταν την πλησιάσει η γραφίδα', async () => {
+  await pen();
+  const faded = () => page.evaluate(() => ['toolbarWrap', 'lessonName', 'zoomCtl'].filter((id) => document.getElementById(id).classList.contains('under')));
+  await page.mouse.move(400, 300);
+  await page.mouse.down();
+  await page.mouse.move(520, 330, { steps: 6 });
+  assert((await faded()).length === 0, 'κάτι ξεθώριασε ενώ η γραφίδα ήταν μακριά');
+  const z = await page.evaluate(() => { const r = document.getElementById('zoomCtl').getBoundingClientRect(); return { x: r.left - 20, y: r.bottom + 20 }; });
+  await page.mouse.move(z.x, z.y, { steps: 6 });
+  assert((await faded()).join() === 'zoomCtl', 'έπρεπε να ξεθωριάσει μόνο το zoom');
+  await page.mouse.up();
+  assert((await faded()).length === 0, 'το zoom έμεινε ξεθωριασμένο μετά το σήκωμα');
+  await page.click('#undo');
+});
+
 test('Γόμα ολόκληρης γραμμής', async () => {
   await tool('eraser');
   await page.click('[data-eraser="stroke"]');
