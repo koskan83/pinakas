@@ -4,7 +4,7 @@ import {
 import { Params } from './expr';
 import { STAMPS, SpringState } from './stamps';
 import { CM, GadgetDrag, GadgetKind, Gadgets } from './gadgets';
-import { ANGLE_KEY, angleSides, eraseMeasures, fmt, measureAngles, measureSides, trigPoint } from './measure';
+import { ANGLE_KEY, angleSides, eraseMeasures, fmt, measureAngles, measureSides, trigPoint, sideLen, sideText, unitsFor } from './measure';
 import { Renderer } from './render';
 
 // οι δοκιμές και όποιος τα χρειάζεται τα βρίσκουν ακόμα εδώ
@@ -519,7 +519,7 @@ export class Board {
       const [wx, wy] = unrot(it, px, py);
       const near = (p: Pt): boolean => Math.abs(wx - p[0]) < Math.max(34, 26 / k) && Math.abs(wy - p[1]) < Math.max(18, 20 / k);
       if (it.meas.len) for (const m of measureSides(it)) {
-        if (near(m.pos)) return { id: it.id, side: m.i, text: it.labels?.[m.i] ?? fmt(m.len / CM), x: sx, y: sy };
+        if (near(m.pos)) return { id: it.id, side: m.i, text: it.labels?.[m.i] ?? sideText(m, unitsFor(items, it), it.shape === 'line' || it.shape === 'arrow').split('   ')[0], x: sx, y: sy };
       }
       if (it.meas.ang) for (const m of measureAngles(it)) {
         if (near(m.pos)) return { id: it.id, side: ANGLE_KEY + m.i, text: it.labels?.[ANGLE_KEY + m.i] ?? String(m.deg), x: sx, y: sy };
@@ -745,7 +745,10 @@ export class Board {
     const m = measureSides(before).find((x) => x.i === sideIndex);
     if (!m) return;
     if (/^\d+([.,]\d+)?$/.test(v)) {
-      const f = (parseFloat(v.replace(',', '.')) * CM) / m.len;
+      // πάνω σε άξονες ο αριθμός είναι στις μονάδες τους· πλάγια πλευρά σε άξονες με άλλη κλίμακα ο καθένας δεν έχει μήκος να οριστεί
+      const cur = sideLen(m, unitsFor(this.page.items, before));
+      if (cur === null) return;
+      const f = parseFloat(v.replace(',', '.')) / cur;
       if (!(f > 0) || !Number.isFinite(f)) return;
       // το άκρο a μένει στη θέση του, το b μετακινείται πάνω στην ίδια ευθεία
       const b: Pt = [m.a[0] + (m.b[0] - m.a[0]) * f, m.a[1] + (m.b[1] - m.a[1]) * f];

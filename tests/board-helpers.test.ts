@@ -80,3 +80,33 @@ describe('ρόμβος και παραλληλόγραμμο', () => {
     expect(Math.max(...L) - Math.min(...L)).toBeLessThan(1e-9);
   });
 });
+
+import { CM_UNITS, sideLen, sideSlope, sideText, unitsFor } from '../src/measure';
+import type { AxesItem, Shape as Sh } from '../src/model';
+
+describe('μέτρηση μέσα σε άξονες', () => {
+  // άξονες στο (400, 400), 40 μονάδες πίνακα ανά γραμμή, x: 5 ανά γραμμή, y: 10 ανά γραμμή
+  const ax: AxesItem = { kind: 'axes', id: 'a', x: 400, y: 400, unit: 40, mode: 'q1', nx: 10, ny: 10, color: '#111111', sx: 5, sy: 10 };
+  const line = (x0: number, y0: number, x1: number, y1: number): Sh => ({ kind: 'shape', id: 's', shape: 'line', x0, y0, x1, y1, color: '#111111', width: 3 });
+  it('σχήμα πάνω στους άξονες μετριέται στις μονάδες τους, αλλιώς σε εκατοστά', () => {
+    expect(unitsFor([ax], line(440, 360, 520, 360))).toEqual({ kx: 5 / 40, ky: 10 / 40, axes: true });
+    expect(unitsFor([ax], line(40, 40, 120, 40))).toBe(CM_UNITS);
+    expect(unitsFor([ax], { ...line(440, 360, 520, 360), rot: 0.3 })).toBe(CM_UNITS);
+  });
+  it('οριζόντια και κατακόρυφα μήκη, κλίση για τα πλάγια', () => {
+    const u = unitsFor([ax], line(440, 360, 520, 360));
+    expect(sideLen({ a: [440, 360], b: [520, 360] }, u)).toBeCloseTo(10);
+    expect(sideLen({ a: [440, 360], b: [440, 240] }, u)).toBeCloseTo(30);
+    expect(sideLen({ a: [440, 360], b: [520, 240] }, u)).toBeNull();
+    // 2 γραμμές δεξιά (10) και 3 γραμμές πάνω (30): κλίση 3
+    expect(sideSlope({ a: [440, 360], b: [520, 240] }, u)).toBeCloseTo(3);
+    expect(sideText({ a: [440, 360], b: [520, 240], len: 144 }, u, true)).toBe('λ = 3');
+    expect(sideText({ a: [440, 360], b: [520, 360], len: 80 }, u, true)).toBe('10');
+  });
+  it('σε άξονες με ίδια κλίμακα η ευθεία δείχνει μήκος και κλίση', () => {
+    const u = unitsFor([{ ...ax, sx: undefined, sy: undefined }], line(440, 360, 560, 200));
+    expect(sideText({ a: [440, 360], b: [560, 200], len: 200 }, u, true)).toBe('5   λ = 1,33');
+    expect(sideText({ a: [440, 360], b: [560, 200], len: 200 }, u, false)).toBe('5');
+  });
+  it('χωρίς άξονες μένουν τα εκατοστά', () => expect(sideText({ a: [0, 0], b: [120, 0], len: 120 }, CM_UNITS, true)).toBe('3'));
+});

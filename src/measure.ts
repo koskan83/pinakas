@@ -1,6 +1,6 @@
 /** Καθαροί υπολογισμοί για μετρήσεις και ετικέτες: πλευρές, γωνίες, μορφοποίηση αριθμών. Δεν αγγίζουν τον καμβά. */
 
-import { AngleItem, Item, MeasOpts, Pt, Shape, TrigItem, angleEnds, isPoly, trianglePts, unrot } from './model';
+import { AngleItem, Item, MeasOpts, Pt, Shape, TrigItem, angleEnds, axesRange, isPoly, trianglePts, unrot } from './model';
 
 export function trigPoint(t: TrigItem): Pt {
   return [t.x + t.r * Math.cos(t.a), t.y - t.r * Math.sin(t.a)];
@@ -145,4 +145,70 @@ export function angleSides(a: AngleItem): MSide[] {
     if ((away[0] - mx) * nx + (away[1] - my) * ny > 0) { nx = -nx; ny = -ny; }
     return { i, a: o, b: p, len, pos: [mx + nx * 20, my + ny * 20] as Pt };
   });
+}
+
+// ---------- μονάδες μέτρησης: εκατοστά του πίνακα, ή οι μονάδες των αξόνων όταν το σχήμα είναι πάνω σε άξονες ----------
+
+/** Πόσο αξίζει μία μονάδα του πίνακα οριζόντια (kx) και κατακόρυφα (ky). `axes`: αν μετράμε στις μονάδες αξόνων. */
+export interface Units { kx: number; ky: number; axes: boolean }
+
+/** Χωρίς άξονες: 40 μονάδες του πίνακα = 1 cm (ίδιο με το CM των οργάνων). */
+export const CM_UNITS: Units = { kx: 1 / 40, ky: 1 / 40, axes: false };
+
+/**
+ * Οι μονάδες στις οποίες μετριέται ένα σχήμα: αν το κέντρο του είναι μέσα στο πλέγμα κάποιων αξόνων, οι δικές τους
+ * (με την κλίμακα κάθε άξονα)· αλλιώς εκατοστά. Στραμμένα σχήματα μετριούνται πάντα σε εκατοστά.
+ */
+export function unitsFor(items: Item[], s: Shape): Units {
+  if (s.rot) return CM_UNITS;
+  const cx = (s.x0 + s.x1) / 2, cy = (s.y0 + s.y1) / 2;
+  for (let i = items.length - 1; i >= 0; i--) {
+    const a = items[i];
+    if (a.kind !== 'axes') continue;
+    const r = axesRange(a);
+    if (cx < a.x + r.xmin * a.unit || cx > a.x + r.xmax * a.unit || cy < a.y - r.ymax * a.unit || cy > a.y - r.ymin * a.unit) continue;
+    return { kx: (a.sx ?? 1) / a.unit, ky: (a.sy ?? 1) / a.unit, axes: true };
+  }
+  return CM_UNITS;
+}
+
+const sameScale = (u: Units): boolean => Math.abs(u.kx - u.ky) <= 1e-9 * Math.max(u.kx, u.ky);
+
+/**
+ * Το μήκος μιας πλευράς στις μονάδες της. Όταν οι δύο άξονες έχουν άλλη κλίμακα, μήκος έχουν μόνο οι οριζόντιες
+ * και οι κατακόρυφες πλευρές (π.χ. χρόνος και ταχύτητα)· για τις πλάγιες επιστρέφει null.
+ */
+export function sideLen(m: { a: Pt; b: Pt }, u: Units): number | null {
+  const dx = Math.abs(m.b[0] - m.a[0]), dy = Math.abs(m.b[1] - m.a[1]);
+  if (sameScale(u)) return Math.hypot(dx, dy) * u.kx;
+  const len = Math.hypot(dx, dy);
+  if (dy <= len * 0.02) return dx * u.kx;
+  if (dx <= len * 0.02) return dy * u.ky;
+  return null;
+}
+
+/** Η κλίση μιας πλευράς στις μονάδες των αξόνων (ο άξονας y προς τα πάνω)· null αν είναι κατακόρυφη. */
+export function sideSlope(m: { a: Pt; b: Pt }, u: Units): number | null {
+  const dx = (m.b[0] - m.a[0]) * u.kx, dy = -(m.b[1] - m.a[1]) * u.ky;
+  return Math.abs(m.b[0] - m.a[0]) < 1e-6 ? null : dy / dx;
+}
+
+/** Αριθμός μέτρησης: ένα δεκαδικό για συνηθισμένες τιμές, περισσότερα για πολύ μικρές. */
+export function fmtU(n: number): string {
+  const a = Math.abs(n);
+  const d = a === 0 || a >= 10 ? 1 : a >= 1 ? 2 : a >= 0.1 ? 2 : 3;
+  return (+n.toFixed(d) || 0).toLocaleString('el', { maximumFractionDigits: d }).replace('-', '−');
+}
+
+/**
+ * Η ετικέτα μιας πλευράς. Σε εκατοστά: το μήκος. Πάνω σε άξονες: το μήκος στις μονάδες τους, και για ευθεία ή βέλος
+ * και η κλίση λ· πλάγια πλευρά σε άξονες με διαφορετικές κλίμακες δείχνει μόνο την κλίση.
+ */
+export function sideText(m: { a: Pt; b: Pt; len: number }, u: Units, line: boolean): string {
+  if (!u.axes) return fmt(m.len * u.kx);
+  const len = sideLen(m, u), slope = sideSlope(m, u);
+  const flat = slope !== null && Math.abs(m.b[1] - m.a[1]) <= m.len * 0.02;
+  const sl = slope === null || flat ? '' : `λ = ${fmtU(slope)}`;
+  if (len === null) return sl;
+  return line && sl ? `${fmtU(len)}   ${sl}` : fmtU(len);
 }

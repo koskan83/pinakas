@@ -7,7 +7,7 @@ import { Fn, Params, compileCached, domText, fnOf, keyPoints } from './expr';
 import { Asymptotes, asymptotes, integrate, lineEq, nf, oneSided, riemann, slope } from './analysis';
 import { STAMPS, SpringState } from './stamps';
 import { CM } from './gadgets';
-import { ANGLE_KEY, HL_ALPHA, angleSides, fmt, hlFlat, measureAngles, measureSides, radText, trigPoint } from './measure';
+import { ANGLE_KEY, HL_ALPHA, angleSides, fmt, fmtU, hlFlat, measureAngles, measureSides, radText, sideText, trigPoint, unitsFor } from './measure';
 
 /** Ό,τι χρειάζεται η σχεδίαση από τον πίνακα. */
 export interface RenderHost {
@@ -692,7 +692,18 @@ export class Renderer {
     }
     const len = (a: Pt, b: Pt) => Math.hypot(b[0] - a[0], b[1] - a[1]);
     const sides = measureSides(s);
-    if (o.len) for (const m of sides) c.fillText(s.labels?.[m.i] ?? fmt(m.len / CM), m.pos[0], m.pos[1]);
+    // πάνω σε άξονες οι μετρήσεις είναι στις μονάδες τους (π.χ. s και m/s), όχι σε εκατοστά
+    const un = unitsFor(this.b.page.items, s);
+    const same = Math.abs(un.kx - un.ky) <= 1e-9 * Math.max(un.kx, un.ky);
+    const num = un.axes ? fmtU : fmt;
+    const isLine = s.shape === 'line' || s.shape === 'arrow';
+    if (o.len) for (const m of sides) {
+      const text = s.labels?.[m.i] ?? sideText(m, un, isLine);
+      // μακριά ετικέτα (π.χ. «λ = 20») πάει λίγο πιο μακριά από την πλευρά, για να μην πέφτει πάνω της
+      const far = text.length > 4 ? 1 + Math.min(1.6, (text.length - 4) * 0.22) : 1;
+      const mx = (m.a[0] + m.b[0]) / 2, my = (m.a[1] + m.b[1]) / 2;
+      c.fillText(text, mx + (m.pos[0] - mx) * far, my + (m.pos[1] - my) * far);
+    }
     // με δικές σου ετικέτες το σχήμα δεν είναι σε κλίμακα: εμβαδόν και περίμετρος δεν θα είχαν νόημα
     const scaled = !Object.keys(s.labels ?? {}).some((key) => +key < ANGLE_KEY);
     const { x0, y0, x1, y1 } = s;
@@ -710,28 +721,28 @@ export class Renderer {
     };
     if (s.shape === 'rect') {
       const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
-      if (o.ang && w > 110 && h > 70) {
+      if (o.ang && same && w > 110 && h > 70) {
         const q: Pt[] = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
         for (let i = 0; i < 4; i++) corner(q[i], q[(i + 1) % 4], q[(i + 3) % 4], ctr);
       }
-      if (scaled && o.area) mid.push(`Ε = ${fmt((w * h) / CM / CM)}`);
-      if (scaled && o.per) mid.push(`Π = ${fmt((2 * (w + h)) / CM)}`);
+      if (scaled && o.area) mid.push(`Ε = ${num(w * un.kx * h * un.ky)}`);
+      if (scaled && o.per && same) mid.push(`Π = ${num(2 * (w + h) * un.kx)}`);
     } else if (s.shape === 'ellipse') {
       const a = Math.abs(x1 - x0) / 2, b = Math.abs(y1 - y0) / 2;
       const circle = Math.abs(a - b) < Math.max(a, b) * 0.03;
-      if (o.len) mid.push(circle ? `r = ${fmt(a / CM)}` : `a = ${fmt(a / CM)}  b = ${fmt(b / CM)}`);
-      if (o.area) mid.push(`Ε = ${fmt((Math.PI * a * b) / CM / CM)}`);
+      if (o.len) mid.push(circle && same ? `r = ${num(a * un.kx)}` : `a = ${num(a * un.kx)}  b = ${num(b * un.ky)}`);
+      if (o.area) mid.push(`Ε = ${num(Math.PI * a * un.kx * b * un.ky)}`);
       // περίμετρος έλλειψης: προσέγγιση του Ramanujan (ακριβής για κύκλο)
-      if (o.per) mid.push(`Π = ${fmt((Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)))) / CM)}`);
+      if (o.per && same) mid.push(`Π = ${num(Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))) * un.kx)}`);
     } else if (isPoly(s.shape)) {
       const t = trianglePts(s);
       const n = t.length;
       ctr = [t.reduce((a, p) => a + p[0], 0) / n, t.reduce((a, p) => a + p[1], 0) / n];
       // εμβαδόν πολυγώνου από τις κορυφές του
       const area = Math.abs(t.reduce((a, p, i) => a + p[0] * t[(i + 1) % n][1] - t[(i + 1) % n][0] * p[1], 0)) / 2;
-      if (o.ang) for (const m of measureAngles(s)) c.fillText(s.labels?.[ANGLE_KEY + m.i] ?? `${m.deg}°`, m.pos[0], m.pos[1]);
-      if (scaled && o.area) mid.push(`Ε = ${fmt(area / CM / CM)}`);
-      if (scaled && o.per) mid.push(`Π = ${fmt(t.reduce((a, p, i) => a + len(p, t[(i + 1) % n]), 0) / CM)}`);
+      if (o.ang && same) for (const m of measureAngles(s)) c.fillText(s.labels?.[ANGLE_KEY + m.i] ?? `${m.deg}°`, m.pos[0], m.pos[1]);
+      if (scaled && o.area) mid.push(`Ε = ${num(area * un.kx * un.ky)}`);
+      if (scaled && o.per && same) mid.push(`Π = ${num(t.reduce((a, p, i) => a + len(p, t[(i + 1) % n]), 0) * un.kx)}`);
     }
     mid.forEach((text, i) => c.fillText(text, ctr[0], ctr[1] + (i - (mid.length - 1) / 2) * 24));
     c.restore();
