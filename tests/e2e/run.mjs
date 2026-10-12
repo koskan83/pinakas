@@ -500,8 +500,29 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   const changed = it.v.join() !== '4,0';
   await page.click('#undo');
   await page.click('#undo');
+  // κυβάκια: όσο κρατάς πατημένο για να χτίσεις, το εργαλείο πρέπει να μένει στην οθόνη
+  await page.click('#gadgetBtn');
+  await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-kid="build"]');
+  const sky = () => page.evaluate(([x, y]) => {
+    const cv = document.getElementById('base');
+    const f = cv.width / cv.clientWidth;
+    return [...cv.getContext('2d').getImageData(Math.round(x * f), Math.round(y * f), 1, 1).data].slice(0, 3).join();
+  }, [mid.x - 150, mid.y - 150]);
+  const skyBefore = await sky();
+  await page.mouse.move(mid.x, mid.y - 100);
+  await page.mouse.down();
+  await page.mouse.move(mid.x + 60, mid.y - 100, { steps: 5 });
+  const skyDuring = await sky();
+  await page.mouse.up();
+  const built = (await items(pi)).find((i) => i.kind === 'stamp' && i.name === 'build');
+  const blocks = built ? built.v.slice(1).filter((n) => n > 0).length : 0;
+  await page.click('#undo');
+  await page.click('#undo');
   await page.reload();
   await page.waitForSelector('#toolbar');
+  assert(skyBefore === '224,242,254', `τα κυβάκια δεν ζωγραφίστηκαν εκεί που περίμενα (χρώμα ${skyBefore})`);
+  assert(skyDuring === skyBefore, `όσο χτίζεις, το εργαλείο εξαφανίζεται από την οθόνη (χρώμα ${skyDuring})`);
+  assert(blocks >= 2, `το σύρσιμο έχτισε ${blocks} κυβάκια αντί για τουλάχιστον 2`);
   assert(!(await visible('#tools [data-tool="measure"]')), 'η επιλογή «Δημοτικό» δεν έμεινε μετά το ξανάνοιγμα');
   await level();
   assert(await visible('#tools [data-tool="measure"]'), 'η Μέτρηση δεν επέστρεψε στο Γυμνάσιο – Λύκειο');

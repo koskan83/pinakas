@@ -54,6 +54,8 @@ interface PState {
   v0?: View;
   /** Πρόχειρη μνήμη ενός συρσίματος πάνω σε εργαλείο του Δημοτικού. */
   kid?: Record<string, number>;
+  /** Το εργαλείο όπως ήταν πριν αρχίσει το σύρσιμο πάνω του (για την αναίρεση). */
+  kidOrig?: StampItem;
 }
 
 interface Gesture {
@@ -2004,7 +2006,8 @@ export class Board {
           // χτίσιμο με κυβάκια ή δείκτης ρολογιού: το σύρσιμο δουλεύει πάνω στο εργαλείο, δεν το μετακινεί
           this.selected = hit.id;
           ps.mode = 'kid';
-          ps.orig = hit;
+          // όχι στο ps.orig: ό,τι είναι εκεί θεωρείται «υπό μετακίνηση» και δεν ζωγραφίζεται στη σελίδα
+          ps.kidOrig = hit;
           this.redraw();
           this.onUi();
           break;
@@ -2054,6 +2057,13 @@ export class Board {
     ps.gadget = undefined;
     ps.preview = undefined;
     ps.orig = undefined;
+    if (ps.kidOrig) {
+      // μισοτελειωμένο σύρσιμο πάνω σε εργαλείο του Δημοτικού: γυρίζει όπως ήταν
+      const before = ps.kidOrig;
+      const i = this.page.items.findIndex((x) => x.id === before.id);
+      if (i >= 0) this.page.items[i] = before;
+      ps.kidOrig = undefined;
+    }
     ps.before = undefined;
     ps.changed = false;
     ps.mode = 'none';
@@ -2301,7 +2311,7 @@ export class Board {
         break;
       }
       case 'kid': {
-        const cur = this.page.items.find((x) => x.id === ps.orig?.id);
+        const cur = this.page.items.find((x) => x.id === ps.kidOrig?.id);
         if (cur && cur.kind === 'stamp' && this.kidPaint(ps, cur, wx, wy, false)) this.redraw();
         return;
       }
@@ -2450,10 +2460,10 @@ export class Board {
         this.redraw();
         return;
       case 'kid': {
-        const before = ps.orig!;
+        const before = ps.kidOrig!;
         const after = this.page.items.find((x) => x.id === before.id);
         if (after && after !== before) this.push({ t: 'mod', p: this.cur, before, after });
-        ps.orig = undefined;
+        ps.kidOrig = undefined;
         this.redraw();
         this.onUi();
         return;
