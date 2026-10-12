@@ -192,9 +192,13 @@ describe('χτίσιμο με κυβάκια', () => {
     expect(d.paint!([slots - 2, ...v.slice(1)], s * 0.5, s * 0.5, d.w, d.h, {}, true)![1]).toBe(0);
   });
   it('η σειρά υλικών διαλέγει υλικό, και ο κάδος αδειάζει το χτίσιμο', () => {
-    const y = s * 14 + (d.h - s * 14) / 2, sw = d.w / slots;
+    // στη σειρά υπάρχει και μια τελευταία θέση: «όλη η οθόνη» (ή η πόρτα επιστροφής)
+    const y = s * 14 + (d.h - s * 14) / 2, sw = d.w / (slots + 1);
     expect(d.paint!([0, 1, 1], sw * 5.5, y, d.w, d.h, {}, true)![0]).toBe(5);
     expect(d.paint!([4, 1, 1], sw * (slots - 0.5), y, d.w, d.h, {}, true)).toEqual([4]);
+    expect(d.fullAt!(sw * (slots + 0.5), y, d.w, d.h)).toBe(true);
+    expect(d.fullAt!(sw * (slots - 0.5), y, d.w, d.h)).toBe(false);
+    expect(d.paint!([4, 1, 1], sw * (slots + 0.5), y, d.w, d.h, {}, true)).toBeNull();
     // σύρσιμο που ξεκίνησε από τα υλικά δεν χτίζει
     const st = {};
     d.paint!([0], sw * 5.5, y, d.w, d.h, st, true);
