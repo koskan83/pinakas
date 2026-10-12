@@ -165,6 +165,8 @@ export interface FnDef {
   expr: string;
   color: string;
   hidden?: boolean;
+  /** Περιορισμός του πεδίου ορισμού: [από, έως]· null = χωρίς όριο από εκείνη την πλευρά. */
+  dom?: [number | null, number | null];
 }
 
 /** Έτοιμο σχήμα φυσικής (βλ. stamps.ts). */

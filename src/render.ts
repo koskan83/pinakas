@@ -3,7 +3,7 @@
 import {
   AngleItem, AxesAn, AxesItem, Doc, FnDef, Item, Page, Pic, Pt, Shape, StampItem, Stroke, TextItem, TrigItem, angleDegrees, angleEnds, axesRange, isDark, isPoly, itemRot, tableLines, textFont, textLines, trianglePts, unrot,
 } from './model';
-import { Fn, Params, compileCached, keyPoints } from './expr';
+import { Fn, Params, compileCached, domText, fnOf, keyPoints } from './expr';
 import { Asymptotes, asymptotes, integrate, lineEq, nf, oneSided, riemann, slope } from './analysis';
 import { STAMPS, SpringState } from './stamps';
 import { CM } from './gadgets';
@@ -245,7 +245,7 @@ export class Renderer {
       c.lineWidth = 3;
       const n = Math.max(80, Math.min(1500, Math.round(((xmax - xmin) * u) / 1.5)));
       for (const f of fns) {
-        const fn = compileCached(f.expr);
+        const fn = fnOf(f);
         if (!fn) continue;
         c.strokeStyle = this.b.ink(f.color);
         c.beginPath();
@@ -273,10 +273,10 @@ export class Renderer {
       c.textBaseline = 'top';
       fns.forEach((f, i) => {
         c.fillStyle = this.b.ink(f.color);
-        c.fillText(compileCached(f.expr) ? f.expr : `${f.expr} ?`, X(xmax + 1.1), Y(ymax) + i * lf * 1.4);
+        c.fillText(compileCached(f.expr) ? (f.dom ? `${f.expr},  ${domText(f.dom, a.lx ?? 'x')}` : f.expr) : `${f.expr} ?`, X(xmax + 1.1), Y(ymax) + i * lf * 1.4);
       });
       if (a.points) {
-        const ok = fns.map((f) => compileCached(f.expr)).filter((f): f is Fn => !!f);
+        const ok = fns.map((f) => fnOf(f)).filter((f): f is Fn => !!f);
         const num = (v: number): string => String(+v.toFixed(2) || 0);
         c.font = `600 ${lf * 0.85}px system-ui, "Segoe UI", Roboto, sans-serif`;
         c.textBaseline = 'bottom';
@@ -347,7 +347,7 @@ export class Renderer {
   /** Οι δύο πρώτες ορατές συναρτήσεις των αξόνων (σε αυτές δουλεύουν ολοκλήρωμα, όριο, εφαπτομένη) με τις παραμέτρους τους. */
   private axesFn(a: AxesItem): { f?: (x: number) => number; g?: (x: number) => number } {
     const prm: Params = { ...a.params, ...(a.id === this.b.selected ? this.b.paramPreview : null) };
-    const ok = (a.fns ?? []).filter((d) => !d.hidden).map((d) => compileCached(d.expr)).filter((d): d is Fn => !!d);
+    const ok = (a.fns ?? []).filter((d) => !d.hidden).map((d) => fnOf(d)).filter((d): d is Fn => !!d);
     return { f: ok[0] && ((x) => ok[0](x, prm)), g: ok[1] && ((x) => ok[1](x, prm)) };
   }
 
@@ -411,7 +411,7 @@ export class Renderer {
     const Y = (v: number) => a.y - Math.max(-1e5, Math.min(1e5, v / sy)) * u;
     const dark = isDark(this.b.doc.bg);
     const ink = this.b.ink(a.color);
-    const ok = fns.map((d) => ({ d, fn: compileCached(d.expr) })).filter((o): o is { d: FnDef; fn: Fn } => !!o.fn);
+    const ok = fns.map((d) => ({ d, fn: fnOf(d) })).filter((o): o is { d: FnDef; fn: Fn } => !!o.fn);
     const info: [string, string][] = [];
     if (!ok.length) return info;
     const f = (x: number): number => ok[0].fn(x, prm);

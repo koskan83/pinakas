@@ -11,10 +11,10 @@ import { GadgetKind } from './gadgets';
 import { closeOverlay, isNative, isOverlay, nativeSave, nativeScreenshot, openOverlay } from './native';
 import { Curtain, Spotlight } from './overlays';
 import { STAMPS } from './stamps';
-import { Params, compile, compileCached, paramsOf } from './expr';
-import { fitScaleY } from './analysis';
+import { Params, compile, fnOf, paramsOf } from './expr';
+import { fitScaleY, pickAxesMode } from './analysis';
 import { buildPdf } from './pdf';
-import { AiTask, MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage } from './ai';
+import { AiTask, MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage, parseGraphReply } from './ai';
 import { axesRange, itemBounds, uid, wrapText } from './model';
 import { PEN_ICON, PenKind, mountUi } from './ui';
 
@@ -529,7 +529,7 @@ function addFn(): void {
 /** Η κλίμακα του κατακόρυφου άξονα που ταιριάζει στις ορατές συναρτήσεις (undefined = 1 ανά γραμμή). */
 function fitY(ax: AxesItem, fns: FnDef[], params: Params | undefined): number | undefined {
   const r = axesRange(ax);
-  const ok = fns.filter((f) => !f.hidden).map((f) => compileCached(f.expr)).filter((f) => !!f).map((f) => (x: number) => f!(x, params ?? {}));
+  const ok = fns.filter((f) => !f.hidden).map((f) => fnOf(f)).filter((f) => !!f).map((f) => (x: number) => f!(x, params ?? {}));
   const sy = fitScaleY(ok, r.xmin, r.xmax, r.ymax, -r.ymin);
   return sy === 1 ? undefined : sy;
 }
@@ -782,6 +782,35 @@ function aiNote(box: { x0: number; y0: number; x1: number; y1: number }, text: s
 
 let aiBusy = 0;
 /** Στέλνει τα στοιχεία για αναγνώριση και τα αντικαθιστά με κείμενο ή τυπωμένο τύπο. */
+/** Βάζει άξονες με τις συναρτήσεις που διάβασε το AI· οι άξονες και η κλίμακα διαλέγονται από το πεδίο ορισμού και τις τιμές τους. */
+function plotReply(out: string): void {
+  const r = parseGraphReply(out);
+  const pal = [...inkPalette().slice(1), '#ea580c', '#7c3aed'];
+  const fns: FnDef[] = [];
+  const params: Params = {};
+  for (const f of r.fns) {
+    try {
+      compile(f.expr);
+    } catch {
+      continue;
+    }
+    for (const n of paramsOf(f.expr)) params[n] ??= 1;
+    // οι κλάδοι της ίδιας συνάρτησης (ίδια απάντηση) παίρνουν το ίδιο χρώμα
+    fns.push({ expr: f.expr, color: pal[0], ...(f.dom ? { dom: f.dom } : {}) });
+  }
+  if (!fns.length) {
+    toast(r.fns.length ? `Δεν μπόρεσα να σχεδιάσω το «${r.fns[0].expr}». Γράψε το με το f(x).` : 'Δεν βρήκα συνάρτηση για γραφική παράσταση', 6000);
+    return;
+  }
+  const NX = 10;
+  const gs = fns.map((f) => fnOf(f)!).map((f) => (x: number) => f(x, params));
+  const mode = pickAxesMode(gs, NX);
+  const sy = fitScaleY(gs, mode === 'full' ? -NX : 0, NX, 10, mode === 'q1' ? 0 : 10);
+  board.addAxes(mode, { fns, ...(Object.keys(params).length ? { params } : {}), ...(sy === 1 ? {} : { sy }), ...(r.lx ? { lx: r.lx } : {}), ...(r.ly ? { ly: r.ly } : {}) });
+  const cut = fns.some((f) => f.dom && ((f.dom[1] ?? 0) > NX || (f.dom[0] ?? 0) < -NX));
+  toast(cut ? 'Η γραφική παράσταση μπήκε. Οι άξονες φτάνουν ως το 10, οπότε φαίνεται μόνο ένα μέρος του πεδίου ορισμού.' : 'Η γραφική παράσταση μπήκε. Έλεγξε ότι ο τύπος διαβάστηκε σωστά.', 5000);
+}
+
 async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
   if (!ai.keys[ai.provider]) {
     openAi();
@@ -790,12 +819,17 @@ async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
   }
   const page = board.cur;
   // λύση και έλεγχος βλέπουν ό,τι υπάρχει στην κυκλωμένη περιοχή (και κομμάτι εικόνας από Word ή PDF)· η αναγνώριση μόνο τα επιλεγμένα χειρόγραφα
-  const img = (kind === 'solve' || kind === 'check') && board.hasRegion ? await board.regionImage() : await board.inkImage(ids);
+  const img = kind !== 'text' && kind !== 'math' && board.hasRegion ? await board.regionImage() : await board.inkImage(ids);
   if (!img) return;
   aiBusy++;
-  toast(kind === 'solve' ? '✨ Λύνεται…' : kind === 'check' ? '✨ Ελέγχεται…' : '✨ Αναγνώριση…', 0);
+  toast(kind === 'graph' ? '✨ Γραφική παράσταση…' : kind === 'solve' ? '✨ Λύνεται…' : kind === 'check' ? '✨ Ελέγχεται…' : '✨ Αναγνώριση…', 0);
   try {
     const out = await recognize(img.blob, kind, ai);
+    if (kind === 'graph') {
+      if (board.cur !== page) toast('Άλλαξες σελίδα· η γραφική παράσταση δεν μπήκε');
+      else plotReply(out);
+      return;
+    }
     if (!out) {
       toast(kind === 'solve' ? 'Δεν βρήκα κάτι να λύσω' : kind === 'check' ? 'Δεν βρήκα λύση να ελέγξω' : 'Δεν μπόρεσα να το διαβάσω');
       return;
@@ -939,7 +973,7 @@ function refreshUi(): void {
   // η αναγνώριση έχει νόημα μόνο όταν στην επιλογή υπάρχει χειρόγραφο
   const ink = board.selectionHasInk;
   const writing = board.selectionHasWriting;
-  document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', b.dataset.rec === 'solve' || b.dataset.rec === 'check' ? !(writing || region) : !ink));
+  document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', b.dataset.rec === 'text' || b.dataset.rec === 'math' ? !ink : !(writing || region)));
   $('selOpts').querySelector('.recSep')!.classList.toggle('hidden', !(writing || region) || !board.hasSelection);
   show('sumBtn', !!board.resultantSource);
   show('axesOpts', !!ax);

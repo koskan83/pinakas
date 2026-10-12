@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { asymptotes, integrate, lineEq, nf, oneSided, riemann, slope, fitScaleY } from '../src/analysis';
+import { asymptotes, integrate, lineEq, nf, oneSided, riemann, slope, fitScaleY, pickAxesMode } from '../src/analysis';
+import { parseGraphReply } from '../src/ai';
+import { domText, fnOf } from '../src/expr';
 
 describe('ολοκλήρωμα και Riemann', () => {
   it('∫ x²/2−1 από 1 έως 3 = 7/3', () => {
@@ -110,4 +112,34 @@ describe('fitScaleY', () => {
   it('στο 1ο τεταρτημόριο τα αρνητικά δεν μετράνε', () => expect(fit((x) => 50 * x, 10, 0, 0)).toBe(50));
   it('χωρίς συναρτήσεις, 1', () => expect(fitScaleY([], -10, 10, 10, 10)).toBe(1));
   it('με δύο συναρτήσεις χωράνε και οι δύο', () => expect(fitScaleY([(x) => x, (x) => -200 * x], -10, 10, 10, 10)).toBe(200));
+});
+
+describe('γραφική παράσταση από το AI', () => {
+  it('διαβάζει τύπο, πεδίο ορισμού και ονόματα', () => {
+    expect(parseGraphReply('F: 10-2x\nD: 0 ; 5\nX: t\nY: υ')).toEqual({ fns: [{ expr: '10-2x', dom: [0, 5] }], lx: 't', ly: 'υ' });
+    expect(parseGraphReply('F: y = -200x\nX: x\nY: y')).toEqual({ fns: [{ expr: '-200x' }] });
+    expect(parseGraphReply('F: √(x)\nD: 0 ; inf')).toEqual({ fns: [{ expr: '√(x)', dom: [0, null] }] });
+    expect(parseGraphReply('').fns).toEqual([]);
+  });
+  it('κλάδοι: κάθε F με το δικό του D', () => {
+    const r = parseGraphReply('F: x²\nD: -inf ; 0\nF: 2x\nD: 0 ; inf');
+    expect(r.fns).toEqual([{ expr: 'x²', dom: [null, 0] }, { expr: '2x', dom: [0, null] }]);
+  });
+  it('η fnOf δεν ορίζεται έξω από το πεδίο', () => {
+    const f = fnOf({ expr: '2x', dom: [0, 5] })!;
+    expect(f(-1)).toBeNaN();
+    expect(f(3)).toBe(6);
+    expect(f(6)).toBeNaN();
+    expect(domText([0, 5], 't')).toBe('0 ≤ t ≤ 5');
+    expect(domText([0, null])).toBe('x ≥ 0');
+  });
+  it('διαλέγει άξονες από το πεδίο ορισμού και τις τιμές', () => {
+    const g = (expr: string, dom?: [number | null, number | null]) => { const f = fnOf({ expr, dom })!; return (x: number) => f(x); };
+    expect(pickAxesMode([g('10-2x', [0, 5])], 10)).toBe('q1');
+    expect(pickAxesMode([g('10-2x', [0, null])], 10)).toBe('q14');
+    expect(pickAxesMode([g('-200x')], 10)).toBe('full');
+    expect(pickAxesMode([g('√(x)')], 10)).toBe('q1');
+    expect(pickAxesMode([g('ln(x)')], 10)).toBe('q14');
+    expect(pickAxesMode([], 10)).toBe('full');
+  });
 });

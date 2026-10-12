@@ -68,7 +68,8 @@ const aiCalls = [];
 await ctx.route('https://generativelanguage.googleapis.com/**', (r) => {
   const body = r.request().postDataJSON();
   aiCalls.push({ image: body.contents[0].parts[0].inline_data?.data?.length ?? 0, prompt: body.contents[0].parts[1].text });
-  return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ candidates: [{ content: { parts: [{ text: '✓ Σωστή επιλογή: το 2' }] } }] }) });
+  const text = body.contents[0].parts[1].text.includes('will be plotted') ? 'F: 10-2x\nD: 0 ; 5\nX: t\nY: υ' : '✓ Σωστή επιλογή: το 2';
+  return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }) });
 });
 await ctx.route('https://www.googleapis.com/**', (r) => {
   const req = r.request();
@@ -247,7 +248,7 @@ test('Σχήμα από τα Όργανα, επιλογή και διαγραφ�
 test('Λάσο σε χειρόγραφο: εμφανίζονται αναγνώριση, λύση και έλεγχος', async () => {
   await tool('select');
   await lasso(260, 250, 560, 350);
-  for (const k of ['text', 'math', 'solve', 'check']) assert(await visible(`#selOpts [data-rec="${k}"]`), `λείπει το κουμπί «${k}»`);
+  for (const k of ['text', 'math', 'solve', 'check', 'graph']) assert(await visible(`#selOpts [data-rec="${k}"]`), `λείπει το κουμπί «${k}»`);
   await page.mouse.click(1000, 600);
 });
 
@@ -419,6 +420,20 @@ test('Λάσο πάνω σε σελίδα από PDF ή Word: το AI βλέπε
   assert(aiCalls.length === 1 && aiCalls[0].image > 500, 'δεν στάλθηκε εικόνα της περιοχής');
   const it = await items(pi);
   assert(it.length === n0 + 1 && it.at(-1).kind === 'text' && it.at(-1).text.startsWith('✓'), 'η απάντηση δεν γράφτηκε κάτω από την περιοχή');
+});
+
+test('Λάσο σε συνάρτηση → «Γραφική»: μπαίνουν άξονες που ταιριάζουν στο πεδίο ορισμού', async () => {
+  const pi = Number((await page.textContent('#pageLabel')).split('/')[0]) - 1;
+  await tool('select');
+  await lasso(420, 200, 640, 320);
+  await page.click('#selOpts [data-rec="graph"]');
+  await page.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Η γραφική παράσταση μπήκε'), null, { timeout: 10000 });
+  const ax = (await items(pi)).find((i) => i.kind === 'axes');
+  assert(ax, 'δεν μπήκαν άξονες');
+  assert(ax.mode === 'q1', `για υ = 10 − 2t με 0 ≤ t ≤ 5 περίμενα 1ο τεταρτημόριο, βγήκε ${ax.mode}`);
+  assert(ax.fns.length === 1 && ax.fns[0].expr === '10-2x' && ax.fns[0].dom[0] === 0 && ax.fns[0].dom[1] === 5, 'η συνάρτηση ή το πεδίο ορισμού δεν πέρασαν σωστά');
+  assert(ax.lx === 't' && ax.ly === 'υ', 'τα ονόματα των αξόνων δεν πέρασαν');
+  await page.mouse.click(1200, 300);
 });
 
 test('Μαθήματα: νέο μάθημα, τμήμα, μετονομασία από το όνομα, και όλα μένουν μετά από κλείσιμο', async () => {

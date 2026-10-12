@@ -165,3 +165,24 @@ export function fitScaleY(fns: G[], xmin: number, xmax: number, up: number, down
   }
   return +(10 ** (e + 1)).toPrecision(6);
 }
+
+/**
+ * Ποιοι άξονες ταιριάζουν σε συναρτήσεις με περιορισμένο πεδίο ορισμού: αν καμία δεν ορίζεται για x < 0 αρκεί το δεξί μισό («q14»),
+ * κι αν επιπλέον καμία δεν παίρνει αρνητικές τιμές, μόνο το 1ο τεταρτημόριο («q1»). `nx`: ως πού φτάνει ο άξονας x.
+ */
+export function pickAxesMode(fns: G[], nx: number): 'full' | 'q1' | 'q14' {
+  const N = 400;
+  let any = false, left = false, below = false;
+  for (const g of fns) {
+    for (let i = 0; i <= N; i++) {
+      const x = -nx + (2 * nx * i) / N;
+      const y = g(x);
+      if (!Number.isFinite(y)) continue;
+      any = true;
+      if (x < -1e-9) left = true;
+      else if (y < -1e-9) below = true;
+    }
+  }
+  if (!any || left) return 'full';
+  return below ? 'q14' : 'q1';
+}

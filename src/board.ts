@@ -367,8 +367,8 @@ export class Board {
   }
 
   /** Εισαγωγή καρτεσιανών αξόνων στο κέντρο της οθόνης. */
-  addAxes(mode: AxesMode): void {
-    const axes: AxesItem = { kind: 'axes', id: uid(), x: 0, y: 0, unit: CM, mode, nx: 10, ny: 10, color: this.color, ...(this.axesNums ? {} : { nums: false }) };
+  addAxes(mode: AxesMode, extra?: Partial<AxesItem>): void {
+    const axes: AxesItem = { kind: 'axes', id: uid(), x: 0, y: 0, unit: CM, mode, nx: 10, ny: 10, color: this.color, ...(this.axesNums ? {} : { nums: false }), ...extra };
     // μικραίνουμε τη μονάδα ώστε να χωράνε ολόκληροι στην οθόνη
     const full = itemBounds(axes);
     const k = this.page.view.k;

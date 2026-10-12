@@ -3,7 +3,7 @@
 export type Provider = 'gemini' | 'claude';
 export type RecKind = 'text' | 'math';
 /** Τι ζητάμε από την υπηρεσία: μεταγραφή (κείμενο ή τύπος) ή λύση της άσκησης. */
-export type AiTask = RecKind | 'solve' | 'check';
+export type AiTask = RecKind | 'solve' | 'check' | 'graph';
 
 export interface AiSettings {
   provider: Provider;
@@ -75,6 +75,20 @@ const PROMPT: Record<AiTask, string> = {
     'otherwise "✗ " plus which option was marked, then a second line with the correct option, then a third line with a reason of at most 15 words. ' +
     'If no option is marked, reply with "✗ Δεν έχει σημειωθεί απάντηση" and on the second line the correct option. ' +
     'If nothing is readable or there is nothing to check reply with an empty message.',
+  graph:
+    'The image shows a function or an equation in two variables from a Greek secondary-school classroom whiteboard, handwritten or printed ' +
+    '(for example f(x) = x² − 3x + 2, y = −200x, υ = 10 − 2t with 0 ≤ t ≤ 5, or a piecewise function). It will be plotted by a program. ' +
+    'Reply with plain lines only, no explanation, no LaTeX, no code fences:\n' +
+    'F: the right-hand side as an expression of x. If the independent variable has another name (t, θ, …) rewrite it as x. ' +
+    'If the equation is not solved for the dependent variable (e.g. 2x + y = 4) solve it first.\n' +
+    'D: only if the domain is restricted in the image (e.g. "x ≥ 0", "0 ≤ t ≤ 5", a piecewise condition, "t ≥ 0" implied by the word time is NOT enough): ' +
+    'two numbers "from ; to", using the word inf for no bound (e.g. "D: 0 ; inf", "D: -2 ; 3"). Otherwise omit the D line.\n' +
+    'X: the original name of the independent variable. Y: the original name of the dependent variable (y, f(x) becomes y, υ, s, …).\n' +
+    'For a piecewise function or several functions give one F line per branch, each followed by its own D line (at most 4).\n' +
+    'Syntax allowed in F: numbers with a decimal point, x, + − * /, ^ for powers, parentheses, √( ), | | for absolute value, ' +
+    'π, e, ln( ), log( ) and the Greek names ημ( ), συν( ), εφ( ), σφ( ) for sin, cos, tan, cot. Never write sin, cos, tan, sqrt, abs or exp. ' +
+    'Other single letters (a, b, λ) may stay as parameters. Example reply:\nF: 10-2x\nD: 0 ; 5\nX: t\nY: υ\n' +
+    'If the image contains no function that can be plotted reply with an empty message.',
 };
 
 async function toBase64(blob: Blob): Promise<string> {
@@ -134,7 +148,39 @@ export async function recognize(png: Blob, kind: AiTask, s: AiSettings): Promise
   const parts: { text?: string }[] = s.provider === 'gemini' ? json.candidates?.[0]?.content?.parts ?? [] : json.content ?? [];
   const raw = parts.map((p) => p.text ?? '').join('');
   // ο έλεγχος λύσης είναι σκέτο κείμενο: δεν έχει περιτύλιγμα LaTeX να καθαριστεί
-  return kind === 'check' ? raw.trim() : clean(raw);
+  return kind === 'check' || kind === 'graph' ? raw.trim() : clean(raw);
+}
+
+export interface GraphReply {
+  fns: { expr: string; dom?: [number | null, number | null] }[];
+  lx?: string;
+  ly?: string;
+}
+
+/** Διαβάζει την απάντηση για γραφική παράσταση (γραμμές «F:», «D:», «X:», «Y:»). */
+export function parseGraphReply(text: string): GraphReply {
+  const out: GraphReply = { fns: [] };
+  const bound = (v: string): number | null => {
+    const t = v.trim().replace('−', '-').replace(',', '.');
+    if (!t || /inf|∞/i.test(t)) return null;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : null;
+  };
+  for (const raw of text.split('\n')) {
+    const m = /^\s*([FDXY])\s*:\s*(.+?)\s*$/i.exec(raw.replace(/[`*]/g, ''));
+    if (!m) continue;
+    const k = m[1].toUpperCase(), v = m[2];
+    if (k === 'F' && out.fns.length < 4) out.fns.push({ expr: v.slice(v.lastIndexOf('=') + 1).trim() });
+    else if (k === 'D' && out.fns.length) {
+      const [a, b] = v.split(';');
+      const lo = bound(a ?? ''), hi = bound(b ?? '');
+      if (lo !== null || hi !== null) out.fns[out.fns.length - 1].dom = lo !== null && hi !== null && lo > hi ? [hi, lo] : [lo, hi];
+    } else if (k === 'X') out.lx = v.slice(0, 4);
+    else if (k === 'Y') out.ly = v.slice(0, 6);
+  }
+  if (out.lx === 'x') delete out.lx;
+  if (out.ly === 'y') delete out.ly;
+  return out;
 }
 
 // ---------- LaTeX → εικόνα ----------

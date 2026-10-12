@@ -197,6 +197,25 @@ export function compileCached(src: string): Fn | null {
   return f;
 }
 
+/** Η συνάρτηση ενός τύπου, περιορισμένη στο πεδίο ορισμού της (έξω από αυτό δεν ορίζεται). null αν ο τύπος δεν είναι έγκυρος. */
+export function fnOf(d: { expr: string; dom?: [number | null, number | null] }): Fn | null {
+  const f = compileCached(d.expr);
+  if (!f || !d.dom) return f;
+  const lo = d.dom[0] ?? -Infinity, hi = d.dom[1] ?? Infinity;
+  return (x, p) => (x < lo || x > hi ? NaN : f(x, p));
+}
+
+/** Το πεδίο ορισμού γραμμένο δίπλα στον τύπο: «x ≥ 0», «−2 ≤ x ≤ 3». */
+export function domText(dom: [number | null, number | null] | undefined, v = 'x'): string {
+  if (!dom) return '';
+  const n = (x: number): string => String(+x.toFixed(2)).replace('-', '−').replace('.', ',');
+  const [lo, hi] = dom;
+  if (lo !== null && hi !== null) return `${n(lo)} ≤ ${v} ≤ ${n(hi)}`;
+  if (lo !== null) return `${v} ≥ ${n(lo)}`;
+  if (hi !== null) return `${v} ≤ ${n(hi)}`;
+  return '';
+}
+
 export interface KeyPoint {
   x: number;
   y: number;

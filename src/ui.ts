@@ -220,6 +220,7 @@ export function mountUi(app: HTMLElement): void {
     <button data-rec="text" class="rec" title="Αναγνώριση της επιλογής ως κείμενο"><span class="txt">Aα</span><small>Σε κείμενο</small></button>
     <button data-rec="math" class="rec" title="Αναγνώριση της επιλογής ως τύπο"><span class="txt">√x</span><small>Σε τύπο</small></button>
     <button data-rec="solve" class="rec solve" title="Λύση της επιλεγμένης άσκησης (μπαίνει από κάτω)"><span class="txt">x=?</span><small>Λύση</small></button>
+    <button data-rec="graph" class="rec graph" title="Γραφική παράσταση της επιλεγμένης συνάρτησης, σε άξονες που ταιριάζουν στο πεδίο ορισμού της"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v17h17"/><path d="M6 17c3 0 4-11 7-11s3 7 7 7"/></svg></span><small>Γραφική</small></button>
     <button data-rec="check" class="rec check" title="Έλεγχος της λύσης ενός μαθητή: δείχνει σε ποια γραμμή είναι το πρώτο λάθος"><span class="txt">✓?</span><small>Έλεγχος</small></button>
   </div>
   <div id="gadgetMenu" class="popup hidden">
