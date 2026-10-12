@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asymptotes, integrate, lineEq, nf, oneSided, riemann, slope, fitScaleY, pickAxesMode } from '../src/analysis';
+import { asymptotes, integrate, lineEq, nf, oneSided, riemann, slope, fitScaleX, fitScaleY, pickAxesMode } from '../src/analysis';
 import { parseGraphReply } from '../src/ai';
 import { domText, fnOf } from '../src/expr';
 
@@ -141,5 +141,18 @@ describe('γραφική παράσταση από το AI', () => {
     expect(pickAxesMode([g('√(x)')], 10)).toBe('q1');
     expect(pickAxesMode([g('ln(x)')], 10)).toBe('q14');
     expect(pickAxesMode([], 10)).toBe('full');
+  });
+});
+
+describe('fitScaleX', () => {
+  it('το πεδίο ορισμού ορίζει την κλίμακα του x', () => {
+    expect(fitScaleX([[0, 50]], 10)).toBe(5);
+    expect(fitScaleX([[0, 5]], 10)).toBe(1);
+    expect(fitScaleX([[-30, 100]], 10)).toBe(10);
+    expect(fitScaleX([[0, 0.5]], 10)).toBe(0.05);
+    expect(fitScaleX([[0, null]], 10)).toBe(1);
+    expect(fitScaleX([[20, null]], 10)).toBe(5);
+    expect(fitScaleX([undefined], 10)).toBe(1);
+    expect(fitScaleX([[0, 50], undefined], 10)).toBe(1);
   });
 });

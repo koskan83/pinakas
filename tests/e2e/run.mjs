@@ -309,6 +309,9 @@ test('Συνάρτηση που δεν χωράει (y = −200x): ο κατακ
   await type('-200x');
   const sy = (await axes()).sy;
   assert(sy === 200, `η κλίμακα για την y = −200x βγήκε ${sy} αντί για 200`);
+  await page.evaluate(() => document.getElementById('axScale').click());
+  const a2 = await axes();
+  assert(a2.sx === 2 && a2.sy === 500, `με 2 ανά γραμμή στον x περίμενα sx 2 και sy 500, βγήκαν ${a2.sx} και ${a2.sy}`);
   await del();
   assert((await axes()).sy === undefined, 'χωρίς συναρτήσεις η κλίμακα έπρεπε να γυρίσει στο 1');
   await page.mouse.click(1200, 300);

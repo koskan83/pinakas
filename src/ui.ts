@@ -144,6 +144,7 @@ export function mountUi(app: HTMLElement): void {
       <div class="group" id="axesOpts">
         <button data-axis="x"><span>x</span>Όνομα οριζόντιου άξονα</button>
         <button data-axis="y"><span>y</span>Όνομα κατακόρυφου άξονα</button>
+        <button id="axScale"><span class="txt">×1</span>Κλίμακα οριζόντιου άξονα: κάθε πάτημα αλλάζει πόσο αξίζει μια γραμμή (1, 2, 5, 10, 20, 50, 100). Ο κατακόρυφος προσαρμόζεται μόνος του</button>
         <button id="axNums"><span class="txt">123</span>Αριθμοί στους άξονες: σβήσε τους για να γράψεις δικές σου τιμές (π.χ. ανά 10 ή 20)</button>
         <button id="fnBtn"><span class="txt">f(x)</span>Γραφική παράσταση συνάρτησης</button>
         <button data-an="int"><span class="txt">∫</span>Ορισμένο ολοκλήρωμα ως εμβαδόν (δεύτερο πάτημα: χωρίο ανάμεσα σε δύο συναρτήσεις)</button>

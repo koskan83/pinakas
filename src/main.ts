@@ -12,7 +12,7 @@ import { closeOverlay, isNative, isOverlay, nativeSave, nativeScreenshot, openOv
 import { Curtain, Spotlight } from './overlays';
 import { STAMPS } from './stamps';
 import { Params, compile, fnOf, paramsOf } from './expr';
-import { fitScaleY, pickAxesMode } from './analysis';
+import { fitScaleX, fitScaleY, pickAxesMode } from './analysis';
 import { buildPdf } from './pdf';
 import { AiTask, MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage, parseGraphReply } from './ai';
 import { axesRange, itemBounds, uid, wrapText } from './model';
@@ -350,6 +350,24 @@ $('axesOpts').addEventListener('click', (e) => {
     renderFns();
     return;
   }
+  if (t.closest('#axScale')) {
+    const ax = board.selectedAxes;
+    if (!ax) return;
+    const steps = [1, 2, 5, 10, 20, 50, 100];
+    const old = ax.sx ?? 1;
+    const sx = steps[(steps.indexOf(old) + 1) % steps.length];
+    // οι λαβές της ανάλυσης μένουν στις ίδιες γραμμές του άξονα
+    const f = sx / old;
+    const an: AxesAn | undefined = ax.an && {
+      ...ax.an,
+      ...(ax.an.int ? { int: { ...ax.an.int, a: ax.an.int.a * f, b: ax.an.int.b * f } } : {}),
+      ...(ax.an.lim ? { lim: { x0: ax.an.lim.x0 * f, x: ax.an.lim.x * f } } : {}),
+      ...(ax.an.tan ? { tan: { ...ax.an.tan, x: ax.an.tan.x * f, ...(ax.an.tan.h ? { h: ax.an.tan.h * f } : {}) } } : {}),
+    };
+    const next: AxesItem = { ...ax, sx: sx === 1 ? undefined : sx };
+    board.updateAxes({ sx: next.sx, sy: fitY(next, ax.fns ?? [], ax.params), ...(an ? { an } : {}) });
+    return;
+  }
   if (t.closest('#axNums')) {
     const ax = board.selectedAxes;
     if (!ax) return;
@@ -383,7 +401,9 @@ function toggleAnalysis(key: string): void {
     return;
   }
   const r = axesRange(ax);
-  const inX = (v: number): number => Math.max(r.xmin, Math.min(r.xmax, v));
+  const sx = ax.sx ?? 1;
+  // οι αρχικές θέσεις μετριούνται σε γραμμές του άξονα, όποια κι αν είναι η κλίμακά του
+  const inX = (v: number): number => Math.max(r.xmin, Math.min(r.xmax, v)) * sx;
   const an: AxesAn = { ...ax.an };
   const newInt = { a: inX(1), b: inX(3) };
   if (key === 'int') {
@@ -399,7 +419,7 @@ function toggleAnalysis(key: string): void {
     else an.lim = { x0: inX(0), x: inX(1.5) };
   } else if (key === 'tan') {
     if (!an.tan) an.tan = { x: inX(1) };
-    else if (!an.tan.h) an.tan = { ...an.tan, h: 1 };
+    else if (!an.tan.h) an.tan = { ...an.tan, h: sx };
     else delete an.tan;
   } else if (key === 'asym') an.asym = !an.asym;
   board.updateAxes({ an });
@@ -530,7 +550,8 @@ function addFn(): void {
 function fitY(ax: AxesItem, fns: FnDef[], params: Params | undefined): number | undefined {
   const r = axesRange(ax);
   const ok = fns.filter((f) => !f.hidden).map((f) => fnOf(f)).filter((f) => !!f).map((f) => (x: number) => f!(x, params ?? {}));
-  const sy = fitScaleY(ok, r.xmin, r.xmax, r.ymax, -r.ymin);
+  const sx = ax.sx ?? 1;
+  const sy = fitScaleY(ok, r.xmin * sx, r.xmax * sx, r.ymax, -r.ymin);
   return sy === 1 ? undefined : sy;
 }
 $('fnAdd').onclick = addFn;
@@ -804,11 +825,12 @@ function plotReply(out: string): void {
   }
   const NX = 10;
   const gs = fns.map((f) => fnOf(f)!).map((f) => (x: number) => f(x, params));
-  const mode = pickAxesMode(gs, NX);
-  const sy = fitScaleY(gs, mode === 'full' ? -NX : 0, NX, 10, mode === 'q1' ? 0 : 10);
-  board.addAxes(mode, { fns, ...(Object.keys(params).length ? { params } : {}), ...(sy === 1 ? {} : { sy }), ...(r.lx ? { lx: r.lx } : {}), ...(r.ly ? { ly: r.ly } : {}) });
-  const cut = fns.some((f) => f.dom && ((f.dom[1] ?? 0) > NX || (f.dom[0] ?? 0) < -NX));
-  toast(cut ? 'Η γραφική παράσταση μπήκε. Οι άξονες φτάνουν ως το 10, οπότε φαίνεται μόνο ένα μέρος του πεδίου ορισμού.' : 'Η γραφική παράσταση μπήκε. Έλεγξε ότι ο τύπος διαβάστηκε σωστά.', 5000);
+  // ο οριζόντιος άξονας απλώνεται ή μαζεύεται ώστε να χωράει ακριβώς το πεδίο ορισμού (π.χ. 0 ≤ t ≤ 50 → 5 ανά γραμμή)
+  const sx = fitScaleX(fns.map((f) => f.dom), NX);
+  const mode = pickAxesMode(gs, NX * sx);
+  const sy = fitScaleY(gs, mode === 'full' ? -NX * sx : 0, NX * sx, 10, mode === 'q1' ? 0 : 10);
+  board.addAxes(mode, { fns, ...(Object.keys(params).length ? { params } : {}), ...(sx === 1 ? {} : { sx }), ...(sy === 1 ? {} : { sy }), ...(r.lx ? { lx: r.lx } : {}), ...(r.ly ? { ly: r.ly } : {}) });
+  toast('Η γραφική παράσταση μπήκε. Έλεγξε ότι ο τύπος διαβάστηκε σωστά.', 5000);
 }
 
 async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
@@ -988,6 +1010,8 @@ function refreshUi(): void {
   document.querySelectorAll<HTMLElement>('[data-an]').forEach((b) => b.classList.toggle('on', anOn[b.dataset.an!]));
   $('axesOpts').querySelector('[data-an=sum] span')!.textContent = ax?.an?.int?.n ? `Σ${ax.an.int.n}` : 'Σ';
   $('axNums').classList.toggle('on', ax?.nums !== false);
+  $('axScale').querySelector('span')!.textContent = `×${String(ax?.sx ?? 1).replace('.', ',')}`;
+  $('axScale').classList.toggle('on', (ax?.sx ?? 1) !== 1);
   $('axesOpts').querySelector('[data-axis=x] span')!.textContent = ax?.lx ?? 'x';
   $('axesOpts').querySelector('[data-axis=y] span')!.textContent = ax?.ly ?? 'y';
   if (!ax && !fnMenu.classList.contains('hidden')) {

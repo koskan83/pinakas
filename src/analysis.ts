@@ -157,11 +157,15 @@ export function fitScaleY(fns: G[], xmin: number, xmax: number, up: number, down
   // φαίνεται ήδη αρκετό κομμάτι κάθε καμπύλης και καμία δεν είναι «πλακωμένη» πάνω στον άξονα
   if (worst >= 0.25 && p95 >= 0.08) return 1;
   if (!(p95 > 0)) return 1;
-  // το μικρότερο «στρογγυλό» βήμα (1, 2, 5 × δύναμη του 10) που χωράει το 95% των σημείων
-  const e = Math.floor(Math.log10(p95));
+  return niceStep(p95);
+}
+
+/** Το μικρότερο «στρογγυλό» βήμα (1, 2, 5 × δύναμη του 10) που δεν είναι κάτω από το v. */
+export function niceStep(v: number): number {
+  const e = Math.floor(Math.log10(v));
   for (const m of [1, 2, 5, 10]) {
     const s = m * 10 ** e;
-    if (s >= p95 * 0.999) return +s.toPrecision(6);
+    if (s >= v * 0.999) return +s.toPrecision(6);
   }
   return +(10 ** (e + 1)).toPrecision(6);
 }
@@ -185,4 +189,23 @@ export function pickAxesMode(fns: G[], nx: number): 'full' | 'q1' | 'q14' {
   }
   if (!any || left) return 'full';
   return below ? 'q14' : 'q1';
+}
+
+/**
+ * Κλίμακα του οριζόντιου άξονα (τιμή ανά γραμμή) από τα πεδία ορισμού: αν φτάνουν πέρα από τις `nx` γραμμές (π.χ. 0 ≤ t ≤ 50)
+ * ή πιάνουν πολύ μικρό κομμάτι τους (π.χ. 0 ≤ x ≤ 0,5), ο άξονας απλώνεται ή μαζεύεται. Χωρίς φραγμένο πεδίο ορισμού μένει 1.
+ */
+export function fitScaleX(doms: ([number | null, number | null] | undefined)[], nx: number): number {
+  let m = 0;
+  for (const d of doms) {
+    // συνάρτηση χωρίς περιορισμό: η γνώριμη εικόνα της είναι με 1 ανά γραμμή
+    if (!d) return 1;
+    const [lo, hi] = d;
+    const far = Math.max(Math.abs(lo ?? 0), Math.abs(hi ?? 0));
+    // ανοιχτό προς το άπειρο (π.χ. x ≥ 20): αφήνουμε άλλο τόσο χώρο πέρα από το άκρο
+    m = Math.max(m, lo === null || hi === null ? far * 2 : far);
+  }
+  if (!(m > 0)) return 1;
+  if (m <= nx && m > nx / 5) return 1;
+  return niceStep(m / nx);
 }
