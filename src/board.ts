@@ -10,7 +10,7 @@ import { Renderer } from './render';
 // οι δοκιμές και όποιος τα χρειάζεται τα βρίσκουν ακόμα εδώ
 export { eraseMeasures, hlFlat, measureAngles, measureSides, radText } from './measure';
 
-type Mode = 'draw' | 'shape' | 'gadget' | 'erase' | 'move' | 'resize' | 'pan' | 'lasso' | 'gmove' | 'gresize' | 'rotate' | 'grotate' | 'measure' | 'laser' | 'osc' | 'none';
+type Mode = 'draw' | 'shape' | 'gadget' | 'erase' | 'move' | 'resize' | 'pan' | 'lasso' | 'gmove' | 'gresize' | 'rotate' | 'grotate' | 'measure' | 'laser' | 'osc' | 'kid' | 'none';
 
 type Box = { x0: number; y0: number; x1: number; y1: number };
 /** Ίχνος του δείκτη λέιζερ· t = στιγμή που σηκώθηκε η γραφίδα (0 όσο γράφει). */
@@ -52,6 +52,8 @@ interface PState {
   /** Περιστροφή: μένει true όσο η γραφίδα δεν έχει συρθεί (απλό πάτημα της λαβής αλλάζει κέντρο). */
   tap?: boolean;
   v0?: View;
+  /** Πρόχειρη μνήμη ενός συρσίματος πάνω σε εργαλείο του Δημοτικού. */
+  kid?: Record<string, number>;
 }
 
 interface Gesture {
@@ -393,6 +395,18 @@ export class Board {
   }
 
   /** Οι επιλεγμένοι άξονες, αν η επιλογή είναι άξονες. */
+  /** Σύρσιμο πάνω σε εργαλείο του Δημοτικού που «ζωγραφίζεται» (κυβάκια, δείκτες ρολογιού). false αν το σημείο δεν το αφορά. */
+  private kidPaint(ps: PState, it: StampItem, wx: number, wy: number, first: boolean): boolean {
+    const d = STAMPS[it.name];
+    if (!d?.paint) return false;
+    if (first) ps.kid = {};
+    const [lx, ly] = unrot(it, wx, wy);
+    const v = d.paint(it.v ?? d.init ?? [], lx - it.x, ly - it.y, it.w, it.h, ps.kid!, first);
+    if (!v) return false;
+    this.page.items[this.page.items.indexOf(it)] = { ...it, v };
+    return true;
+  }
+
   /** true αν ήταν πάτημα πάνω σε εργαλείο του Δημοτικού (και όχι μετακίνησή του)· τότε εφαρμόζει ό,τι κάνει το πάτημα. */
   private tapKid(before: StampItem, after: Item, at: Pt): boolean {
     const d = STAMPS[before.name];
@@ -1986,6 +2000,15 @@ export class Board {
         const hit = this.hitTest(wx, wy);
         this.multi = [];
         // πάνω σε μη επιλεγμένη εικόνα (π.χ. σελίδα PDF) το σύρσιμο κάνει λάσο· το απλό άγγιγμα την επιλέγει
+        if (hit && hit.kind === 'stamp' && this.kidPaint(ps, hit, wx, wy, true)) {
+          // χτίσιμο με κυβάκια ή δείκτης ρολογιού: το σύρσιμο δουλεύει πάνω στο εργαλείο, δεν το μετακινεί
+          this.selected = hit.id;
+          ps.mode = 'kid';
+          ps.orig = hit;
+          this.redraw();
+          this.onUi();
+          break;
+        }
         if (hit && !(hit.kind === 'image' && hit.id !== this.selected)) {
           this.selected = hit.id;
           ps.mode = 'move';
@@ -2277,6 +2300,11 @@ export class Board {
         }
         break;
       }
+      case 'kid': {
+        const cur = this.page.items.find((x) => x.id === ps.orig?.id);
+        if (cur && cur.kind === 'stamp' && this.kidPaint(ps, cur, wx, wy, false)) this.redraw();
+        return;
+      }
       case 'move': {
         const dx = wx - ps.start![0];
         const dy = wy - ps.start![1];
@@ -2421,6 +2449,15 @@ export class Board {
         }
         this.redraw();
         return;
+      case 'kid': {
+        const before = ps.orig!;
+        const after = this.page.items.find((x) => x.id === before.id);
+        if (after && after !== before) this.push({ t: 'mod', p: this.cur, before, after });
+        ps.orig = undefined;
+        this.redraw();
+        this.onUi();
+        return;
+      }
       case 'osc': {
         const o = this.oscDrag;
         this.oscDrag = null;

@@ -229,7 +229,7 @@ function renderColors(): void {
   colorsKey = key;
   colorsEl.innerHTML =
     list.map((c) => `<button class="color" data-color="${c}" style="background:${c}" aria-label="${c}"></button>`).join('') +
-    '<button id="colorBtn" title="Περισσότερα χρώματα" aria-label="Περισσότερα χρώματα"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 1.5-2.2-.6-1.5.3-2.8 2-2.8H18a3 3 0 0 0 3-3c0-5.500-4-10-9-10z"/><circle cx="7.5" cy="11" r="1" fill="currentColor"/><circle cx="10.5" cy="7.5" r="1" fill="currentColor"/><circle cx="15" cy="8" r="1" fill="currentColor"/></svg></span></button>';
+    '<button id="colorBtn" title="Περισσότερα χρώματα" aria-label="Περισσότερα χρώματα"><span data-em="🎨"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 1.5-2.2-.6-1.5.3-2.8 2-2.8H18a3 3 0 0 0 3-3c0-5.500-4-10-9-10z"/><circle cx="7.5" cy="11" r="1" fill="currentColor"/><circle cx="10.5" cy="7.5" r="1" fill="currentColor"/><circle cx="15" cy="8" r="1" fill="currentColor"/></svg></span></button>';
 }
 $('colorGrid').innerHTML = MORE_COLORS.map((c) => `<button class="color" data-color="${c}" style="background:${c}" aria-label="${c}"></button>`).join('');
 
@@ -1031,6 +1031,7 @@ function refreshUi(): void {
   $('penBtn').classList.toggle('on', isPenKind(tool));
   $('gadgetBtn').classList.toggle('on', tool === 'shape');
   $('penBtn').querySelector('span')!.innerHTML = PEN_ICON[penKind];
+  $('penBtn').querySelector('span')!.dataset.em = penKind === 'laser' ? '🔦' : '✏️';
   document.querySelectorAll<HTMLElement>('[data-pen]').forEach((b) => b.classList.toggle('on', b.dataset.pen === tool));
   document.querySelectorAll<HTMLElement>('[data-auto]').forEach((b) => b.classList.toggle('on', b.dataset.auto === autoKind));
   renderColors();
@@ -2076,6 +2077,18 @@ $('wLevel').addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-level]');
   if (b) setLevel(b.dataset.level === 'primary');
 });
+
+// στο Δημοτικό τα εικονίδια της γραμμής εργαλείων γίνονται emoji (το CSS τα δείχνει αντί για τα γραμμικά)
+const EMOJI: Record<string, string> = {
+  '#tools [data-tool="select"]': '👆', '#penBtn': '✏️', '#tools [data-tool="highlighter"]': '🖍️', '#tools [data-tool="text"]': '🔤',
+  '#tools [data-tool="eraser"]': '🧽', '#tools [data-tool="hand"]': '✋', '#undo': '↩️', '#redo': '↪️', '#importBtn': '🖼️',
+  '#gadgetBtn': '🧰', '#prev': '◀️', '#next': '▶️', '#addPage': '📄',
+  '#penKinds [data-pen="pen"]': '✏️', '#penKinds [data-pen="laser"]': '🔦',
+};
+for (const [sel, em] of Object.entries(EMOJI)) {
+  const span = document.querySelector<HTMLElement>(`${sel} > span`);
+  if (span) span.dataset.em = em;
+}
 
 const WELCOME = 'grafida.welcome';
 function openWelcome(): void {

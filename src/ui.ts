@@ -1,5 +1,7 @@
 /** Η σελίδα της εφαρμογής: εικονίδια και το HTML της γραμμής εργαλείων, των μενού και των παραθύρων. */
 
+import { PICS } from './kids';
+
 export type PenKind = 'pen' | 'laser';
 export const LASER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="#ef4444" stroke="none"/></svg>';
 export const PENCIL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg>';
@@ -247,17 +249,22 @@ export function mountUi(app: HTMLElement): void {
     <div class="gHead" data-lv="pri">Αριθμοί</div>
     <div class="tiles" data-lv="pri">
       ${tile('data-kid="numline"', '<b class="sm">0–10</b>', 'Αριθμογρ.', 'Αριθμογραμμή: το ⟳ αλλάζει από πού ως πού')}
-      ${tile('data-kid="blocks"', '<b class="em">🧱</b>', 'Ε Δ Μ', 'Εκατοντάδες, δεκάδες, μονάδες με κυβάκια')}
+      ${tile('data-kid="blocks"', '<b class="em">🔢</b>', 'Ε Δ Μ', 'Εκατοντάδες, δεκάδες, μονάδες με κυβάκια')}
       ${tile('data-kid="hundred"', '<b class="sm">100</b>', 'Πίν. 100', 'Πίνακας του 100: πατάς αριθμούς και χρωματίζονται')}
       ${tile('data-kid="times"', '<b>×</b>', 'Προπαίδεια', 'Προπαίδεια: πατάς ένα κουτί και φαίνεται το γινόμενο')}
       ${tile('data-kid="colops"', '<b class="sm">Ε Δ Μ</b>', 'Κάθ. πράξη', 'Πλέγμα για κάθετη πράξη με κρατούμενα')}
       ${tile('data-kid="balance"', '<b class="em">⚖️</b>', 'Ζυγαριά', 'Ζυγαριά: βάζεις αριθμούς και γέρνει προς το μεγαλύτερο άθροισμα')}
       ${tile('data-kid="money"', '<b class="em">💶</b>', 'Χρήματα', 'Κέρματα και χαρτονομίσματα ευρώ')}
+      ${tile('data-kid="build"', '<b class="em">🧱</b>', 'Κυβάκια', 'Χτίσιμο με κυβάκια: διαλέγεις υλικό και σέρνεις για να χτίσεις')}
+    </div>
+    <div class="gHead" data-lv="pri">Εικόνες για μέτρημα</div>
+    <div class="tiles small" data-lv="pri">
+      ${PICS.map(([key, emoji, label]) => `<button data-kid="pic-${key}" class="tile pic" title="${label}"><span><b class="em">${emoji}</b></span></button>`).join('')}
     </div>
     <div class="gHead" data-lv="pri">Κλάσματα και ώρα</div>
     <div class="tiles" data-lv="pri">
-      ${tile('data-kid="fracpie"', '<b class="em">◔</b>', 'Πίτα', 'Κλάσμα σε πίτα: πατάς κομμάτια και χρωματίζονται')}
-      ${tile('data-kid="fracbar"', '<b class="em">▥</b>', 'Μπάρα', 'Κλάσμα σε μπάρα: για σύγκριση και ισοδύναμα κλάσματα')}
+      ${tile('data-kid="fracpie"', '<b class="em">🍕</b>', 'Πίτα', 'Κλάσμα σε πίτα: πατάς κομμάτια και χρωματίζονται')}
+      ${tile('data-kid="fracbar"', '<b class="em">🍫</b>', 'Μπάρα', 'Κλάσμα σε μπάρα: για σύγκριση και ισοδύναμα κλάσματα')}
       ${tile('data-kid="clock"', '<b class="em">🕒</b>', 'Ρολόι', 'Ρολόι: πατάς γύρω γύρω για τα λεπτά, πιο μέσα για την ώρα')}
     </div>
     <div class="gHead" data-lv="pri">Παιχνίδι και επιβράβευση</div>

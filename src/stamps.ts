@@ -43,6 +43,11 @@ export interface StampDef {
   drawKid?(c: C, w: number, h: number, v: number[], env: KidEnv): void;
   /** Πάτημα στο σημείο (x, y) του κουτιού: η νέα κατάσταση, ή null αν δεν έπεσε πουθενά. */
   tap?(v: number[], x: number, y: number, w: number, h: number): number[] | null;
+  /**
+   * Σύρσιμο πάνω στο εργαλείο (χτίσιμο με κυβάκια, δείκτες ρολογιού). `first`: η αρχή της κίνησης· αν τότε επιστρέψει null,
+   * το σύρσιμο μετακινεί το εργαλείο ως συνήθως. `st`: πρόχειρη μνήμη για όσο κρατά η κίνηση.
+   */
+  paint?(v: number[], x: number, y: number, w: number, h: number, st: Record<string, number>, first: boolean): number[] | null;
 }
 
 function path(c: C, pts: number[][], close = false): void {

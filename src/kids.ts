@@ -192,6 +192,63 @@ function star(c: C, cx: number, cy: number, r: number): void {
 
 const kid = (d: Omit<StampDef, 'draw' | 'kid'>): StampDef => ({ ...d, kid: true, draw: () => {} });
 
+// ---------- χτίσιμο με κυβάκια ----------
+const BCOLS = 16, BROWS = 10;
+/** Τα υλικά: βασικό χρώμα, σκούρα και ανοιχτή απόχρωση για την «υφή». */
+const BLOCKS: { name: string; base: string; dark: string; light: string; top?: string }[] = [
+  { name: 'Γρασίδι', base: '#8b5a2b', dark: '#6b4423', light: '#a9713a', top: '#4caf50' },
+  { name: 'Χώμα', base: '#8b5a2b', dark: '#6b4423', light: '#a9713a' },
+  { name: 'Πέτρα', base: '#9ca3af', dark: '#6b7280', light: '#d1d5db' },
+  { name: 'Ξύλο', base: '#b98146', dark: '#8a5a2b', light: '#d9a066' },
+  { name: 'Κορμός', base: '#6b4423', dark: '#4a2f17', light: '#8b5a2b' },
+  { name: 'Φύλλα', base: '#2e7d32', dark: '#1b5e20', light: '#66bb6a' },
+  { name: 'Τούβλα', base: '#c0392b', dark: '#8e2a20', light: '#e57368' },
+  { name: 'Άμμος', base: '#f4d58d', dark: '#d9b45f', light: '#fbe7b5' },
+  { name: 'Νερό', base: '#3b82f6', dark: '#1d4ed8', light: '#93c5fd' },
+  { name: 'Γυαλί', base: '#bae6fd', dark: '#7dd3fc', light: '#f0f9ff' },
+  { name: 'Χρυσός', base: '#facc15', dark: '#ca8a04', light: '#fef08a' },
+];
+/** Ένα κυβάκι σε στιλ pixel: βασικό χρώμα, λίγες «ψηφίδες» για υφή, σκούρο περίγραμμα. */
+function drawBlock(c: C, type: number, x: number, y: number, s: number): void {
+  const b = BLOCKS[type];
+  if (!b) return;
+  c.fillStyle = b.base;
+  c.fillRect(x, y, s, s);
+  const q = s / 4;
+  // σταθερές θέσεις ανά υλικό, ώστε το ίδιο κυβάκι να φαίνεται πάντα ίδιο
+  const spots: [number, number, boolean][] = [[0, 1, true], [2, 0, false], [3, 2, true], [1, 3, false], [2, 2, true], [0, 3, false]];
+  for (const [i, j, dk] of spots) {
+    c.fillStyle = dk ? b.dark : b.light;
+    c.fillRect(x + ((i + type) % 4) * q, y + j * q, q, q);
+  }
+  if (b.top) {
+    c.fillStyle = b.top;
+    c.fillRect(x, y, s, q * 1.2);
+    c.fillStyle = '#2e7d32';
+    c.fillRect(x + q, y + q * 1.2, q * 0.5, q * 0.5);
+    c.fillRect(x + q * 2.6, y + q * 1.2, q * 0.5, q * 0.7);
+  }
+  c.strokeStyle = 'rgba(0,0,0,0.45)';
+  c.lineWidth = Math.max(1, s * 0.04);
+  c.strokeRect(x, y, s, s);
+}
+/** Διάταξη του εργαλείου: πλέγμα επάνω, σειρά υλικών κάτω (υλικά, γόμα, καθάρισμα). */
+function buildGeom(w: number, h: number): { s: number; gh: number; slots: number; sw: number; py: number; ps: number } {
+  const s = w / BCOLS, gh = s * BROWS;
+  const slots = BLOCKS.length + 2, sw = w / slots;
+  return { s, gh, slots, sw, py: gh + (h - gh) / 2, ps: Math.min(sw * 0.74, (h - gh) * 0.7) };
+}
+
+/** Εικόνες για μέτρημα και προβλήματα: ζωγραφίζονται ως emoji, ώστε να φαίνονται ίδιες με τα πλήκτρα τους. */
+export const PICS: [key: string, emoji: string, label: string][] = [
+  ['house', '🏠', 'Σπίτι'], ['tree', '🌳', 'Δέντρο'], ['boy', '👦', 'Αγόρι'], ['girl', '👧', 'Κορίτσι'],
+  ['apple', '🍎', 'Μήλο'], ['flower', '🌸', 'Λουλούδι'], ['sun', '☀️', 'Ήλιος'], ['cloud', '☁️', 'Σύννεφο'],
+  ['dog', '🐶', 'Σκύλος'], ['cat', '🐱', 'Γάτα'], ['fish', '🐟', 'Ψάρι'], ['bird', '🐦', 'Πουλί'],
+  ['car', '🚗', 'Αυτοκίνητο'], ['ball', '⚽', 'Μπάλα'], ['balloon', '🎈', 'Μπαλόνι'], ['candy', '🍬', 'Καραμέλα'],
+  ['heart', '❤️', 'Καρδιά'], ['book', '📕', 'Βιβλίο'], ['pencil', '✏️', 'Μολύβι'], ['cookie', '🍪', 'Μπισκότο'],
+];
+const EMOJI_FONT = '"Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif';
+
 export const KIDS: Record<string, StampDef> = {
   numline: kid({
     label: 'Αριθμογραμμή', w: 760, h: 120, init: [0],
@@ -323,19 +380,23 @@ export const KIDS: Record<string, StampDef> = {
       c.stroke();
       text(c, v[1] ? `${hr}:${String(mins % 60).padStart(2, '0')}` : '? : ??', w / 2, sy + 1, (h - w) * 0.46, env.ink, 700);
     },
-    tap(v, x, y, w, h) {
+    // οι δείκτες σέρνονται: έξω κοντά στους αριθμούς ο λεπτοδείκτης (ανά 5 λεπτά), πιο μέσα ο ωροδείκτης
+    paint(v, x, y, w, _h, st, first) {
       const cx = w / 2, cy = w / 2, r = w * 0.47;
       const mins = ((v[0] ?? 0) % 720 + 720) % 720;
       const d = Math.hypot(x - cx, y - cy);
-      if (d <= r * 1.05) {
-        let a = Math.atan2(x - cx, cy - y);
-        if (a < 0) a += 2 * Math.PI;
-        // έξω κοντά στους αριθμούς: ο λεπτοδείκτης (ανά 5 λεπτά)· πιο μέσα: ο ωροδείκτης
-        if (d > r * 0.56) return [Math.floor(mins / 60) * 60 + (Math.round((a / (2 * Math.PI)) * 12) % 12) * 5, v[1] ?? 1];
-        return [(Math.round((a / (2 * Math.PI)) * 12 - (mins % 60) / 60 + 12) % 12) * 60 + (mins % 60), v[1] ?? 1];
+      if (first) {
+        if (d > r * 1.05) return null;
+        st.hand = d > r * 0.56 ? 1 : 2;
       }
-      if (y > w && y <= h) return [mins, v[1] ? 0 : 1];
-      return null;
+      let a = Math.atan2(x - cx, cy - y);
+      if (a < 0) a += 2 * Math.PI;
+      if (st.hand === 1) return [Math.floor(mins / 60) * 60 + (Math.round((a / (2 * Math.PI)) * 12) % 12) * 5, v[1] ?? 1];
+      return [(Math.round((a / (2 * Math.PI)) * 12 - (mins % 60) / 60 + 12) % 12) * 60 + (mins % 60), v[1] ?? 1];
+    },
+    tap(v, _x, y, w, h) {
+      const mins = ((v[0] ?? 0) % 720 + 720) % 720;
+      return y > w && y <= h ? [mins, v[1] ? 0 : 1] : null;
     },
   }),
 
@@ -681,6 +742,76 @@ export const KIDS: Record<string, StampDef> = {
     },
   }),
 
+  build: kid({
+    label: 'Χτίσιμο με κυβάκια', w: 760, h: 550, init: [0],
+    drawKid(c, w, h, v, env) {
+      const g = buildGeom(w, h);
+      // ουρανός και αχνό πλέγμα, για να φαίνεται πού μπαίνει κάθε κυβάκι
+      c.save();
+      c.fillStyle = '#e0f2fe';
+      c.fillRect(0, 0, w, g.gh);
+      c.strokeStyle = 'rgba(30,64,175,0.14)';
+      c.lineWidth = 1;
+      c.beginPath();
+      for (let i = 0; i <= BCOLS; i++) { c.moveTo(i * g.s, 0); c.lineTo(i * g.s, g.gh); }
+      for (let j = 0; j <= BROWS; j++) { c.moveTo(0, j * g.s); c.lineTo(w, j * g.s); }
+      c.stroke();
+      let count = 0;
+      for (let i = 0; i < BCOLS * BROWS; i++) {
+        const t = v[1 + i] ?? 0;
+        if (!t) continue;
+        count++;
+        drawBlock(c, t - 1, (i % BCOLS) * g.s, Math.floor(i / BCOLS) * g.s, g.s);
+      }
+      c.restore();
+      c.lineWidth = 2;
+      c.strokeRect(0, 0, w, g.gh);
+      // σειρά υλικών: το επιλεγμένο έχει πλαίσιο
+      const sel = v[0] ?? 0;
+      for (let k = 0; k < g.slots; k++) {
+        const cx = g.sw * (k + 0.5), x = cx - g.ps / 2, y = g.py - g.ps / 2;
+        if (k < BLOCKS.length) drawBlock(c, k, x, y, g.ps);
+        else text(c, k === BLOCKS.length ? '🧽' : '🗑️', cx, g.py + 1, g.ps * 0.8);
+        if (k === sel) {
+          c.save();
+          c.strokeStyle = env.ink;
+          c.lineWidth = Math.max(3, g.ps * 0.09);
+          rrect(c, x - g.ps * 0.14, y - g.ps * 0.14, g.ps * 1.28, g.ps * 1.28, g.ps * 0.16);
+          c.stroke();
+          c.restore();
+        }
+      }
+      c.save();
+      c.font = `700 ${g.s * 0.42}px ${FONT}`;
+      c.textAlign = 'right';
+      c.textBaseline = 'top';
+      c.fillStyle = '#1e3a8a';
+      c.fillText(`${count} κυβάκια`, w - g.s * 0.2, g.s * 0.14);
+      c.restore();
+    },
+    paint(v, x, y, w, h, st, first) {
+      const g = buildGeom(w, h);
+      const out = [...v];
+      while (out.length < 1 + BCOLS * BROWS) out.push(0);
+      const sel = out[0] ?? 0;
+      if (y >= 0 && y < g.gh && x >= 0 && x < w) {
+        if (st.pal) return null;
+        const i = Math.floor(y / g.s) * BCOLS + Math.floor(x / g.s);
+        // η πρώτη επαφή αποφασίζει: πάνω σε ίδιο κυβάκι (ή με τη γόμα) σβήνεις, αλλιώς χτίζεις
+        if (first) st.val = sel >= BLOCKS.length || out[1 + i] === sel + 1 ? 0 : sel + 1;
+        if (out[1 + i] === st.val) return first ? out : null;
+        out[1 + i] = st.val;
+        return out;
+      }
+      if (!first || y < g.gh || y > h) return null;
+      st.pal = 1;
+      const k = Math.max(0, Math.min(g.slots - 1, Math.floor(x / g.sw)));
+      if (k === BLOCKS.length + 1) return [sel >= BLOCKS.length ? 0 : sel];
+      out[0] = k;
+      return out;
+    },
+  }),
+
   star: kid({
     label: 'Αστέρι', w: 140, h: 140,
     drawKid(c, w, h) {
@@ -734,3 +865,18 @@ export const KIDS: Record<string, StampDef> = {
     },
   }),
 };
+
+for (const [key, emoji, label] of PICS) {
+  KIDS[`pic-${key}`] = kid({
+    label, w: 130, h: 130,
+    drawKid(c, w, h) {
+      c.save();
+      c.font = `${h * 0.8}px ${EMOJI_FONT}`;
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillStyle = '#000000';
+      c.fillText(emoji, w / 2, h * 0.54);
+      c.restore();
+    },
+  });
+}
