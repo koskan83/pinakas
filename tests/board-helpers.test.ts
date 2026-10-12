@@ -207,3 +207,46 @@ describe('χτίσιμο με κυβάκια', () => {
     expect(v[1 + 13 * 24]).toBe(2);
   });
 });
+
+import { hangNorm, hangStart, hangState } from '../src/kids';
+
+describe('κρεμάλα', () => {
+  const ABC = 'ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ';
+  const bitOf = (ch: string): number => 1 << ABC.indexOf(ch);
+  it('η λέξη γίνεται κεφαλαία χωρίς τόνους', () => {
+    expect(hangNorm('Σχολείο')).toBe('ΣΧΟΛΕΙΟ');
+    expect(hangNorm('γαϊδούρι!')).toBe('ΓΑΙΔΟΥΡΙ');
+    expect(hangNorm('λύκος')).toBe('ΛΥΚΟΣ');
+  });
+  it('το πρώτο και το τελευταίο γράμμα φαίνονται από την αρχή', () => {
+    const v = hangStart('μπανάνα');
+    const st = hangState(v);
+    expect(st.word).toBe('ΜΠΑΝΑΝΑ');
+    expect(st.mask).toBe(bitOf('Μ') | bitOf('Α'));
+    expect(st.wrong).toBe(0);
+    expect(st.won).toBe(false);
+    expect(hangStart('α')).toEqual([0]);
+  });
+  it('πάτημα σε γράμμα: σωστό το ανοίγει, λάθος μετράει, και στα 6 λάθη χάνεται', () => {
+    const d = KIDS.hangman;
+    const key = (v: number[], ch: string): number[] | null => {
+      const i = ABC.indexOf(ch), kw = (d.w * 0.62) / 8;
+      return d.tap!(v, d.w * 0.36 + (i % 8 + 0.5) * kw, d.h * 0.4 + (Math.floor(i / 8) + 0.5) * d.h * 0.13, d.w, d.h);
+    };
+    let v = hangStart('ΒΙΒΛΙΟ');
+    v = key(v, 'Ι')!;
+    expect(hangState(v).wrong).toBe(0);
+    // το ίδιο γράμμα δεύτερη φορά δεν κάνει τίποτα
+    expect(key(v, 'Ι')).toBeNull();
+    v = key(v, 'Λ')!;
+    expect(hangState(v).won).toBe(true);
+    expect(key(v, 'Ω')).toBeNull();
+    let w = hangStart('ΒΙΒΛΙΟ');
+    for (const ch of 'ΑΓΔΕΖ') w = key(w, ch)!;
+    expect(hangState(w).wrong).toBe(5);
+    expect(hangState(w).lost).toBe(false);
+    w = key(w, 'Η')!;
+    expect(hangState(w).lost).toBe(true);
+    expect(key(w, 'Ι')).toBeNull();
+  });
+});

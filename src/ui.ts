@@ -270,6 +270,7 @@ export function mountUi(app: HTMLElement): void {
     <div class="gHead" data-lv="pri">Παιχνίδι και επιβράβευση</div>
     <div class="tiles" data-lv="pri">
       ${tile('data-kid="dice"', '<b class="em">🎲</b>', 'Ζάρι')}
+      ${tile('data-kid="hangman"', '<b class="em">🔡</b>', 'Κρεμάλα', 'Κρεμάλα: τυχαία λέξη ή δική σου, με πάτημα στα γράμματα')}
       ${tile('data-kid="lottery"', '<b class="em">🎟️</b>', 'Κλήρωση', 'Κλήρωση αριθμού (π.χ. ποιος μαθητής θα σηκωθεί)')}
       ${tile('data-kid="star"', '<b class="em">⭐</b>', 'Αστέρι')}
       ${tile('data-kid="smile"', '<b class="em">🙂</b>', 'Φατσούλα')}
