@@ -89,7 +89,7 @@ export class Lessons {
   constructor(private host: LessonHost, parent: HTMLElement) {
     parent.insertAdjacentHTML(
       'beforeend',
-      `<button id="lessonName" class="fab" title="Μαθήματα"></button>
+      `<button id="lessonName" class="fab hidden" title="Μετονομασία μαθήματος"><i id="libOpen" title="Μαθήματα"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/></svg></i><span></span></button>
       <div id="lib" class="hidden">
         <div id="libHead">
           <img class="lg onDark" src="./logo-light.svg" alt="" /><img class="lg onLight" src="./logo.svg" alt="" />
@@ -112,7 +112,8 @@ export class Lessons {
     );
     this.el = parent.querySelector<HTMLElement>('#lib')!;
     this.label = parent.querySelector<HTMLElement>('#lessonName')!;
-    this.label.onclick = () => void this.open();
+    // το εικονίδιο ανοίγει τα μαθήματα· το ίδιο το όνομα μετονομάζει το ανοιχτό μάθημα
+    this.label.onclick = (e) => void ((e.target as HTMLElement).closest('#libOpen') ? this.open() : this.rename(this.current));
     this.el.addEventListener('click', (e) => void this.click(e));
     const file = this.el.querySelector<HTMLInputElement>('#libFile')!;
     file.onchange = () => {
@@ -210,8 +211,20 @@ export class Lessons {
     this.renderLabel();
   }
 
+  private async rename(meta: LessonMeta | undefined): Promise<void> {
+    if (!meta) return;
+    const name = prompt('Όνομα μαθήματος', meta.name)?.trim();
+    if (!name || name === meta.name) return;
+    meta.name = name.slice(0, 60);
+    meta.updated = Date.now();
+    await kvSet(INDEX, this.index);
+    this.renderLabel();
+  }
+
   private renderLabel(): void {
-    this.label.textContent = this.current?.name ?? '';
+    const name = this.current?.name ?? '';
+    this.label.querySelector('span')!.textContent = name;
+    this.label.classList.toggle('hidden', !name);
     this.label.classList.toggle('warn', this.overdue);
   }
 
@@ -440,11 +453,7 @@ export class Lessons {
       return this.close();
     }
     if (act === 'rename') {
-      const name = prompt('Όνομα μαθήματος', meta.name)?.trim();
-      if (!name) return;
-      meta.name = name.slice(0, 60);
-      await kvSet(INDEX, this.index);
-      this.renderLabel();
+      await this.rename(meta);
     } else if (act === 'group') {
       const have = this.groups;
       const g = prompt(`Τμήμα ή τάξη του μαθήματος (π.χ. Β2). Άφησέ το κενό για κανένα.${have.length ? `\nΥπάρχουν: ${have.join(', ')}` : ''}`, meta.group ?? this.filter);

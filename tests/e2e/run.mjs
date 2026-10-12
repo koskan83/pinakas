@@ -364,9 +364,9 @@ test('Λάσο πάνω σε σελίδα από PDF ή Word: το AI βλέπε
   assert(it.length === n0 + 1 && it.at(-1).kind === 'text' && it.at(-1).text.startsWith('✓'), 'η απάντηση δεν γράφτηκε κάτω από την περιοχή');
 });
 
-test('Μαθήματα: νέο μάθημα, τμήμα, και όλα μένουν μετά από κλείσιμο', async () => {
+test('Μαθήματα: νέο μάθημα, τμήμα, μετονομασία από το όνομα, και όλα μένουν μετά από κλείσιμο', async () => {
   page.once('dialog', (d) => d.accept('Δοκιμή Β2'));
-  await page.click('#lessonName');
+  await page.click('#libOpen');
   await page.waitForSelector('#lib:not(.hidden)');
   await page.click('#lib [data-lib="new"]');
   await page.waitForFunction(() => document.getElementById('lessonName').textContent === 'Δοκιμή Β2');
@@ -374,7 +374,7 @@ test('Μαθήματα: νέο μάθημα, τμήμα, και όλα μένο�
   await drag(300, 300, 500, 340);
   const n0 = (await items()).length;
   assert(n0 === 1, `στο νέο μάθημα γράφτηκαν ${n0} στοιχεία αντί για 1`);
-  await page.click('#lessonName');
+  await page.click('#libOpen');
   await page.waitForSelector('#lib:not(.hidden)');
   assert((await page.locator('#libGrid .card').count()) === 2, 'η βιβλιοθήκη δεν έχει δύο μαθήματα');
   page.once('dialog', (d) => d.accept('Β2'));
@@ -389,11 +389,18 @@ test('Μαθήματα: νέο μάθημα, τμήμα, και όλα μένο�
   await page.waitForFunction(() => document.getElementById('lessonName').textContent === 'Δοκιμή Β2');
   const n1 = (await items()).length;
   assert(n1 === 1, `μετά το ξανάνοιγμα βρέθηκαν ${n1} στοιχεία αντί για 1`);
+  page.once('dialog', (d) => d.accept('Δοκιμή Β2 νέο'));
+  await page.click('#lessonName span');
+  await page.waitForFunction(() => document.getElementById('lessonName').textContent === 'Δοκιμή Β2 νέο');
+  await sleep(300);
+  await page.reload();
+  await page.waitForSelector('#toolbar');
+  await page.waitForFunction(() => document.getElementById('lessonName').textContent === 'Δοκιμή Β2 νέο');
 });
 
 test('Αντίγραφο μαθημάτων στο Drive', async () => {
   const before = drive.uploads;
-  await page.click('#lessonName');
+  await page.click('#libOpen');
   await page.waitForSelector('#lib:not(.hidden)');
   await page.click('#lib [data-lib="cloud"]');
   await page.waitForFunction(() => document.getElementById('libSafeMsg').textContent.startsWith('Όλα τα μαθήματα έχουν αντίγραφο'), null, { timeout: 20000 });

@@ -296,8 +296,10 @@ body.dark #toolbar, body.dark #subbar, body.dark .popup, body.dark .fab { box-sh
 .popup button.sq.lim { font-size: 15px; font-weight: 600; }
 
 /* ---------- βιβλιοθήκη μαθημάτων ---------- */
-#lessonName { left: 80px; width: auto; max-width: 38vw; padding: 0 18px; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
-#lessonName:empty { display: none; }
+#lessonName { left: 80px; width: auto; max-width: 38vw; padding: 0 18px 0 0; font-size: 17px; font-weight: 600; white-space: nowrap; opacity: .85; display: flex; align-items: center; }
+#lessonName span { overflow: hidden; text-overflow: ellipsis; }
+#libOpen { flex: none; align-self: stretch; width: 52px; margin-right: 12px; display: flex; align-items: center; justify-content: center; border-right: 1px solid rgba(128,128,128,.35); }
+#libOpen svg { width: 22px; height: 22px; }
 #lessonName.under { opacity: .25; }
 body.inking #lessonName { pointer-events: none; }
 #lib { position: fixed; inset: 0; z-index: 40; background: var(--bar); color: var(--fg); display: flex; flex-direction: column; }
