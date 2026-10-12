@@ -1055,6 +1055,28 @@ function placeSelBar(): void {
   el.style.top = `${y}px`;
 }
 board.onUi = refreshUi;
+board.onMergeAxes = (target, dropped) => {
+  const pal = [...inkPalette().slice(1), '#ea580c', '#7c3aed'];
+  const fns = [...(target.fns ?? [])];
+  // κάθε συνάρτηση που έρχεται παίρνει χρώμα που δεν υπάρχει ήδη· οι κλάδοι της ίδιας (ίδιο χρώμα πριν) μένουν ομόχρωμοι
+  const recolor = new Map<string, string>();
+  for (const f of dropped.fns ?? []) {
+    let c = recolor.get(f.color);
+    if (!c) {
+      const used = new Set([...fns.map((g) => g.color), ...recolor.values()]);
+      c = pal.find((p) => !used.has(p)) ?? pal[(fns.length + recolor.size) % pal.length];
+      recolor.set(f.color, c);
+    }
+    fns.push({ ...f, color: c });
+  }
+  const params = { ...dropped.params, ...target.params };
+  // οι άξονες ανοίγουν όσο χρειάζεται για να χωρέσουν και τα δύο σχήματα
+  const mode: AxesMode = target.mode === 'full' || dropped.mode === 'full' ? 'full' : target.mode === 'q14' || dropped.mode === 'q14' ? 'q14' : 'q1';
+  const sx = Math.max(target.sx ?? 1, dropped.sx ?? 1);
+  const next: AxesItem = { ...target, fns, mode, ...(Object.keys(params).length ? { params } : {}), sx: sx === 1 ? undefined : sx };
+  toast('Οι δύο γραφικές παραστάσεις ενώθηκαν στους ίδιους άξονες. Με αναίρεση χωρίζουν ξανά.', 5000);
+  return { ...next, sy: fitY(next, fns, params) };
+};
 curtain.onChange = curtainTop.onChange = refreshUi;
 curtain.ink = curtainTop.ink = () => ({ tool: board.tool, color: board.color, width: board.width, eraser: board.sizes.eraser });
 spot.onChange = refreshUi;

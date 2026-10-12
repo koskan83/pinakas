@@ -121,6 +121,8 @@ export class Board {
   onView: () => void = () => {};
   onChange: () => void = () => {};
   onUi: () => void = () => {};
+  /** Όταν άξονες με συναρτήσεις αφεθούν πάνω σε άλλους: επιστρέφει τους ενωμένους άξονες, ή null για απλή μετακίνηση. */
+  onMergeAxes: (target: AxesItem, dropped: AxesItem) => AxesItem | null = () => null;
   onPointerInfo: (e: PointerEvent, count: number) => void = () => {};
   /** Καλείται όταν ολοκληρωθεί μια γραμμή του στυλό (για την αυτόματη αναγνώριση). */
   onStroke: (s: Stroke) => void = () => {};
@@ -391,6 +393,30 @@ export class Board {
   }
 
   /** Οι επιλεγμένοι άξονες, αν η επιλογή είναι άξονες. */
+  /**
+   * Άξονες με συναρτήσεις που αφήνονται πάνω σε άλλους άξονες ενώνονται μαζί τους: οι συναρτήσεις περνούν στους πρώτους
+   * και οι δεύτεροι φεύγουν. Μία αναίρεση τα χωρίζει ξανά.
+   */
+  private mergeAxes(before: AxesItem, after: AxesItem): boolean {
+    if (!after.fns?.length) return false;
+    const b = itemBounds(after);
+    const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+    // «πάνω στους άλλους»: το κέντρο αυτών που σέρνεις πέφτει μέσα στο πλαίσιο των άλλων
+    const target = [...this.page.items].reverse().find((x): x is AxesItem => {
+      if (x.kind !== 'axes' || x.id === before.id) return false;
+      const t = itemBounds(x);
+      return cx > t.x0 && cx < t.x1 && cy > t.y0 && cy < t.y1;
+    });
+    const merged = target && this.onMergeAxes(target, after);
+    if (!target || !merged) return false;
+    const old = [...this.page.items];
+    this.page.items = old.filter((x) => x.id !== before.id).map((x) => (x.id === target.id ? merged : x));
+    this.push({ t: 'set', p: this.cur, before: old, after: [...this.page.items] });
+    this.selected = merged.id;
+    this.multi = [];
+    return true;
+  }
+
   get selectedAxes(): AxesItem | null {
     const it = this.selected ? this.page.items.find((x) => x.id === this.selected) : undefined;
     return it && it.kind === 'axes' ? it : null;
@@ -2394,6 +2420,13 @@ export class Board {
         const after = ps.preview!;
         if (ps.mode === 'rotate' && ps.tap) this.nextPivot(itemBounds(before), before);
         const i = this.page.items.findIndex((x) => x.id === before.id);
+        if (i >= 0 && ps.mode === 'move' && after.kind === 'axes' && after !== before && this.mergeAxes(before as AxesItem, after)) {
+          ps.orig = undefined;
+          ps.preview = undefined;
+          this.redraw();
+          this.onUi();
+          return;
+        }
         if (i >= 0 && after !== before) {
           this.page.items[i] = after;
           this.push({ t: 'mod', p: this.cur, before, after });

@@ -319,6 +319,40 @@ test('Συνάρτηση που δεν χωράει (y = −200x): ο κατακ
   assert(!(await axes()), 'έμειναν άξονες στη σελίδα');
 });
 
+test('Δύο γραφικές παραστάσεις: σέρνεις τη μία πάνω στην άλλη και ενώνονται στους ίδιους άξονες', async () => {
+  const type = async (v) => {
+    if (!(await visible('#fnAdd'))) await page.click('#fnBtn');
+    await page.evaluate((v) => { const i = document.getElementById('fnInput'); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); }, v);
+    await page.click('#fnAdd');
+  };
+  const allAxes = async () => (await items()).filter((i) => i.kind === 'axes');
+  const add = async (f) => {
+    await page.click('#gadgetBtn');
+    await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-axes="full"]');
+    await type(f);
+  };
+  await add('x²');
+  // οι πρώτοι άξονες πάνε αριστερά, για να μπουν οι δεύτεροι χωριστά
+  let a = await allAxes();
+  assert(a.length === 1, 'δεν μπήκαν οι πρώτοι άξονες');
+  await add('2x');
+  a = await allAxes();
+  assert(a.length === 2 && a[0].fns.length === 1 && a[1].fns.length === 1, 'δεν υπάρχουν δύο άξονες με μία συνάρτηση ο καθένας');
+  // οι δεύτεροι είναι επιλεγμένοι και ακριβώς πάνω στους πρώτους: ένα μικρό σύρσιμο τους «αφήνει» επάνω τους
+  await page.mouse.click(1250, 120);
+  await tool('select');
+  const box = await page.evaluate(() => ({ w: innerWidth, h: innerHeight }));
+  await drag(box.w / 2 + 60, box.h / 2 - 60, box.w / 2 + 90, box.h / 2 - 40);
+  a = await allAxes();
+  assert(a.length === 1, `μετά το σύρσιμο έμειναν ${a.length} άξονες αντί για 1`);
+  assert(a[0].fns.length === 2 && a[0].fns[0].expr === 'x²' && a[0].fns[1].expr === '2x', 'οι συναρτήσεις δεν ενώθηκαν');
+  assert(a[0].fns[0].color !== a[0].fns[1].color, 'η δεύτερη συνάρτηση δεν άλλαξε χρώμα');
+  await page.click('#undo');
+  assert((await allAxes()).length === 2, 'η αναίρεση δεν τις χώρισε ξανά');
+  for (let i = 0; i < 8 && (await allAxes()).length; i++) await page.click('#undo');
+  assert(!(await allAxes()).length, 'έμειναν άξονες στη σελίδα');
+});
+
 test('Άξονες, τριγωνομετρικός κύκλος και μετρήσεις σχεδιάζονται', async () => {
   const inked = () => page.evaluate(() => {
     const cv = document.getElementById('base');
