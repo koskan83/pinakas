@@ -170,6 +170,24 @@ test('Πλήρης οθόνη: εμφανίζεται κουμπί εξόδου 
   assert(!(await visible('#fsExit')), 'το κουμπί εξόδου έμεινε μετά την έξοδο');
 });
 
+test('Σκούρος πίνακας: το μαύρο από την παλέτα γράφει μαύρο (για λευκές σελίδες που μπήκαν από αρχείο)', async () => {
+  await page.click('#menuBtn');
+  await page.click('#menu [data-act="bg-dark"]');
+  await page.click('#menuBtn');
+  await pen();
+  await page.click('#colorBtn');
+  await page.click('#colorGrid [data-color="#111111"]');
+  await drag(300, 200, 520, 240);
+  const s = (await items()).filter((i) => i.kind === 'stroke').pop();
+  assert(s && s.color === '#000000', `το μαύρο της παλέτας γράφτηκε ως ${s && s.color}, που σε σκούρο πίνακα γίνεται λευκό`);
+  await page.click('#undo');
+  await page.click('#colors [data-color="#ffffff"]');
+  await page.click('#menuBtn');
+  await page.click('#menu [data-act="bg-white"]');
+  await page.click('#menuBtn');
+  assert(!(await visible('#menu')), 'το μενού έμεινε ανοιχτό');
+});
+
 test('Γόμα ολόκληρης γραμμής', async () => {
   await tool('eraser');
   await page.click('[data-eraser="stroke"]');

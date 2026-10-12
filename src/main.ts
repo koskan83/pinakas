@@ -247,6 +247,18 @@ const sizedTool = (): SizedTool => (board.tool === 'eraser' || board.tool === 'h
 let penKind: PenKind = 'pen';
 const isPenKind = (t: Tool): t is PenKind => t === 'pen' || t === 'laser';
 
+/**
+ * Το μαύρο και το λευκό της γραμμής ακολουθούν το φόντο (βλ. Board.ink). Όταν όμως διαλέγεις από την παλέτα το «αντίθετο» του φόντου,
+ * το θέλεις όπως το βλέπεις: π.χ. μαύρο για να γράψεις πάνω σε λευκή σελίδα που έβαλες σε σκούρο πίνακα.
+ */
+function literal(c: string): string {
+  const dark = isDark(board.doc.bg);
+  const v = c.toLowerCase();
+  if (dark && v === '#111111') return '#000000';
+  if (!dark && v === '#ffffff') return '#fefefe';
+  return c;
+}
+
 function pickColor(c: string): void {
   board.color = c;
   if (board.tool !== 'highlighter' && !palette().includes(c)) customColor = c;
@@ -287,11 +299,11 @@ $('colorGrid').addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-color]');
   if (!b) return;
   closePopups();
-  pickColor(b.dataset.color!);
+  pickColor(literal(b.dataset.color!));
 });
 ($('colorInput') as HTMLInputElement).onchange = (e) => {
   closePopups();
-  pickColor((e.target as HTMLInputElement).value.toLowerCase());
+  pickColor(literal((e.target as HTMLInputElement).value.toLowerCase()));
 };
 widthsEl.addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-width]');
