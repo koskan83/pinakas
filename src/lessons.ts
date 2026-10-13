@@ -133,9 +133,9 @@ export class Lessons {
       if (f) void this.restore(f);
     };
     // το κλείσιμο της καρτέλας δεν περιμένει το χρονόμετρο της αυτόματης αποθήκευσης
-    window.addEventListener('pagehide', () => void this.flush(false));
+    window.addEventListener('pagehide', () => this.flushSoon(false));
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') void this.flush(false);
+      if (document.visibilityState === 'hidden') this.flushSoon(false);
     });
   }
 
@@ -250,7 +250,12 @@ export class Lessons {
     if (this.loading || !this.cur) return;
     this.dirty = true;
     clearTimeout(this.timer);
-    this.timer = window.setTimeout(() => void this.flush(Date.now() - this.thumbAt > 20000), 1500);
+    this.timer = window.setTimeout(() => this.flushSoon(Date.now() - this.thumbAt > 20000), 1500);
+  }
+
+  /** Αποθήκευση στο παρασκήνιο: αν αποτύχει, δεν μένει σφάλμα «στον αέρα» και η επόμενη αλλαγή ξαναδοκιμάζει. */
+  private flushSoon(withThumb: boolean): void {
+    this.flush(withThumb).catch((err) => console.warn('Η αποθήκευση δεν ολοκληρώθηκε', err));
   }
 
   /** Γράφει τώρα το ανοιχτό μάθημα στη συσκευή. */
@@ -262,7 +267,13 @@ export class Lessons {
     const doc = this.host.getDoc();
     meta.updated = Date.now();
     meta.pages = doc.pages.length;
-    await saveLesson(meta.id, doc);
+    try {
+      await saveLesson(meta.id, doc);
+    } catch (err) {
+      // δεν γράφτηκε (π.χ. η σελίδα έκλεινε εκείνη τη στιγμή): μένει «προς αποθήκευση» για την επόμενη φορά
+      this.dirty = true;
+      throw err;
+    }
     if (withThumb) {
       this.thumbAt = Date.now();
       meta.thumb = (await this.host.thumb().catch(() => undefined)) ?? meta.thumb;

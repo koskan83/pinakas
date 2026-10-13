@@ -743,8 +743,9 @@ test('Άσκηση με το 🎯: το ρολόι ζητά ώρα και το �
   await page.mouse.click(bar.x + bar.w * 0.32, bar.y + bar.h * 0.75);
   const task = (await kid('fracbar')).v;
   for (let i = 0; i < task[3]; i++) await page.mouse.click(bar.x + (bar.w * (i + 0.5)) / task[0], bar.y + bar.h * 0.2);
-  const solved = (await kid('fracbar')).v;
+  // αμέσως μετά το τελευταίο πάτημα: το κομφετί φεύγει μόνο του μετά από λίγο
   const party = await page.locator('.confetti').count();
+  const solved = (await kid('fracbar')).v;
   for (let i = 0; i < task[3] + 2; i++) await page.click('#undo');
   await level();
   assert(asked[1] === 0 && goal % 5 === 0 && goal !== asked[0], `το 🎯 του ρολογιού δεν έβαλε άσκηση (${asked})`);
@@ -882,6 +883,8 @@ for (const t of tests) {
   } catch (err) {
     failed++;
     console.log(`  ✗ ${t.name}\n      ${String(err.message ?? err).split("\n").slice(0, 4).join(" | ")}`);
+    // στο GitHub: φαίνεται στη σελίδα της εκτέλεσης, χωρίς να ανοίξεις τα logs
+    if (process.env.GITHUB_ACTIONS) console.log(`::error title=e2e: ${t.name}::${String(err.message ?? err).split('\n')[0]}`);
     // καθαρή κατάσταση για το επόμενο σενάριο
     await page.keyboard.press('Escape').catch(() => {});
     await page.evaluate(() => document.querySelectorAll('.popup, #pagePick, #lib, #qrBig, #welcome').forEach((e) => e.classList.add('hidden'))).catch(() => {});
@@ -889,6 +892,7 @@ for (const t of tests) {
 }
 if (errors.length) {
   failed++;
+  if (process.env.GITHUB_ACTIONS) console.log(`::error title=e2e: σφάλματα JavaScript::${[...new Set(errors)].slice(0, 3).join(' | ')}`);
   console.log(`  ✗ Σφάλματα JavaScript στη σελίδα:\n      ${[...new Set(errors)].slice(0, 5).join('\n      ')}`);
 }
 console.log(`\n${tests.length - Math.min(failed, tests.length)} από ${tests.length} σενάρια πέρασαν`);
