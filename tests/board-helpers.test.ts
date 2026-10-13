@@ -389,21 +389,23 @@ import { spellDiff, spellList, spellNorm, spellPack, spellState, type Spell } fr
 describe('ορθογραφία με το τερατάκι', () => {
   const d = KIDS.spell;
   const game = (words: string[], more: Partial<Spell> = {}): number[] =>
-    spellPack({ phase: 0, hand: false, peek: false, ready: false, en: false, idx: 0, sel: 0, words, res: words.map(() => 0), typed: '', marks: [], ...more });
+    spellPack({ phase: 0, hand: false, peek: false, ready: false, en: false, said: false, idx: 0, sel: 0, words, hints: words.map(() => ''), res: words.map(() => 0), typed: '', marks: [], ...more });
   const EL = ['αβγδεζηθικ', 'λμνξοπρσςτ', 'υφχψω   ⌫⌫', 'άέήίόύώϊϋΐ'], EN = ['abcdefghij', 'klmnopqrst', "uvwxyz'  ⌫"];
   const key = (v: number[], ch: string, rows = EL): number[] | null => {
     const row = rows.findIndex((r) => r.includes(ch)), col = rows[row].indexOf(ch);
     return d.tap!(v, d.w * (0.02 + 0.096 * (col + 0.5)), d.h * (0.475 + (0.39 * (row + 0.5)) / rows.length), d.w, d.h);
   };
   const type = (v: number[], s: string, rows = EL): number[] => [...s].reduce((acc, ch) => key(acc, ch, rows)!, v);
-  /** Τα κουμπιά κάτω: Λέξεις, 👁, τρόπος γραφής, Έλεγχος / Επόμενη. */
-  const button = (k: number): [number, number] => [d.w * [0.095, 0.225, 0.3775, 0.735][k], d.h * 0.93];
+  /** Τα κουμπιά κάτω: Λέξεις, 👁, τρόπος γραφής, Έλεγχος / Επόμενη, και (4) το 🔊. */
+  const button = (k: number): [number, number] => [d.w * [0.0875, 0.2025, 0.4225, 0.75, 0.2875][k], d.h * 0.93];
   const press = (v: number[], k: number): number[] | null => d.tap!(v, ...button(k), d.w, d.h);
   it('κρατά τόνους και πεζά, χωρίς στίξη, σε ελληνικά και αγγλικά', () => {
     expect(spellNorm('  Το Σχολείο!  ')).toBe('το σχολείο');
     expect(spellNorm('ΠΑΪΔΆΚΙΑ')).toBe('παϊδάκια');
     expect(spellNorm('Don’t  Stop.')).toBe("don't stop");
-    expect(spellList('μήλο, Καλή μέρα;  , apple\nσχολείο')).toEqual(['μήλο', 'καλή μέρα', 'apple', 'σχολείο']);
+    expect(spellList('μήλο, Καλή μέρα;  , apple\nσχολείο').words).toEqual(['μήλο', 'καλή μέρα', 'apple', 'σχολείο']);
+    // μετά το «=» αυτό που βλέπει ο μαθητής· ανάποδα γραμμένο, ζητείται πάλι η αγγλική
+    expect(spellList('Apple = μήλο, σκύλος=dog, φως')).toEqual({ words: ['apple', 'dog', 'φως'], hints: ['μήλο', 'σκύλος', ''] });
   });
   it('αντιστοιχίζει λάθος, περιττό και γράμμα που λείπει', () => {
     const bad = (a: string, b: string): string => spellDiff(a, b).map((c) => (c.a === c.b ? '.' : c.a && c.b ? 's' : c.a ? 'x' : '+')).join('');
@@ -414,7 +416,7 @@ describe('ορθογραφία με το τερατάκι', () => {
     expect(bad('οδοσ', 'οδός')).toBe('..ss');
   });
   it('η κατάσταση γράφεται και διαβάζεται ίδια· η παλιά (μία λέξη) ξεκινά από την αρχή', () => {
-    const s: Spell = { phase: 1, hand: true, peek: true, ready: true, en: true, idx: 1, sel: 2, words: ['μήλο', 'good morning'], res: [12, 0], typed: 'go_d', marks: [false, false, true, false] };
+    const s: Spell = { phase: 1, hand: true, peek: true, ready: true, en: true, said: true, idx: 1, sel: 2, words: ['μήλο', 'good morning'], hints: ['', 'καλημέρα'], res: [12, 0], typed: 'go_d', marks: [false, false, true, false] };
     expect(spellState(spellPack(s))).toEqual(s);
     expect(spellState([1, 4, 956, 942, 955, 959, 956]).words).toEqual([]);
     expect(spellState(d.init!).words).toEqual([]);
@@ -427,7 +429,12 @@ describe('ορθογραφία με το τερατάκι', () => {
     const en = d.tap!(d.init!, d.w * 0.6, d.h * 0.42, d.w, d.h)!;
     expect(spellState(en).en).toBe(true);
     expect(d.tap!(en, d.w * 0.6, d.h * 0.42, d.w, d.h)).toBeNull();
-    expect(spellState(d.tap!(en, d.w * 0.12, d.h * 0.57, d.w, d.h)!).words.every((x) => /^[a-z]+$/.test(x))).toBe(true);
+    // οι έτοιμες αγγλικές δεν φαίνονται: ο μαθητής βλέπει τη σημασία τους στα ελληνικά
+    const ready2 = d.tap!(en, d.w * 0.12, d.h * 0.57, d.w, d.h)!, r2 = spellState(ready2);
+    expect(r2.words.every((x) => /^[a-z]+$/.test(x))).toBe(true);
+    expect(r2.hints.every((x) => /^[α-ωά-ώ]+$/i.test(x))).toBe(true);
+    expect(r2.peek).toBe(false);
+    expect(d.fx!(en, ready2)).toBe(`say|en-GB|${r2.words[0]}`);
     const own = d.ask!(d.init!, d.w / 2, d.h * 0.79, d.w, d.h)!;
     expect(own).toMatchObject({ secret: true, voice: 'el-GR' });
     expect(d.ask!(en, d.w / 2, d.h * 0.79, d.w, d.h)!.voice).toBe('en-GB');
@@ -475,6 +482,9 @@ describe('ορθογραφία με το τερατάκι', () => {
     expect(d.fx!(v, right)).toBe('win');
     v = press(right, 3)!;
     expect(spellState(v)).toMatchObject({ phase: 0, idx: 1, typed: '' });
+    // κάθε νέα λέξη λέγεται δυνατά· το 🔊 την ξαναλέει
+    expect(d.fx!(right, v)).toBe('say|el-GR|φως');
+    expect(d.fx!(v, press(v, 4)!)).toBe('say|el-GR|φως');
     v = press(press(press(type(v, 'φος'), 3)!, 3)!, 3)!;
     expect(spellState(v)).toMatchObject({ idx: 2, res: [1, 11] });
     // στα αποτελέσματα: «Ξανά οι ίδιες» και «Νέες λέξεις»

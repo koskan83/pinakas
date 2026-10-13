@@ -128,6 +128,28 @@ export function playFx(ev: string, prefs: FxPrefs): void {
   SOUNDS[ev]?.();
 }
 
+/**
+ * Λέει δυνατά ένα κείμενο με τη φωνή της συσκευής (ορθογραφία: η λέξη που πρέπει να γραφτεί). `lang` π.χ. 'el-GR'.
+ * false αν η συσκευή δεν έχει φωνή για αυτή τη γλώσσα.
+ */
+export function say(text: string, lang: string): boolean {
+  const synth = typeof speechSynthesis === 'undefined' ? null : speechSynthesis;
+  if (!synth) return false;
+  const voices = synth.getVoices(), is = (v: SpeechSynthesisVoice, l: string): boolean => v.lang.replace('_', '-').toLowerCase().startsWith(l.toLowerCase());
+  const voice = voices.find((v) => is(v, lang)) ?? voices.find((v) => is(v, lang.slice(0, 2)));
+  // η λίστα με τις φωνές μπορεί να μην έχει φορτώσει ακόμα: τότε αφήνουμε τη συσκευή να διαλέξει από τη γλώσσα
+  if (voices.length && !voice) return false;
+  synth.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = lang;
+  if (voice) u.voice = voice;
+  u.rate = 0.8;
+  synth.speak(u);
+  return true;
+}
+// οι φωνές φορτώνουν με καθυστέρηση: τις ζητάμε από νωρίς
+if (typeof speechSynthesis !== 'undefined') speechSynthesis.getVoices();
+
 const COLORS = ['#f43f5e', '#f59e0b', '#fde047', '#22c55e', '#3b82f6', '#a855f7', '#ec4899'];
 
 /** Κομφετί που πετάγεται από το σημείο (x, y) της οθόνης και πέφτει. Δεν πιάνει αγγίγματα και σβήνει μόνο του. */

@@ -9,7 +9,7 @@ import { STAMPS } from './stamps';
 import { PEN_ICON, PenKind } from './ui';
 import { ask, notice } from './dialog';
 import { openBuildView } from './build-view';
-import { confetti, loadFx, playFx, saveFx } from './fx';
+import { confetti, loadFx, playFx, saveFx, say } from './fx';
 import { NEWS, VERSION, newsPending } from './news';
 import { BUILTIN, type Template } from './pages';
 import { $, HL_PALETTE, MORE_COLORS, PALETTE, SIZES, SIZE_NAME, app, board, curtain, curtainTop, download, fileName, layoutBar, spot, stamp, timer, toast } from './app';
@@ -929,8 +929,18 @@ function showFxPrefs(): void {
 }
 showFxPrefs();
 /** Ήχος για κάτι που έγινε σε εργαλείο του Δημοτικού· στις επιτυχίες και κομφετί από το σημείο (x, y) της οθόνης. */
+const noVoice = new Set<string>();
 function kidFx(ev: string, x?: number, y?: number): void {
   if (!primary) return;
+  if (ev.startsWith('say|')) {
+    // ορθογραφία: η λέξη λέγεται δυνατά· αν η συσκευή δεν έχει φωνή για τη γλώσσα, το λέμε μία φορά
+    const [, lang, text] = ev.split('|');
+    if (!say(text, lang) && !noVoice.has(lang)) {
+      noVoice.add(lang);
+      toast(`Αυτή η συσκευή δεν έχει ${lang.startsWith('el') ? 'ελληνική' : 'αγγλική'} φωνή για να πει τη λέξη. Πες τη εσύ, ή δείξε τη με το 👁.`, 8000);
+    }
+    return;
+  }
   playFx(ev, fxPrefs);
   if (ev === 'win') confetti(x, y, 180);
   else if (ev === 'cheer') confetti(x, y, 70);

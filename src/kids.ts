@@ -386,21 +386,34 @@ const SPELL_READY = [
   'δημοκρατία επανάσταση πολιτισμός εκπαίδευση συνάντηση αλληλεγγύη ανακύκλωση εμπιστοσύνη πληροφορία ειλικρίνεια υποχρέωση εξαίρεση',
   'κοινοβούλιο συνείδηση αξιοπρέπεια ευαισθησία παρεξήγηση επιχείρηση συμπεριφορά διεύθυνση ατμόσφαιρα δικαιοσύνη ευθύνη αποτέλεσμα σύγκρουση εξυπηρέτηση',
 ].map((s) => s.split(' '));
+/** Οι αγγλικές έχουν δίπλα τους τη σημασία στα ελληνικά: αυτή βλέπει ο μαθητής, και γράφει την αγγλική λέξη. */
 const SPELL_READY_EN = [
-  'cat dog sun red blue one two book pen mum dad ball',
-  'apple school green yellow three happy water house mother father sister brother',
-  'teacher friend family window orange monday pencil number garden rabbit summer winter',
-  'breakfast birthday tomorrow elephant football saturday beautiful kitchen morning thursday because children',
-  'different favourite wednesday mountain language question february together vegetable computer yesterday dangerous',
-  'environment necessary restaurant temperature government interesting neighbour knowledge dictionary experience invitation comfortable',
+  'cat=γάτα dog=σκύλος sun=ήλιος red=κόκκινο blue=μπλε one=ένα two=δύο book=βιβλίο pen=στιλό mum=μαμά dad=μπαμπάς ball=μπάλα',
+  'apple=μήλο school=σχολείο green=πράσινο yellow=κίτρινο three=τρία happy=χαρούμενος water=νερό house=σπίτι mother=μητέρα father=πατέρας sister=αδελφή brother=αδελφός',
+  'teacher=δάσκαλος friend=φίλος family=οικογένεια window=παράθυρο orange=πορτοκάλι monday=Δευτέρα pencil=μολύβι number=αριθμός garden=κήπος rabbit=κουνέλι summer=καλοκαίρι winter=χειμώνας',
+  'breakfast=πρωινό birthday=γενέθλια tomorrow=αύριο elephant=ελέφαντας football=ποδόσφαιρο saturday=Σάββατο beautiful=όμορφος kitchen=κουζίνα morning=πρωί thursday=Πέμπτη because=επειδή children=παιδιά',
+  'different=διαφορετικός favourite=αγαπημένος wednesday=Τετάρτη mountain=βουνό language=γλώσσα question=ερώτηση february=Φεβρουάριος together=μαζί vegetable=λαχανικό computer=υπολογιστής yesterday=χθες dangerous=επικίνδυνος',
+  'environment=περιβάλλον necessary=απαραίτητος restaurant=εστιατόριο temperature=θερμοκρασία government=κυβέρνηση interesting=ενδιαφέρων neighbour=γείτονας knowledge=γνώση dictionary=λεξικό experience=εμπειρία invitation=πρόσκληση comfortable=άνετος',
 ].map((s) => s.split(' '));
 /** Λέξη ή πρόταση όπως συγκρίνεται, ελληνική ή αγγλική: πεζά με τους τόνους τους, χωρίς στίξη (μένει η απόστροφος) και διπλά κενά. */
 export function spellNorm(text: string, max = SPELL_LEN): string {
   return text.toLocaleLowerCase('el').replace(/[’`´]/g, "'").replace(/[^α-ωάέήίόύώϊϋΐΰa-z' ]/g, '').replace(/ +/g, ' ').trim().slice(0, max).trim();
 }
-/** Η λίστα του δασκάλου: λέξεις ή μικρές φράσεις χωρισμένες με κόμμα (ή ερωτηματικό, ή αλλαγή γραμμής). */
-export function spellList(text: string): string[] {
-  return text.split(/[,;·\n]+/).map((s) => spellNorm(s)).filter(Boolean).slice(0, SPELL_WORDS);
+/**
+ * Η λίστα του δασκάλου: λέξεις ή μικρές προτάσεις χωρισμένες με κόμμα (ή ερωτηματικό, ή αλλαγή γραμμής).
+ * Κάθε μία μπορεί να έχει μετά από «=» αυτό που θα βλέπει ο μαθητής (π.χ. τη σημασία στα ελληνικά: apple=μήλο)·
+ * αν γραφτούν ανάποδα (μήλο=apple), η αγγλική είναι αυτή που ζητείται.
+ */
+export function spellList(text: string): { words: string[]; hints: string[] } {
+  const words: string[] = [], hints: string[] = [];
+  for (const entry of text.split(/[,;·\n]+/)) {
+    const [a, b = ''] = entry.split('='), swap = !!b && !/[a-z]/i.test(a) && /[a-z]/i.test(b);
+    const word = spellNorm(swap ? b : a);
+    if (!word || words.length >= SPELL_WORDS) continue;
+    words.push(word);
+    hints.push((swap ? a : b).replace(/\s+/g, ' ').trim().slice(0, SPELL_LEN));
+  }
+  return { words, hints };
 }
 /**
  * Η κατάσταση του παιχνιδιού.
@@ -409,30 +422,31 @@ export function spellList(text: string): string[] {
  * `res` ανά λέξη: 0 δεν παίχτηκε · 1 σωστή με την πρώτη · 2 σωστή μετά τη διόρθωση · 10 + όσα λάθη έφαγε το τερατάκι.
  * `sel`: το γράμμα που έχει πιαστεί για αλλαγή (θέση + 1), 0 αν γράφει στο τέλος. `marks`: ποια γράμματα σημάδεψε ο πρώτος έλεγχος
  * (το «_» είναι θέση όπου λείπει γράμμα). `peek`: η σωστή λέξη φαίνεται· `ready`: έτοιμες λέξεις, άρα κάθε νέα λέξη δείχνεται πρώτα.
+ * `hints`: ανά λέξη, αυτό που βλέπει ο μαθητής αντί να την ακούσει (η σημασία της στα ελληνικά), ή κενό. `said`: αλλάζει σε κάθε πάτημα του 🔊.
  * `en`: στην αρχική οθόνη έχουν διαλεχτεί τα Αγγλικά (έτοιμες αγγλικές λέξεις, υπαγόρευση στα αγγλικά).
  */
 export interface Spell {
-  phase: number; hand: boolean; peek: boolean; ready: boolean; en: boolean; idx: number; sel: number;
-  words: string[]; res: number[]; typed: string; marks: boolean[];
+  phase: number; hand: boolean; peek: boolean; ready: boolean; en: boolean; said: boolean; idx: number; sel: number;
+  words: string[]; hints: string[]; res: number[]; typed: string; marks: boolean[];
 }
 const SPELL_NEW = 1024, SPELL_MARK = 0x10000;
-const SPELL_EMPTY: Spell = { phase: 0, hand: false, peek: false, ready: false, en: false, idx: 0, sel: 0, words: [], res: [], typed: '', marks: [] };
+const SPELL_EMPTY: Spell = { phase: 0, hand: false, peek: false, ready: false, en: false, said: false, idx: 0, sel: 0, words: [], hints: [], res: [], typed: '', marks: [] };
 /** [σημαίες, ποια λέξη, πιασμένο γράμμα, μήκος λίστας, η λίστα…, αποτέλεσμα ανά λέξη…, ό,τι έχει γραφτεί…]. */
 export function spellState(v: number[]): Spell {
   const f = v[0] ?? 0;
   // καταστάσεις της πρώτης έκδοσης (μία λέξη) δεν έχουν τη σημαία: ξεκινούν από την αρχή
   if (!(f & SPELL_NEW)) return SPELL_EMPTY;
-  const n = v[3] ?? 0, list = String.fromCharCode(...v.slice(4, 4 + n)), words = list ? list.split('\n') : [];
+  const n = v[3] ?? 0, list = String.fromCharCode(...v.slice(4, 4 + n)), entries = list ? list.split('\n').map((e) => e.split('=')) : [], words = entries.map((e) => e[0]);
   const rest = v.slice(4 + n + words.length);
   return {
-    phase: f & 3, hand: (f & 4) !== 0, peek: (f & 8) !== 0, ready: (f & 16) !== 0, en: (f & 32) !== 0, idx: v[1] ?? 0, sel: v[2] ?? 0, words,
+    phase: f & 3, hand: (f & 4) !== 0, peek: (f & 8) !== 0, ready: (f & 16) !== 0, en: (f & 32) !== 0, said: (f & 64) !== 0, idx: v[1] ?? 0, sel: v[2] ?? 0, words, hints: entries.map((e) => e[1] ?? ''),
     res: words.map((_, i) => v[4 + n + i] ?? 0), typed: rest.map((code) => String.fromCharCode(code % SPELL_MARK)).join(''), marks: rest.map((code) => code >= SPELL_MARK),
   };
 }
 export function spellPack(s: Spell): number[] {
-  const list = s.words.join('\n');
+  const list = s.words.map((word, i) => (s.hints[i] ? `${word}=${s.hints[i]}` : word)).join('\n');
   return [
-    SPELL_NEW + s.phase + (s.hand ? 4 : 0) + (s.peek ? 8 : 0) + (s.ready ? 16 : 0) + (s.en ? 32 : 0), s.idx, s.sel, list.length,
+    SPELL_NEW + s.phase + (s.hand ? 4 : 0) + (s.peek ? 8 : 0) + (s.ready ? 16 : 0) + (s.en ? 32 : 0) + (s.said ? 64 : 0), s.idx, s.sel, list.length,
     ...[...list].map((ch) => ch.charCodeAt(0)), ...s.words.map((_, i) => s.res[i] ?? 0),
     ...[...s.typed].map((ch, i) => ch.charCodeAt(0) + (s.marks[i] ? SPELL_MARK : 0)),
   ];
@@ -475,21 +489,24 @@ function spellCheck(s: Spell, written: string): Spell | null {
   return { ...s, phase: 2, peek: false, typed: t, marks: [], sel: 0, res };
 }
 /** Η επόμενη λέξη (ή, μετά την τελευταία, τα αποτελέσματα). */
-const spellNext = (s: Spell): Spell => ({ ...s, phase: 0, idx: s.idx + 1, typed: '', marks: [], sel: 0, peek: s.ready && s.idx + 1 < s.words.length });
-const spellStart = (s: Spell, words: string[], ready: boolean): Spell => ({ ...SPELL_EMPTY, hand: s.hand, en: s.en, words, res: words.map(() => 0), ready, peek: ready });
+const spellNext = (s: Spell): Spell => ({ ...s, phase: 0, idx: s.idx + 1, typed: '', marks: [], sel: 0, peek: s.ready && s.idx + 1 < s.words.length && !s.hints[s.idx + 1] });
+/** Νέο παιχνίδι. Οι έτοιμες λέξεις φαίνονται πρώτα (κανείς δεν τις ξέρει), εκτός αν ο μαθητής βλέπει τη σημασία τους. */
+const spellStart = (s: Spell, words: string[], ready: boolean, hints: string[] = []): Spell => ({ ...SPELL_EMPTY, hand: s.hand, en: s.en, words, hints: words.map((_, i) => hints[i] ?? ''), res: words.map(() => 0), ready, peek: ready && !hints[0] });
+/** Το γεγονός που κάνει την εφαρμογή να πει δυνατά τη λέξη (βλέπε kidFx). */
+const spellSay = (s: Spell): string => `say|${/[a-z]/.test(s.words[s.idx]) ? 'en-GB' : 'el-GR'}|${s.words[s.idx]}`;
 /**
  * Διάταξη: πάνω η πρόοδος, μετά η γραμμή όπου γράφεται η λέξη (`base`) και τι λέει το τερατάκι (`msg`), στη μέση τα πλήκτρα
- * (ή το πλαίσιο για γραφή με το χέρι), κάτω τα κουμπιά: Λέξεις, 👁, τρόπος γραφής, Έλεγχος / Επόμενη.
+ * (ή το πλαίσιο για γραφή με το χέρι), κάτω τα κουμπιά: Λέξεις, 👁, 🔊, τρόπος γραφής, Έλεγχος / Επόμενη.
  */
 function spellGeom(w: number, h: number): { top: number; base: number; msg: number; ky: number; kh: number; kx: number; kw: number; by: number; bh: number; bx: number[]; bw: number[] } {
-  return { top: h * 0.05, base: h * 0.345, msg: h * 0.44, ky: h * 0.475, kh: h * 0.0975, kx: w * 0.02, kw: w * 0.096, by: h * 0.875, bh: h * 0.11, bx: [0.02, 0.185, 0.28, 0.49].map((f) => w * f), bw: [0.15, 0.08, 0.195, 0.49].map((f) => w * f) };
+  return { top: h * 0.05, base: h * 0.345, msg: h * 0.44, ky: h * 0.475, kh: h * 0.0975, kx: w * 0.02, kw: w * 0.096, by: h * 0.875, bh: h * 0.11, bx: [0.02, 0.165, 0.25, 0.335, 0.52].map((f) => w * f), bw: [0.135, 0.075, 0.075, 0.175, 0.46].map((f) => w * f) };
 }
 /** Τα κουτάκια των γραμμάτων: όσο μεγαλώνει το τερατάκι, τόσο περισσότερο χώρο κρατά δεξιά και αριστερά της λέξης. */
 function spellLay(w: number, n: number, eaten: number): { r: number; cw: number; x0: number } {
   const r = spellR(w, eaten), m = Math.max(n, 1), cw = Math.min(w * 0.08, (w - 2 * (r * 2 + w * 0.03)) / m);
   return { r, cw, x0: (w - m * cw) / 2 };
 }
-const spellBtn = (g: { bx: number[]; bw: number[]; by: number; bh: number }, x: number, y: number): number => (y < g.by || y > g.by + g.bh ? -1 : [0, 1, 2, 3].findIndex((i) => x >= g.bx[i] && x <= g.bx[i] + g.bw[i]));
+const spellBtn = (g: { bx: number[]; bw: number[]; by: number; bh: number }, x: number, y: number): number => (y < g.by || y > g.by + g.bh ? -1 : [0, 1, 2, 3, 4].findIndex((i) => x >= g.bx[i] && x <= g.bx[i] + g.bw[i]));
 /** Το τερατάκι που τρώει τα λάθη, με κέντρο το (x, y): `open` από 0 (κλειστό στόμα) έως 1 (ορθάνοιχτο). */
 function monster(c: C, x: number, y: number, r: number, open: number): void {
   c.save();
@@ -1761,7 +1778,7 @@ export const KIDS: Record<string, StampDef> = {
         btn(w * 0.51, g.by, w * 0.47, g.bh, '✏️ Νέες λέξεις', BLUE);
         return;
       }
-      const target = s.words[s.idx], res = s.res[s.idx] ?? 0;
+      const target = s.words[s.idx], res = s.res[s.idx] ?? 0, hint = s.hints[s.idx];
       // τι φαίνεται στη γραμμή: η σωστή λέξη (👁, ή γραφή με το χέρι χωρίς ανάγνωση), το αποτέλεσμα του ελέγχου, ή ό,τι γράφει ο μαθητής
       const whole = s.peek || s.phase === 3 || (s.phase === 2 && !s.typed);
       const diff = s.phase === 2 && s.typed ? spellDiff(s.typed, target) : [];
@@ -1914,6 +1931,7 @@ export const KIDS: Record<string, StampDef> = {
       // τι λέει το τερατάκι
       const marked = s.marks.filter(Boolean).length;
       const said = s.peek ? `Δες καλά τη λέξη! ${s.hand ? 'Πάτα το 👁 για να κρυφτεί και γράψε την.' : 'Μόλις πατήσεις γράμμα, κρύβεται.'}`
+        : s.phase === 0 && hint ? `${/[a-z]/.test(target) ? 'Γράψε στα αγγλικά' : 'Γράψε'}: ${hint}`
         : s.phase === 0 ? (s.hand ? 'Γράψε με το μολύβι στο πλαίσιο αυτό που ακούς και πάτα «Έλεγχος»' : s.typed ? '' : 'Γράψε με τα γράμματα αυτό που ακούς')
         : s.phase === 1 ? `Χμ… μυρίζω ${lathi(marked)}! ${s.hand ? 'Σβήσε, διόρθωσε και πάτα ξανά «Έλεγχος».' : 'Πάτα το κόκκινο γράμμα και διόρθωσέ το.'}`
         : s.phase === 3 ? 'Έτσι γράφεται. Την έγραψες σωστά;'
@@ -1922,7 +1940,7 @@ export const KIDS: Record<string, StampDef> = {
         : res === 2 ? 'Μπράβο, το διόρθωσες! Το τερατάκι έμεινε νηστικό.'
         : !s.typed ? 'Μιαμ! Δες πώς γράφεται και πάμε παρακάτω.'
         : `Το τερατάκι έφαγε ${lathi(bad.length)} και μεγάλωσε!`;
-      if (said) fitText(c, said, w / 2, g.msg, h * 0.04, w * 0.94, s.peek ? BLUE : s.phase === 1 || (s.phase === 2 && res >= 10) ? ORANGE : s.phase === 2 && t >= end ? GOOD : env.ink, 700);
+      if (said) fitText(c, said, w / 2, g.msg, h * 0.04, w * 0.94, s.peek || (s.phase === 0 && hint) ? BLUE : s.phase === 1 || (s.phase === 2 && res >= 10) ? ORANGE : s.phase === 2 && t >= end ? GOOD : env.ink, 700);
       const live = s.phase < 2;
       if (s.hand) {
         // πλαίσιο για γραφή με το χέρι: γραμμές τετραδίου
@@ -1963,14 +1981,15 @@ export const KIDS: Record<string, StampDef> = {
       btn(g.bx[0], g.by, g.bw[0], g.bh, '✏️ Λέξεις', BLUE);
       btn(g.bx[1], g.by, g.bw[1], g.bh, '👁', s.peek ? ORANGE : '#64748b', live);
       // το κουμπί δείχνει τον άλλο τρόπο γραφής, αυτόν στον οποίο θα σε πάει
-      btn(g.bx[2], g.by, g.bw[2], g.bh, s.hand ? '⌨️ Με πλήκτρα' : '✍️ Με το χέρι', '#64748b', s.phase === 0);
+      btn(g.bx[2], g.by, g.bw[2], g.bh, '🔊', '#0d9488');
+      btn(g.bx[3], g.by, g.bw[3], g.bh, s.hand ? '⌨️ Πλήκτρα' : '✍️ Με το χέρι', '#64748b', s.phase === 0);
       if (s.phase === 3) {
-        btn(g.bx[3], g.by, g.bw[3] * 0.49, g.bh, '✓ Σωστά', GOOD);
-        btn(g.bx[3] + g.bw[3] * 0.51, g.by, g.bw[3] * 0.49, g.bh, '✗ Λάθος', RED);
+        btn(g.bx[4], g.by, g.bw[4] * 0.49, g.bh, '✓ Σωστά', GOOD);
+        btn(g.bx[4] + g.bw[4] * 0.51, g.by, g.bw[4] * 0.49, g.bh, '✗ Λάθος', RED);
       } else if (s.phase === 2) {
-        btn(g.bx[3], g.by, g.bw[3], g.bh, s.idx + 1 < n ? '▶ Επόμενη λέξη' : '🏁 Αποτελέσματα', PURPLE);
+        btn(g.bx[4], g.by, g.bw[4], g.bh, s.idx + 1 < n ? '▶ Επόμενη λέξη' : '🏁 Αποτελέσματα', PURPLE);
       } else {
-        btn(g.bx[3], g.by, g.bw[3], g.bh, s.phase === 1 ? '🔍 Έλεγχος ξανά' : '🔍 Έλεγχος', GOOD, s.hand || !!spellNorm(s.typed, SPELL_MAX));
+        btn(g.bx[4], g.by, g.bw[4], g.bh, s.phase === 1 ? '🔍 Έλεγχος ξανά' : '🔍 Έλεγχος', GOOD, s.hand || !!spellNorm(s.typed, SPELL_MAX));
       }
     },
     ask(v, x, y, w, h) {
@@ -1979,11 +1998,11 @@ export const KIDS: Record<string, StampDef> = {
         if (x < w * 0.2 || x > w * 0.8 || y < h * 0.72 || y > h * 0.86) return null;
         return {
           title: s.en ? 'Οι λέξεις ή οι προτάσεις (Αγγλικά)' : 'Οι λέξεις ή οι προτάσεις της ορθογραφίας',
-          hint: `Χωρισμένες με κόμμα${s.en ? ': apple, school, good morning' : ', με τους τόνους τους: μήλο, σχολείο, καλή μέρα'}. Έως 20, η καθεμία έως 40 γράμματα. Με το 🎤 τις λες αντί να τις γράψεις: κάθε φορά που μιλάς μπαίνει μία. Φαίνονται ως κουκκίδες, για να μη τις δουν οι μαθητές· το 👁 τις δείχνει.`,
+          hint: `Χωρισμένες με κόμμα${s.en ? ': apple, school, good morning. Με «=» βάζεις τη σημασία που θα βλέπει ο μαθητής: apple=μήλο' : ', με τους τόνους τους: μήλο, σχολείο, καλή μέρα'}. Έως 20, η καθεμία έως 40 γράμματα. Με το 🎤 τις λες αντί να τις γράψεις: κάθε φορά που μιλάς μπαίνει μία. Φαίνονται ως κουκκίδες, για να μη τις δουν οι μαθητές· το 👁 τις δείχνει.`,
           secret: true, max: 840, voice: s.en ? 'en-GB' : 'el-GR',
           apply(typed) {
-            const words = spellList(typed);
-            return words.length ? spellPack(spellStart(s, words, false)) : null;
+            const list = spellList(typed);
+            return list.words.length ? spellPack(spellStart(s, list.words, false, list.hints)) : null;
           },
         };
       }
@@ -1992,9 +2011,9 @@ export const KIDS: Record<string, StampDef> = {
       const k = spellBtn(g, x, y), area = { x: g.kx, y: g.ky, w: g.kw * 10, h: g.kh * 4 };
       const clear = (next: Spell): KidAsk => ({ title: '', area, mode: 'clear', apply: () => spellPack(next) });
       if (k === 0) return clear({ ...SPELL_EMPTY, hand: true, en: s.en });
-      if (k === 2 && s.phase === 0) return clear({ ...s, hand: false, peek: s.peek });
-      if (k === 3 && s.phase === 2) return clear(spellNext(s));
-      if (k === 3 && s.phase < 2) {
+      if (k === 3 && s.phase === 0) return clear({ ...s, hand: false });
+      if (k === 4 && s.phase === 2) return clear(spellNext(s));
+      if (k === 4 && s.phase < 2) {
         return {
           title: '', area, mode: 'read',
           // χωρίς ανάγνωση (δεν υπάρχει κλειδί ή ίντερνετ): φαίνεται η σωστή λέξη και η τάξη τη συγκρίνει με το χειρόγραφο
@@ -2009,22 +2028,23 @@ export const KIDS: Record<string, StampDef> = {
         if (y >= h * 0.385 && y <= h * 0.47 && x >= w * 0.3 && x <= w * 0.7) return s.en === x > w * 0.5 ? null : spellPack({ ...s, en: !s.en });
         const k = Math.floor((x / w - 0.06) / 0.15);
         if (y < h * 0.5 || y > h * 0.64 || k < 0 || k > 5 || x > w * (0.06 + 0.15 * k + 0.13)) return null;
-        const pool = [...(s.en ? SPELL_READY_EN : SPELL_READY)[k]], words: string[] = [];
-        while (words.length < SPELL_PICK && pool.length) words.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
-        return spellPack(spellStart(s, words, true));
+        const pool = [...(s.en ? SPELL_READY_EN : SPELL_READY)[k]], picked: string[][] = [];
+        while (picked.length < SPELL_PICK && pool.length) picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0].split('='));
+        return spellPack(spellStart(s, picked.map((e) => e[0]), true, picked.map((e) => e[1] ?? '')));
       }
       if (s.idx >= s.words.length) {
         if (y < g.by || y > g.by + g.bh) return null;
-        if (x >= w * 0.02 && x <= w * 0.49) return spellPack(spellStart(s, s.words, s.ready));
+        if (x >= w * 0.02 && x <= w * 0.49) return spellPack(spellStart(s, s.words, s.ready, s.hints));
         return x >= w * 0.51 && x <= w * 0.98 ? spellPack({ ...SPELL_EMPTY, hand: s.hand, en: s.en }) : null;
       }
       const k = spellBtn(g, x, y);
       if (k === 0) return s.hand ? null : spellPack({ ...SPELL_EMPTY, en: s.en });
       if (k === 1) return s.phase < 2 ? spellPack({ ...s, peek: !s.peek }) : null;
-      if (k === 2) return s.phase === 0 && !s.hand ? spellPack({ ...s, hand: true, typed: '', marks: [], sel: 0 }) : null;
-      if (k === 3) {
+      if (k === 2) return spellPack({ ...s, said: !s.said });
+      if (k === 3) return s.phase === 0 && !s.hand ? spellPack({ ...s, hand: true, typed: '', marks: [], sel: 0 }) : null;
+      if (k === 4) {
         if (s.phase === 3) {
-          const right = x < g.bx[3] + g.bw[3] / 2, res = [...s.res];
+          const right = x < g.bx[4] + g.bw[4] / 2, res = [...s.res];
           res[s.idx] = right ? 1 : 11;
           return spellPack({ ...s, phase: 2, typed: right ? s.words[s.idx] : '', res });
         }
@@ -2064,8 +2084,11 @@ export const KIDS: Record<string, StampDef> = {
     },
     fx(a, b) {
       const p = spellState(a), n = spellState(b);
+      const playing = n.idx < n.words.length;
+      // νέα λέξη (ή το 🔊): η εφαρμογή τη λέει δυνατά
+      if (playing && (p.words.join() !== n.words.join() || p.idx !== n.idx || p.said !== n.said)) return spellSay(n);
       if (p.words.join() !== n.words.join() || p.hand !== n.hand || p.en !== n.en) return 'new';
-      if (n.words.length && n.idx >= n.words.length) return p.idx < n.idx ? 'win' : 'new';
+      if (!playing) return n.words.length && p.idx < n.idx ? 'win' : 'new';
       if (n.phase === 2 && p.phase !== 2) {
         const res = n.res[n.idx];
         return res === 1 ? 'win' : res === 2 ? 'cheer' : n.typed ? `munch${Math.min(res - 10, 12)}` : 'munch1';
