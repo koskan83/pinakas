@@ -139,6 +139,14 @@ describe('εργαλεία Δημοτικού', () => {
     expect(tap('fracbar', [4, 1], 0.9, 0.2)).toEqual([4, 9]);
     expect(tap('fracbar', [4, 3], 0.86, 0.75)).toEqual([5, 0]);
     expect(tap('fracbar', [1, 0], 0.14, 0.75)).toBeNull();
+    // όψη σοκολάτας / πίτσας: ανάβει από το κουμπί της και μένει όταν αλλάζουν τα κομμάτια ή ο παρονομαστής
+    expect(tap('fracbar', [4, 1], 0.68, 0.75)).toEqual([4, 1, 1]);
+    expect(tap('fracbar', [4, 1, 1], 0.68, 0.75)).toEqual([4, 1, 0]);
+    expect(tap('fracbar', [4, 1, 1], 0.9, 0.2)).toEqual([4, 9, 1]);
+    expect(tap('fracbar', [4, 3, 1], 0.86, 0.75)).toEqual([5, 0, 1]);
+    expect(tap('fracpie', [4, 0], 0.9, 0.1 * 280 / 370)).toEqual([4, 0, 1]);
+    expect(KIDS.fracpizza.init).toEqual([4, 0, 1]);
+    expect(KIDS.fracchoc.init).toEqual([4, 0, 1]);
   });
   it('ρολόι: έξω τα λεπτά, μέσα η ώρα, κάτω η ψηφιακή ένδειξη', () => {
     const d = KIDS.clock, c = d.w / 2, r = d.w * 0.47;

@@ -240,6 +240,28 @@ export function mountUi(app: HTMLElement): void {
   <div id="gadgetMenu" class="popup hidden">
     <div class="gHead" id="recentHead">Πρόσφατα</div>
     <div class="tiles" id="recentTiles"></div>
+    <div class="gHead" data-lv="pri">Αριθμοί και πράξεις</div>
+    <div class="tiles" data-lv="pri">
+      ${tile('data-kid="numline"', '<b class="sm">0–10</b>', 'Αριθμογρ.', 'Αριθμογραμμή: το ⟳ αλλάζει από πού ως πού')}
+      ${tile('data-kid="blocks"', '<b class="em">🔢</b>', 'Ε Δ Μ', 'Εκατοντάδες, δεκάδες, μονάδες με κυβάκια: πάνω από 9 περνά ένα στην επόμενη στήλη')}
+      ${tile('data-kid="hundred"', '<b class="sm">100</b>', 'Πίν. 100', 'Πίνακας του 100: πατάς αριθμούς και χρωματίζονται')}
+      ${tile('data-kid="times"', '<b>×</b>', 'Προπαίδεια', 'Προπαίδεια: πατάς ένα κουτί και φαίνεται το γινόμενο')}
+      ${tile('data-kid="colops"', '<b class="sm">Ε Δ Μ</b>', 'Κάθ. πράξη', 'Πλέγμα για κάθετη πράξη με κρατούμενα')}
+      ${tile('data-kid="balance"', '<b class="em">⚖️</b>', 'Ζυγαριά', 'Ζυγαριά: βάζεις αριθμούς και γέρνει προς το μεγαλύτερο άθροισμα')}
+    </div>
+    <div class="gHead" data-lv="pri">Κλάσματα</div>
+    <div class="tiles" data-lv="pri">
+      ${tile('data-kid="fracpie"', IC('<circle cx="12" cy="12" r="9"/><path d="M12 3v9l7.800 4.500M12 12l-7.800 4.500"/>'), 'Πίτα', 'Κλάσμα σε κύκλο: πατάς κομμάτια και χρωματίζονται')}
+      ${tile('data-kid="fracbar"', IC('<rect x="2" y="8" width="20" height="8" rx="1"/><path d="M7 8v8M12 8v8M17 8v8"/>'), 'Μπάρα', 'Κλάσμα σε μπάρα: για σύγκριση και ισοδύναμα κλάσματα')}
+      ${tile('data-kid="fracpizza"', '<b class="em">🍕</b>', 'Πίτσα', 'Κλάσμα σε πίτσα: τα κομμάτια που παίρνεις φαίνονται ολόκληρα')}
+      ${tile('data-kid="fracchoc"', '<b class="em">🍫</b>', 'Σοκολάτα', 'Κλάσμα σε σοκολάτα: τα κομμάτια που παίρνεις φαίνονται ολόκληρα')}
+    </div>
+    <div class="gHead" data-lv="pri">Χρόνος και χρήματα</div>
+    <div class="tiles" data-lv="pri">
+      ${tile('data-kid="clock"', '<b class="em">🕒</b>', 'Ρολόι', 'Ρολόι: πατάς γύρω γύρω για τα λεπτά, πιο μέσα για την ώρα')}
+      ${tile('data-kid="money"', '<b class="em">💶</b>', 'Χρήματα', 'Κέρματα και χαρτονομίσματα ευρώ')}
+      ${tile('data-gadget="timer"', I.timer, 'Χρονόμετρο')}
+    </div>
     <div class="gHead">Σχήματα</div>
     <div class="tiles">
       ${tile('data-shape="line"', I.line, 'Ευθεία')}
@@ -252,58 +274,48 @@ export function mountUi(app: HTMLElement): void {
       ${tile('data-shape="angle"', I.angle, 'Γωνία', 'Γωνία με μοίρες')}
       ${tile('data-ins="table"', I.table, 'Πίνακας…', 'Πίνακας, ορίζουσα ή μήτρα: διαλέγεις γραμμές και στήλες')}
     </div>
-    <div class="gHead" data-lv="pri">Αριθμοί</div>
-    <div class="tiles" data-lv="pri">
-      ${tile('data-kid="numline"', '<b class="sm">0–10</b>', 'Αριθμογρ.', 'Αριθμογραμμή: το ⟳ αλλάζει από πού ως πού')}
-      ${tile('data-kid="blocks"', '<b class="em">🔢</b>', 'Ε Δ Μ', 'Εκατοντάδες, δεκάδες, μονάδες με κυβάκια: πάνω από 9 περνά ένα στην επόμενη στήλη')}
-      ${tile('data-kid="hundred"', '<b class="sm">100</b>', 'Πίν. 100', 'Πίνακας του 100: πατάς αριθμούς και χρωματίζονται')}
-      ${tile('data-kid="times"', '<b>×</b>', 'Προπαίδεια', 'Προπαίδεια: πατάς ένα κουτί και φαίνεται το γινόμενο')}
-      ${tile('data-kid="colops"', '<b class="sm">Ε Δ Μ</b>', 'Κάθ. πράξη', 'Πλέγμα για κάθετη πράξη με κρατούμενα')}
-      ${tile('data-kid="balance"', '<b class="em">⚖️</b>', 'Ζυγαριά', 'Ζυγαριά: βάζεις αριθμούς και γέρνει προς το μεγαλύτερο άθροισμα')}
-      ${tile('data-kid="money"', '<b class="em">💶</b>', 'Χρήματα', 'Κέρματα και χαρτονομίσματα ευρώ')}
-      ${tile('data-kid="build"', '<b class="em">🧱</b>', 'Κυβάκια', 'Χτίσιμο με κυβάκια: διαλέγεις υλικό και σέρνεις για να χτίσεις')}
-    </div>
-    <div class="gHead" data-lv="pri">Εικόνες για μέτρημα</div>
-    <div class="tiles small" data-lv="pri">
-      ${PICS.map(([key, emoji, label]) => `<button data-kid="pic-${key}" class="tile pic" title="${label}"><span><b class="em">${emoji}</b></span></button>`).join('')}
-    </div>
-    <div class="gHead" data-lv="pri">Κλάσματα και ώρα</div>
-    <div class="tiles" data-lv="pri">
-      ${tile('data-kid="fracpie"', '<b class="em">🍕</b>', 'Πίτα', 'Κλάσμα σε πίτα: πατάς κομμάτια και χρωματίζονται')}
-      ${tile('data-kid="fracbar"', '<b class="em">🍫</b>', 'Μπάρα', 'Κλάσμα σε μπάρα: για σύγκριση και ισοδύναμα κλάσματα')}
-      ${tile('data-kid="clock"', '<b class="em">🕒</b>', 'Ρολόι', 'Ρολόι: πατάς γύρω γύρω για τα λεπτά, πιο μέσα για την ώρα')}
-    </div>
-    <div class="gHead" data-lv="pri">Παιχνίδι και επιβράβευση</div>
-    <div class="tiles" data-lv="pri">
-      ${tile('data-kid="dice"', '<b class="em">🎲</b>', 'Ζάρι')}
-      ${tile('data-kid="hangman"', '<b class="em">🔡</b>', 'Κρεμάλα', 'Κρεμάλα: τυχαία λέξη ή δική σου, με πάτημα στα γράμματα')}
-      ${tile('data-kid="lottery"', '<b class="em">🎟️</b>', 'Κλήρωση', 'Κλήρωση αριθμού (π.χ. ποιος μαθητής θα σηκωθεί)')}
-      ${tile('data-kid="star"', '<b class="em">⭐</b>', 'Αστέρι')}
-      ${tile('data-kid="smile"', '<b class="em">🙂</b>', 'Φατσούλα')}
-      ${tile('data-kid="bravo"', '<b class="em">👏</b>', 'Μπράβο!')}
-    </div>
-    <div class="gHead" data-lv="sec">Άξονες και συναρτήσεις</div>
+    <div class="gHead" data-lv="sec">Άξονες</div>
     <div class="tiles" data-lv="sec">
       ${tile('data-axes="full"', I.axFull, 'Άξονες', 'Άξονες με 4 τεταρτημόρια')}
       ${tile('data-axes="q1"', I.axQ1, '1ο τεταρτ.', 'Άξονες: 1ο τεταρτημόριο')}
       ${tile('data-axes="q14"', I.axQ14, 'x ≥ 0', 'Άξονες: 1ο και 4ο τεταρτημόριο (x ≥ 0)')}
       ${tile('data-ins="trig"', I.trig, 'Τριγ. κύκλος', 'Τριγωνομετρικός κύκλος')}
+    </div>
+    <div class="gHead" data-lv="sec">Ανάλυση συνάρτησης</div>
+    <div class="tiles" data-lv="sec">
       ${tile('data-anq="int"', '<b>∫</b>', 'Ολοκλήρωμα', 'Ορισμένο ολοκλήρωμα ως εμβαδόν')}
       ${tile('data-anq="sum"', '<b>Σ</b>', 'Riemann', 'Αθροίσματα Riemann')}
       ${tile('data-anq="lim"', '<b class="sm">lim</b>', 'Όριο', 'Όριο σε σημείο')}
       ${tile('data-anq="tan"', '<b>f′</b>', 'Εφαπτομένη', 'Εφαπτομένη και παράγωγος')}
       ${tile('data-anq="asym"', I.asym, 'Ασύμπτωτες')}
     </div>
-    <div class="gHead">Όργανα και φυσική</div>
+    <div class="gHead"><span data-lv="sec">Όργανα και φυσική</span><span data-lv="pri">Όργανα</span></div>
     <div class="tiles">
       ${tile('data-gadget="ruler"', I.ruler, 'Χάρακας')}
       ${tile('data-gadget="protractor"', I.protractor, 'Μοιρογν.', 'Μοιρογνωμόνιο')}
       ${tile('data-gadget="compass"', I.compass, 'Διαβήτης')}
       ${tile('data-ins="stamps" data-lv="sec"', I.physics, 'Φυσική…', 'Σχήματα φυσικής')}
     </div>
+    <div class="gHead" data-lv="pri">Εικόνες για μέτρημα</div>
+    <div class="tiles small" data-lv="pri">
+      ${PICS.map(([key, emoji, label]) => `<button data-kid="pic-${key}" class="tile pic" title="${label}"><span><b class="em">${emoji}</b></span></button>`).join('')}
+    </div>
+    <div class="gHead" data-lv="pri">Παιχνίδια</div>
+    <div class="tiles" data-lv="pri">
+      ${tile('data-kid="build"', '<b class="em">🧱</b>', 'Κυβάκια', 'Χτίσιμο με κυβάκια: διαλέγεις υλικό και σέρνεις για να χτίσεις')}
+      ${tile('data-kid="hangman"', '<b class="em">🔡</b>', 'Κρεμάλα', 'Κρεμάλα: τυχαία λέξη ή δική σου, με πάτημα στα γράμματα')}
+      ${tile('data-kid="dice"', '<b class="em">🎲</b>', 'Ζάρι')}
+      ${tile('data-kid="lottery"', '<b class="em">🎟️</b>', 'Κλήρωση', 'Κλήρωση αριθμού (π.χ. ποιος μαθητής θα σηκωθεί)')}
+    </div>
+    <div class="gHead" data-lv="pri">Επιβράβευση</div>
+    <div class="tiles" data-lv="pri">
+      ${tile('data-kid="star"', '<b class="em">⭐</b>', 'Αστέρι')}
+      ${tile('data-kid="smile"', '<b class="em">🙂</b>', 'Φατσούλα')}
+      ${tile('data-kid="bravo"', '<b class="em">👏</b>', 'Μπράβο!')}
+    </div>
     <div class="gHead">Παρουσίαση</div>
     <div class="tiles">
-      ${tile('data-gadget="timer"', I.timer, 'Χρονόμετρο')}
+      ${tile('data-gadget="timer" data-lv="sec"', I.timer, 'Χρονόμετρο')}
       ${tile('data-view="curtainTop"', I.curtainTop, 'Κουρτ. πάνω', 'Κουρτίνα από πάνω (γράφεις και πάνω της)')}
       ${tile('data-view="curtain"', I.curtain, 'Κουρτ. κάτω', 'Κουρτίνα από κάτω (γράφεις και πάνω της)')}
       ${tile('data-view="spot"', I.spot, 'Προβολέας')}
