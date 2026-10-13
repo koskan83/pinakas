@@ -155,6 +155,57 @@ describe('άσκηση με το 🎯 στα εργαλεία του Δημοτ�
     expect(d.paint!([185, 0, 186, 1], c, c - r * 0.8, d.w, d.h, {}, true)).toEqual([180, 0, 186, 0]);
     expect(d.tap!([185, 0, 186, 1], d.w / 2, d.w + 10, d.w, d.h)).toEqual([185, 1]);
   });
+  it('προπαίδεια: η γωνία ζητά γινόμενο, το σωστό κουτάκι πανηγυρίζει, και δεύτερο πάτημα στη γωνία σταματά την άσκηση', () => {
+    const d = KIDS.times;
+    const cell = (v: number[], q: number, r: number): number[] => at('times', v, (q + 1.5) / 11, (r + 1.5) / 11)!;
+    for (let i = 0; i < 30; i++) {
+      const v = at('times', [0, 0, 0, 0], 0.04, 0.04)!;
+      expect(v.length).toBe(6);
+      expect(v[4]).toBeGreaterThanOrEqual(4);
+      expect(v[5]).toBe(0);
+    }
+    // ζητείται το 12: το 3×5 απλώς ανοίγει, το 3×4 (ή το 2×6) το βρίσκει
+    const wrong = cell([0, 0, 0, 0, 12, 0], 2, 4);
+    expect(wrong.slice(4)).toEqual([12, 0]);
+    expect(d.fx!([0, 0, 0, 0, 12, 0], wrong)).toBe('click');
+    const right = cell(wrong, 5, 1);
+    expect(right.slice(4)).toEqual([12, 1]);
+    expect(d.fx!(wrong, right)).toBe('win');
+    expect(at('times', wrong, 0.04, 0.04)!.length).toBe(4);
+    const next = at('times', right, 0.04, 0.04)!;
+    expect(next[5]).toBe(0);
+    expect(next[4]).not.toBe(12);
+  });
+  it('ψηφοφορία: κάθε πάτημα μετράει μία ψήφο, το 📊 δείχνει το αποτέλεσμα, το ⟳ μηδενίζει', () => {
+    const d = KIDS.poll;
+    let v = d.init!.slice();
+    // 4 επιλογές: Β, Β, Δ
+    v = at('poll', v, 0.38, 0.4)!;
+    v = at('poll', v, 0.38, 0.4)!;
+    v = at('poll', v, 0.88, 0.4)!;
+    expect(v).toEqual([4, 0, 0, 2, 0, 1]);
+    const shown = at('poll', v, 0.9, 0.89)!;
+    expect(shown).toEqual([4, 1, 0, 2, 0, 1]);
+    expect(d.fx!(v, shown)).toBe('drum');
+    // με ψήφους το αριστερό κουμπί είναι ⟳· χωρίς ψήφους τα −/+ αλλάζουν πόσες είναι οι επιλογές
+    expect(at('poll', shown, 0.08, 0.89)).toEqual([4, 0]);
+    expect(at('poll', [4, 0], 0.08, 0.89)).toEqual([3, 0]);
+    expect(at('poll', [5, 0], 0.2, 0.89)).toBeNull();
+    expect(at('poll', [2, 0], 0.75, 0.4)).toEqual([2, 0, 0, 1]);
+  });
+  it('ζυγαριά: το 🎯 βάζει βαρίδια αριστερά που δεν αλλάζουν, και η ισορροπία από τα δεξιά πανηγυρίζει', () => {
+    const d = KIDS.balance;
+    const v = at('balance', [1, 0], 0.07, 0.1)!;
+    expect(v[0]).toBe(3);
+    expect(v[1]).toBe(2);
+    expect(v.length).toBe(4);
+    expect(v[2] + v[3]).toBeGreaterThan(10);
+    expect(d.fx!([3, 2, 6, 7, 10], [3, 2, 6, 7, 10, 3])).toBe('win');
+    expect(d.fx!([1, 2, 6, 7, 10], [1, 2, 6, 7, 10, 3])).toBe('equal');
+    // άλυτη άσκηση: το 🎯 τη σταματά· λυμένη: δίνει καινούργια
+    expect(at('balance', [3, 2, 6, 7, 10], 0.07, 0.1)).toEqual([1, 2, 6, 7, 10]);
+    expect(at('balance', [3, 2, 6, 7, 10, 3], 0.07, 0.1)!.length).toBe(4);
+  });
 });
 
 describe('εργαλεία Δημοτικού', () => {

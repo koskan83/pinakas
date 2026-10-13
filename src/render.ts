@@ -353,7 +353,11 @@ export class Renderer {
     c.textAlign = 'center';
     c.textBaseline = 'top';
     const nums = a.nums !== false;
-    for (let i = lines.xmin; nums && i <= lines.xmax; i++) if (i !== 0) c.fillText(String(+(i * sx).toPrecision(10)), X(i * sx), a.y + t + 3);
+    // όταν οι αριθμοί δεν χωράνε δίπλα δίπλα (π.χ. −0.09, −0.08) γράφεται ένας ανά δύο ή ανά πέντε γραμμές
+    const xt = (i: number): string => String(+(i * sx).toPrecision(10));
+    const wide = nums ? Math.max(c.measureText(xt(lines.xmin)).width, c.measureText(xt(lines.xmax)).width, c.measureText(xt(lines.xmax - 1)).width) + fs * 0.45 : 0;
+    const every = wide <= u ? 1 : wide <= 2 * u ? 2 : 5;
+    for (let i = lines.xmin; nums && i <= lines.xmax; i++) if (i !== 0 && i % every === 0) c.fillText(xt(i), X(i * sx), a.y + t + 3);
     c.textAlign = 'right';
     c.textBaseline = 'middle';
     for (let j = lines.ymin; nums && j <= lines.ymax; j++) if (j !== 0) c.fillText(String(+(j * sy).toPrecision(10)), a.x - t - 4, Y(j * sy));

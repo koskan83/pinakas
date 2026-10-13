@@ -720,6 +720,8 @@ const onMenu = async (e: Event): Promise<void> => {
   if (!act.startsWith('bg-')) closePopups();
   if (act === 'pdflogo') {
     setPdfLogo(!pdfLogo);
+  } else if (act === 'startscr') {
+    setStartScr(!startScr);
   } else if (act === 'labels') {
     setLabels(!$('toolbar').classList.contains('labels'));
   } else if (act === 'fxsound' || act === 'fxclick') {
@@ -1015,6 +1017,18 @@ function setLabels(on: boolean): void {
   layoutBar();
 }
 setLabels((() => { try { return localStorage.getItem('grafida.labels') !== '0'; } catch { return true; } })());
+/** Η οθόνη «Τι κάνουμε σήμερα;» στο πρώτο άνοιγμα της μέρας· ανοιχτή μέχρι να την κλείσει ο χρήστης. */
+let startScr = true;
+function setStartScr(on: boolean): void {
+  startScr = on;
+  document.querySelector('[data-act=startscr]')!.classList.toggle('on', on);
+  try {
+    localStorage.setItem('grafida.startscr', on ? '1' : '0');
+  } catch {
+    /* χωρίς αποθήκευση */
+  }
+}
+setStartScr((() => { try { return localStorage.getItem('grafida.startscr') !== '0'; } catch { return true; } })());
 
 // το διαφανές παράθυρο δεν έχει μαθήματα και δεν πειράζει ό,τι είναι αποθηκευμένο
 export const lessons = isOverlay
@@ -1032,7 +1046,7 @@ void (async () => {
   try { seen = localStorage.getItem(WELCOME) === '1'; } catch { /* χωρίς αποθήκευση: δεν ενοχλούμε */ }
   if (!seen && !isOverlay) openWelcome();
   // στο πρώτο άνοιγμα της μέρας: συνέχισε το τελευταίο μάθημα ή ξεκίνα νέο για το τμήμα σου
-  else lessons?.start();
+  else if (startScr) lessons?.start();
   // μετά από ενημέρωση, μία φορά σε κάθε συσκευή: τι άλλαξε
   if (newsPending(seen) && !isOverlay) void showNews();
 })();

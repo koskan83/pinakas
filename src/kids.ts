@@ -128,6 +128,33 @@ function fracGoal(v: number[]): number[] {
 }
 /** Πανηγυρισμός όταν τα χρωματισμένα κομμάτια γίνουν όσα ζητά η άσκηση. */
 const fracFx = (prev: number[], next: number[]): string => (next[3] && ones(next[1] ?? 0) === next[3] && ones(prev[1] ?? 0) !== next[3] ? 'win' : 'click');
+/**
+ * Η γωνία της προπαίδειας: χωρίς άσκηση ή με λυμένη άσκηση ζητά νέο γινόμενο από κουτάκι που είναι ακόμα κρυμμένο
+ * (αν άνοιξαν όλα, τα ξανακρύβει)· με άσκηση που δεν λύθηκε, τη σταματά.
+ */
+function timesGoal(v: number[]): number[] {
+  if (v[4] && !v[5]) return v.slice(0, 4);
+  let from = v.slice(0, 4);
+  while (from.length < 4) from.push(0);
+  let free: number[] = [];
+  for (let i = 0; i < 100; i++) if (!bit(from, 0, i)) free.push(i);
+  if (!free.length) {
+    from = [0, 0, 0, 0];
+    free = Array.from({ length: 100 }, (_, i) => i);
+  }
+  // όχι ×1 και όχι το ίδιο με πριν, όσο υπάρχει άλλη επιλογή
+  const prod = (i: number): number => (Math.floor(i / 10) + 1) * ((i % 10) + 1);
+  const good = free.filter((i) => i >= 10 && i % 10 > 0 && prod(i) !== v[4]);
+  const pool = good.length ? good : free;
+  return [...from, prod(pool[Math.floor(Math.random() * pool.length)]), 0];
+}
+const POLL_COLORS = [BLUE, ORANGE, GREEN, PURPLE, RED];
+/** Με δύο επιλογές η ψηφοφορία είναι ναι/όχι (ή σωστό/λάθος)· με περισσότερες, Α Β Γ Δ Ε. */
+const pollName = (n: number, i: number): string => (n === 2 ? '✓✗'[i] : 'ΑΒΓΔΕ'[i]);
+function pollGeom(v: number[], w: number, h: number): { n: number; top: number; gap: number; cw: number; lab: number; r: number } {
+  const n = Math.max(2, Math.min(5, v[0] || 4)), top = h * 0.78, gap = w * 0.03;
+  return { n, top, gap, cw: (w - gap * (n + 1)) / n, lab: h * 0.13, r: (h - top) * 0.36 };
+}
 /** Ώρα σε μορφή 7:45 από λεπτά μετά τις 12. */
 const clockText = (mins: number): string => `${Math.floor(mins / 60) || 12}:${String(mins % 60).padStart(2, '0')}`;
 /** Μικρό κουμπί που αλλάζει την όψη του κλάσματος· με περίγραμμα όταν είναι αναμμένο. */
@@ -298,12 +325,23 @@ function chipGeom(w: number, h: number): { cr: number; my: number; at(i: number,
     at: (i, side) => [(side ? w * 0.642 : w * 0.07) + (i % 5) * step, h * (i < 5 ? 0.8 : 0.92)],
   };
 }
-interface Scale { left: number[]; right: number[]; show: boolean }
+interface Scale { left: number[]; right: number[]; show: boolean; goal?: boolean }
 const readScale = (v: number[]): Scale => {
   const n = v[1] ?? 0;
-  return { show: !!v[0], left: v.slice(2, 2 + n), right: v.slice(2 + n) };
+  // το πρώτο στοιχείο: 1 = φαίνεται η σύγκριση, 2 = άσκηση «ισορρόπησε» (τα βαρίδια αριστερά είναι δοσμένα)
+  return { show: !!((v[0] ?? 0) & 1), goal: !!((v[0] ?? 0) & 2), left: v.slice(2, 2 + n), right: v.slice(2 + n) };
 };
-const writeScale = (s: Scale): number[] => [s.show ? 1 : 0, s.left.length, ...s.left, ...s.right];
+const writeScale = (s: Scale): number[] => [(s.show ? 1 : 0) + (s.goal ? 2 : 0), s.left.length, ...s.left, ...s.right];
+const scaleEq = (s: Scale): boolean => sum(s.left) === sum(s.right) && sum(s.left) > 0;
+/** Νέα άσκηση ζυγαριάς: δύο βαρίδια αριστερά με άθροισμα πάνω από 10, ώστε δεξιά να χρειάζονται τουλάχιστον δύο. */
+function scaleGoal(s: Scale): Scale {
+  let a = 0, b = 0;
+  while (a + b <= 10 || a + b === sum(s.left)) {
+    a = 2 + Math.floor(Math.random() * 9);
+    b = 2 + Math.floor(Math.random() * 9);
+  }
+  return { show: s.show, goal: true, left: [a, b], right: [] };
+}
 const sum = (a: number[]): number => a.reduce((p, q) => p + q, 0);
 /** Γεωμετρία της ζυγαριάς για την τρέχουσα κλίση: θέσεις δίσκων και βαριδιών. */
 /** Η κλίση του ζυγού: προς το μεγαλύτερο άθροισμα, ως ένα όριο. */
@@ -1053,7 +1091,12 @@ export const KIDS: Record<string, StampDef> = {
       c.fillRect(0, 0, w, t);
       c.fillRect(0, t, s, h - t);
       c.restore();
-      text(c, '×', s / 2, t / 2, s * 0.5, env.ink, 700);
+      // άσκηση (πέμπτο στοιχείο: το γινόμενο που ζητείται, έκτο: βρέθηκε): «Βρες 42» στη γωνία και ✓ όταν πατηθεί κουτάκι που το δίνει
+      if (v[4]) {
+        text(c, v[5] ? '✓' : 'Βρες', s / 2, t * 0.27, s * 0.24, v[5] ? GOOD : env.ink, 700);
+        text(c, String(v[4]), s / 2, t * 0.66, s * 0.4, v[5] ? GOOD : ORANGE, 800);
+      } else skinBtn(c, s / 2, t / 2, s * 0.4, '🎯', false, env);
+      c.fillStyle = env.ink;
       for (let i = 1; i <= 10; i++) {
         text(c, String(i), s * (i + 0.5), t / 2 + 1, s * 0.44, env.ink, 700);
         text(c, String(i), s / 2, t * (i + 0.5) + 1, s * 0.44, env.ink, 700);
@@ -1061,8 +1104,8 @@ export const KIDS: Record<string, StampDef> = {
       // τα γινόμενα είναι κρυμμένα· κάθε πάτημα αποκαλύπτει (ή ξανακρύβει) ένα
       for (let r = 0; r < 10; r++) for (let q = 0; q < 10; q++) {
         if (!bit(v, 0, r * 10 + q)) continue;
-        c.fillStyle = GREEN;
-        c.globalAlpha = 0.35;
+        c.fillStyle = v[5] && (r + 1) * (q + 1) === v[4] ? GOOD : GREEN;
+        c.globalAlpha = v[5] && (r + 1) * (q + 1) === v[4] ? 0.6 : 0.35;
         c.fillRect(s * (q + 1), t * (r + 1), s, t);
         c.globalAlpha = 1;
         text(c, String((r + 1) * (q + 1)), s * (q + 1.5), t * (r + 1.5) + 1, s * 0.4, env.ink, 600);
@@ -1078,9 +1121,18 @@ export const KIDS: Record<string, StampDef> = {
     },
     tap(v, x, y, w, h) {
       const q = Math.floor((x / w) * 11) - 1, r = Math.floor((y / h) * 11) - 1;
+      if (q === -1 && r === -1) return timesGoal(v);
       if (q < 0 || r < 0 || q > 9 || r > 9) return null;
-      return flip(v, 0, r * 10 + q);
+      const out = flip(v, 0, r * 10 + q);
+      if (!v[4]) return out;
+      while (out.length < 4) out.push(0);
+      out[4] = v[4];
+      // σωστό κουτάκι: μένει ανοιχτό και η άσκηση σημειώνεται λυμένη
+      const hit = !v[5] && (r + 1) * (q + 1) === v[4];
+      out[5] = v[5] || hit ? 1 : 0;
+      return hit && !bit(out, 0, r * 10 + q) ? flip(out, 0, r * 10 + q) : out;
     },
+    fx: (prev, next) => (next[5] && !prev[5] ? 'win' : 'click'),
   }),
 
   colops: kid({
@@ -1198,6 +1250,63 @@ export const KIDS: Record<string, StampDef> = {
     fx: (prev, next) => (next[0] > 0 && prev[1] === next[1] ? 'drum' : 'click'),
   }),
 
+  // ψηφοφορία της τάξης πάνω στον πίνακα: [πόσες επιλογές, φαίνεται το αποτέλεσμα, ψήφοι κάθε επιλογής…]
+  poll: kid({
+    label: 'Ψηφοφορία', w: 560, h: 380, init: [4, 0, 0, 0, 0, 0, 0],
+    drawKid(c, w, h, v, env) {
+      const g = pollGeom(v, w, h);
+      const votes = Array.from({ length: g.n }, (_, i) => v[2 + i] ?? 0);
+      const total = sum(votes), most = Math.max(1, ...votes);
+      const an = env.anim && env.anim.t < 350 ? env.anim : null;
+      for (let i = 0; i < g.n; i++) {
+        const x = g.gap + i * (g.cw + g.gap), name = pollName(g.n, i);
+        c.save();
+        c.fillStyle = POLL_COLORS[i];
+        if (v[1]) {
+          // αποτέλεσμα: ράβδος ανάλογη με τις ψήφους, ο αριθμός από πάνω και το ποσοστό μέσα
+          const full = g.top - g.lab - h * 0.14, bh = Math.max(4, (full * votes[i]) / most), by = g.top - g.lab - bh;
+          rrect(c, x, by, g.cw, bh, Math.min(10, g.cw * 0.08));
+          c.fill();
+          text(c, String(votes[i]), x + g.cw / 2, by - h * 0.055, h * 0.085, env.ink, 800);
+          if (total && bh > h * 0.1) text(c, `${Math.round((100 * votes[i]) / total)}%`, x + g.cw / 2, by + bh / 2 + 1, Math.min(h * 0.06, g.cw * 0.24), '#ffffff', 700);
+          text(c, name, x + g.cw / 2, g.top - g.lab / 2 + 1, g.lab * 0.72, env.ink, 800);
+        } else {
+          // ψηφοφορία: μεγάλο κουμπί για κάθε επιλογή· οι ψήφοι δεν φαίνονται, για να μην επηρεάζεται κανείς
+          const hit = an && (an.prev[2 + i] ?? 0) < votes[i];
+          rrect(c, x, h * 0.04, g.cw, g.top - h * 0.08, g.cw * 0.14);
+          c.globalAlpha = hit ? 1 : 0.82;
+          c.fill();
+          c.globalAlpha = 1;
+          text(c, name, x + g.cw / 2, g.top / 2 + 1, Math.min(g.cw * 0.6, g.top * 0.5) * (hit ? 1.12 : 1), '#ffffff', 800);
+        }
+        c.restore();
+      }
+      const y = g.top + (h - g.top) / 2;
+      if (!total) {
+        knob(c, w * 0.08, y, g.r, '−', env);
+        knob(c, w * 0.2, y, g.r, '+', env);
+      } else knob(c, w * 0.08, y, g.r, '⟳', env);
+      text(c, total === 1 ? 'Ψήφισε 1' : `Ψήφισαν ${total}`, w * 0.5, y + 1, (h - g.top) * 0.36, env.ink, 600);
+      skinBtn(c, w * 0.9, y, g.r, '📊', !!v[1], env);
+    },
+    tap(v, x, y, w, h) {
+      const g = pollGeom(v, w, h), sy = g.top + (h - g.top) / 2;
+      const votes = Array.from({ length: g.n }, (_, i) => v[2 + i] ?? 0);
+      const total = sum(votes);
+      if (inR(x, y, w * 0.9, sy, g.r)) return [g.n, v[1] ? 0 : 1, ...votes];
+      if (!total) {
+        if (inR(x, y, w * 0.08, sy, g.r)) return g.n > 2 ? [g.n - 1, 0] : null;
+        if (inR(x, y, w * 0.2, sy, g.r)) return g.n < 5 ? [g.n + 1, 0] : null;
+      } else if (inR(x, y, w * 0.08, sy, g.r)) return [g.n, 0];
+      if (y < 0 || y >= g.top) return null;
+      const i = Math.floor((x - g.gap / 2) / (g.cw + g.gap));
+      if (i < 0 || i >= g.n) return null;
+      votes[i]++;
+      return [g.n, v[1] ? 1 : 0, ...votes];
+    },
+    fx: (prev, next) => (next[1] && !prev[1] ? 'drum' : 'click'),
+  }),
+
   balance: kid({
     label: 'Ζυγαριά', w: 660, h: 430, init: [1, 0],
     drawKid(c, w, h, v, env) {
@@ -1278,14 +1387,21 @@ export const KIDS: Record<string, StampDef> = {
           text(c, String(n), x, cy + 1, cr * 1.05, '#ffffff', 700);
         }
       });
+      // άσκηση: τα αριστερά βαρίδια είναι δοσμένα και ζητείται να ισορροπήσει η ζυγαριά από τα δεξιά
+      skinBtn(c, w * 0.07, h * 0.1, w * 0.045, '🎯', !!s.goal, env);
+      if (s.goal) fitText(c, L === R ? '✓ Ισορρόπησε!' : 'Ισορρόπησε τη ζυγαριά', w / 2, h * 0.06, h * 0.06, w * 0.6, L === R ? GOOD : env.ink, 700);
+      c.fillStyle = env.ink;
       // όταν ισορροπήσει με βαρίδια και στις δύο πλευρές, η ισότητα «ανάβει» πράσινη για λίγο
       const glow = an && s.show && L === R && L > 0 && an.t < 1200 ? Math.sin((an.t / 1200) * Math.PI) : 0;
       text(c, s.show ? `${L} ${L === R ? '=' : L > R ? '>' : '<'} ${R}` : '?', w / 2, cg.my + 1, w * 0.04 * (1 + glow * 0.5), glow > 0.05 ? GREEN : env.ink, 800);
     },
     tap(v, x, y, w, h) {
       const s = readScale(v), g = scaleGeom(s, w, h);
+      // 🎯: νέα άσκηση· αν η τρέχουσα δεν λύθηκε, τη σταματά
+      if (inR(x, y, w * 0.07, h * 0.1, w * 0.045)) return writeScale(s.goal && !scaleEq(s) ? { ...s, goal: false } : scaleGoal(s));
       const hit = [...g.spots].reverse().find((p) => Math.abs(x - p.x) < g.box * 0.6 && Math.abs(y - p.y) < g.box * 0.6);
       if (hit) {
+        if (s.goal && !hit.side) return null;
         (hit.side ? s.right : s.left).splice(hit.k, 1);
         return writeScale(s);
       }
@@ -1294,6 +1410,7 @@ export const KIDS: Record<string, StampDef> = {
         for (const side of [0, 1]) {
           const [cx, cy] = cg.at(i, side);
           if (!inR(x, y, cx, cy, cg.cr * 1.12)) continue;
+          if (s.goal && !side) return null;
           const list = side ? s.right : s.left;
           if (list.length >= 12) return null;
           list.push(CHIPS[i]);
@@ -1305,8 +1422,7 @@ export const KIDS: Record<string, StampDef> = {
     },
     fx(prev, next) {
       const p = readScale(prev), n = readScale(next);
-      const eq = (q: Scale): boolean => sum(q.left) === sum(q.right) && sum(q.left) > 0;
-      return eq(n) && !eq(p) ? 'equal' : 'click';
+      return scaleEq(n) && !scaleEq(p) ? (n.goal ? 'win' : 'equal') : 'click';
     },
   }),
 

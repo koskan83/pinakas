@@ -59,6 +59,7 @@ const I = {
   ruler: IC('<rect x="2" y="8" width="20" height="8" rx="1"/><path d="M6 8v3M10 8v4M14 8v3M18 8v4"/>'),
   protractor: P('M3 17a9 9 0 0 1 18 0zM12 17v-3M7.5 12.500l1.500 1.500M16.5 12.5l-1.5 1.5'),
   compass: IC('<circle cx="12" cy="4.500" r="1.500"/><path d="M12 6L6 21M12 6l6 15M8.500 14h7"/>'),
+  poll: IC('<path d="M4 20h16"/><rect x="5" y="11" width="3.500" height="7" rx="1"/><rect x="10.250" y="5" width="3.500" height="13" rx="1"/><rect x="15.500" y="14" width="3.500" height="4" rx="1"/>'),
   lottery: IC('<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.300 2.700-6 6-6s6 2.700 6 6"/><path d="M17 4.500l1 2 2.200.300-1.600 1.500.400 2.200-2-1.100-2 1.100.400-2.200"/>'),
   physics: IC('<path d="M2 12h2l1.500-4 2.500 8 2.500-8 2.500 8 1.500-4h1.500"/><rect x="16" y="8" width="6" height="8" rx="1"/>'),
   timer: IC('<circle cx="12" cy="13.500" r="7.500"/><path d="M12 13.500V9.500M9.500 3h5M12 3v3"/>'),
@@ -113,6 +114,7 @@ export function mountUi(app: HTMLElement): void {
     ${mi('data-act="ai"', I.spark, 'Αναγνώριση γραφής και λύσεις (κλειδί)…')}
     ${mi('data-act="labels"', I.tag, 'Ονόματα κάτω από τα εικονίδια')}
     ${mi('data-act="pdflogo"', I.doc, 'Λογότυπο στις σελίδες του PDF')}
+    ${mi('data-act="startscr"', I.spark, '«Τι κάνουμε σήμερα;» στο πρώτο άνοιγμα της μέρας')}
     <div class="gHead">Αρχεία</div>
     ${mi('data-act="open"', I.folder, 'Άνοιγμα αρχείου ως νέο μάθημα…')}
     ${mi('data-act="save"', I.save, 'Αποθήκευση του μαθήματος σε αρχείο')}
@@ -312,6 +314,7 @@ export function mountUi(app: HTMLElement): void {
       ${tile('data-gadget="protractor"', I.protractor, 'Μοιρογν.', 'Μοιρογνωμόνιο')}
       ${tile('data-gadget="compass"', I.compass, 'Διαβήτης')}
       ${tile('data-ins="stamps" data-lv="sec"', I.physics, 'Φυσική…', 'Σχήματα φυσικής')}
+      ${tile('data-kid="poll" data-lv="sec"', I.poll, 'Ψηφοφορία', 'Ψηφοφορία της τάξης: Α Β Γ Δ ή ναι/όχι, με ραβδόγραμμα στο τέλος')}
       ${tile('data-kid="lottery" data-lv="sec"', I.lottery, 'Κλήρωση', 'Κλήρωση: βγάζει τυχαίο μαθητή του τμήματος (ή αριθμό, αν το τμήμα δεν έχει ονόματα)')}
     </div>
     <div class="gHead" data-lv="pri" data-tab="num">Εικόνες για μέτρημα</div>
@@ -323,6 +326,7 @@ export function mountUi(app: HTMLElement): void {
       ${tile('data-kid="build"', '<b class="em">🧱</b>', 'Κυβάκια', 'Χτίσιμο με κυβάκια: διαλέγεις υλικό και σέρνεις για να χτίσεις')}
       ${tile('data-kid="hangman"', '<b class="em">🔡</b>', 'Κρεμάλα', 'Κρεμάλα: τυχαία λέξη ή δική σου, με πάτημα στα γράμματα')}
       ${tile('data-kid="dice"', '<b class="em">🎲</b>', 'Ζάρι')}
+      ${tile('data-kid="poll"', '<b class="em">📊</b>', 'Ψηφοφορία', 'Ψηφοφορία της τάξης: Α Β Γ Δ ή ναι/όχι, με ραβδόγραμμα στο τέλος')}
       ${tile('data-kid="lottery"', '<b class="em">🎟️</b>', 'Κλήρωση', 'Κλήρωση: βγάζει τυχαίο μαθητή του τμήματος (ή αριθμό, αν το τμήμα δεν έχει ονόματα)')}
     </div>
     <div class="gHead" data-lv="pri" data-tab="play">Επιβράβευση</div>
