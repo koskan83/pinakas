@@ -375,7 +375,7 @@ const spellKeys = (target: string): string[] => (/[a-z]/.test(target) ? SPELL_KE
 /** Πόσα γράμματα χωρά μια λέξη ή πρόταση, και πόσα μπορεί να γράψει ο μαθητής (λίγα παραπάνω, για τα περιττά). */
 const SPELL_LEN = 40, SPELL_MAX = 42, SPELL_WORDS = 20, SPELL_PICK = 8;
 /** Πόσο κρατά το φάγωμα ενός λάθους (ms) και πότε αρχίζει το πρώτο. */
-const SPELL_STEP = 800, SPELL_T0 = 350;
+const SPELL_STEP = 800, SPELL_T0 = 350, SPELL_SNIFF = 300;
 const SPELL_GRADES = ['Α΄', 'Β΄', 'Γ΄', 'Δ΄', 'Ε΄', 'ΣΤ΄'];
 /** Έτοιμες λέξεις ανά τάξη· κάθε παιχνίδι παίρνει στην τύχη SPELL_PICK από αυτές. */
 const SPELL_READY = [
@@ -395,6 +395,7 @@ const SPELL_READY_EN = [
   'different=διαφορετικός favourite=αγαπημένος wednesday=Τετάρτη mountain=βουνό language=γλώσσα question=ερώτηση february=Φεβρουάριος together=μαζί vegetable=λαχανικό computer=υπολογιστής yesterday=χθες dangerous=επικίνδυνος',
   'environment=περιβάλλον necessary=απαραίτητος restaurant=εστιατόριο temperature=θερμοκρασία government=κυβέρνηση interesting=ενδιαφέρων neighbour=γείτονας knowledge=γνώση dictionary=λεξικό experience=εμπειρία invitation=πρόσκληση comfortable=άνετος',
 ].map((s) => s.split(' '));
+const SPELL_MEANING = new Map(SPELL_READY_EN.flat().map((e) => e.split('=') as [string, string]));
 /** Λέξη ή πρόταση όπως συγκρίνεται, ελληνική ή αγγλική: πεζά με τους τόνους τους, χωρίς στίξη (μένει η απόστροφος) και διπλά κενά. */
 export function spellNorm(text: string, max = SPELL_LEN): string {
   return text.toLocaleLowerCase('el').replace(/[’`´]/g, "'").replace(/[^α-ωάέήίόύώϊϋΐΰa-z' ]/g, '').replace(/ +/g, ' ').trim().slice(0, max).trim();
@@ -411,17 +412,19 @@ export function spellList(text: string): { words: string[]; hints: string[] } {
     const word = spellNorm(swap ? b : a);
     if (!word || words.length >= SPELL_WORDS) continue;
     words.push(word);
-    hints.push((swap ? a : b).replace(/\s+/g, ' ').trim().slice(0, SPELL_LEN));
+    // αγγλική λέξη χωρίς σημασία: αν είναι από τις έτοιμες, μπαίνει η δική τους
+    hints.push((swap ? a : b).replace(/\s+/g, ' ').trim().slice(0, SPELL_LEN) || (SPELL_MEANING.get(word) ?? ''));
   }
   return { words, hints };
 }
 /**
  * Η κατάσταση του παιχνιδιού.
- * `phase`: 0 ο μαθητής γράφει · 1 πρώτος έλεγχος, τα λάθη σημαδεμένα για να τα διορθώσει · 2 τέλος της λέξης ·
+ * `phase`: 0 ο μαθητής γράφει · 1 πρώτος έλεγχος, το τερατάκι έφαγε τα λάθη και ο μαθητής γράφει το σωστό στα κενά · 2 τέλος της λέξης ·
  * 3 γραφή με το χέρι χωρίς ανάγνωση: φαίνεται η σωστή και η τάξη λέει αν γράφτηκε σωστά.
- * `res` ανά λέξη: 0 δεν παίχτηκε · 1 σωστή με την πρώτη · 2 σωστή μετά τη διόρθωση · 10 + όσα λάθη έφαγε το τερατάκι.
- * `sel`: το γράμμα που έχει πιαστεί για αλλαγή (θέση + 1), 0 αν γράφει στο τέλος. `marks`: ποια γράμματα σημάδεψε ο πρώτος έλεγχος
- * (το «_» είναι θέση όπου λείπει γράμμα). `peek`: η σωστή λέξη φαίνεται· `ready`: έτοιμες λέξεις, άρα κάθε νέα λέξη δείχνεται πρώτα.
+ * `res` ανά λέξη: 0 δεν παίχτηκε · 1 σωστή με την πρώτη · 10 + όσα λάθη έφαγε το τερατάκι (και όσο διορθώνεται, και αν έμεινε λάθος) ·
+ * 100 + όσα έφαγε, αν γράφτηκε σωστά στη δεύτερη προσπάθεια (2 σε παλιότερες καταστάσεις).
+ * `sel`: το γράμμα που έχει πιαστεί για αλλαγή (θέση + 1), 0 αν γράφει στο τέλος. `marks`: ποιες θέσεις άδειασε ο πρώτος έλεγχος
+ * (το «_» είναι κενή θέση που περιμένει γράμμα). `peek`: η σωστή λέξη φαίνεται· `ready`: έτοιμες λέξεις, άρα κάθε νέα λέξη δείχνεται πρώτα.
  * `hints`: ανά λέξη, αυτό που βλέπει ο μαθητής αντί να την ακούσει (η σημασία της στα ελληνικά), ή κενό. `said`: αλλάζει σε κάθε πάτημα του 🔊.
  * `en`: στην αρχική οθόνη έχουν διαλεχτεί τα Αγγλικά (έτοιμες αγγλικές λέξεις, υπαγόρευση στα αγγλικά).
  */
@@ -469,23 +472,27 @@ export function spellDiff(typed: string, target: string): { a: string | null; b:
   return out.reverse();
 }
 /** Πόσα λάθη έχει φάει το τερατάκι σε όλες τις λέξεις μέχρι τώρα. */
-const spellEaten = (res: number[]): number => res.reduce((sum, r) => sum + (r >= 10 ? r - 10 : 0), 0);
+const spellAte = (r: number): number => (r >= 100 ? r - 100 : r >= 10 ? r - 10 : 0);
+const spellEaten = (res: number[]): number => res.reduce((sum, r) => sum + spellAte(r), 0);
+/** Η λέξη γράφτηκε σωστά στη δεύτερη προσπάθεια, αφού το τερατάκι έφαγε τα λάθη της πρώτης. */
+const spellFixed = (r: number): boolean => r === 2 || r >= 100;
 /** Το τερατάκι μεγαλώνει με κάθε λάθος που τρώει, γρήγορα στην αρχή και όλο και λιγότερο, έως το διπλάσιο. */
 const spellR = (w: number, eaten: number): number => w * 0.042 * (2 - Math.exp(-eaten / 5));
 /**
- * Ο έλεγχος αυτού που γράφτηκε. Την πρώτη φορά τα λάθη μόνο σημαδεύονται, για να τα διορθώσει ο μαθητής·
- * τη δεύτερη, όσα έμειναν τα τρώει το τερατάκι και φαίνεται το σωστό.
+ * Ο έλεγχος αυτού που γράφτηκε. Την πρώτη φορά το τερατάκι τρώει τα λάθη και αφήνει τη θέση τους κενή («_»), για να γράψει
+ * ο μαθητής το σωστό· ό,τι περίσσευε φεύγει. Τη δεύτερη, τρώει όσα έμειναν και φαίνεται το σωστό.
  */
 function spellCheck(s: Spell, written: string): Spell | null {
   const target = s.words[s.idx], t = spellNorm(written, SPELL_MAX);
   if (!target || !t) return null;
   const diff = spellDiff(t, target), bad = diff.filter((cell) => cell.a !== cell.b).length;
-  const res = [...s.res];
+  const res = [...s.res], ate = spellAte(res[s.idx] ?? 0);
   if (bad && s.phase === 0) {
-    const marks = diff.map((cell) => cell.a !== cell.b);
-    return { ...s, phase: 1, peek: false, typed: diff.map((cell) => cell.a ?? '_').join(''), marks, sel: s.hand ? 0 : marks.indexOf(true) + 1 };
+    const kept = diff.filter((cell) => cell.b !== null), marks = kept.map((cell) => cell.a !== cell.b);
+    res[s.idx] = 10 + bad;
+    return { ...s, phase: 1, peek: false, typed: kept.map((cell) => (cell.a === cell.b ? cell.a : '_')).join(''), marks, sel: s.hand ? 0 : marks.indexOf(true) + 1, res };
   }
-  res[s.idx] = bad ? 10 + bad : s.phase === 1 ? 2 : 1;
+  res[s.idx] = bad ? 10 + ate + bad : ate ? 100 + ate : 1;
   return { ...s, phase: 2, peek: false, typed: t, marks: [], sel: 0, res };
 }
 /** Η επόμενη λέξη (ή, μετά την τελευταία, τα αποτελέσματα). */
@@ -1764,15 +1771,15 @@ export const KIDS: Record<string, StampDef> = {
       const n = s.words.length;
       // μετά την τελευταία λέξη: τα αποτελέσματα
       if (s.idx >= n) {
-        const ok = s.res.filter((r) => r === 1 || r === 2).length, r = spellR(w, eaten);
+        const ok = s.res.filter((r) => r === 1 || spellFixed(r)).length, r = spellR(w, eaten);
         monster(c, w * 0.14, h * 0.5, r, eaten ? 0.25 : 0);
         fitText(c, `Τέλος! ${ok} από ${n} σωστές`, w * 0.6, h * 0.09, h * 0.068, w * 0.7, env.ink, 800);
         fitText(c, eaten ? `Το τερατάκι έφαγε ${lathi(eaten)} και μεγάλωσε!` : 'Το τερατάκι έμεινε νηστικό!', w * 0.6, h * 0.175, h * 0.042, w * 0.7, eaten ? ORANGE : GOOD, 700);
         const cols = n > 10 ? 2 : 1, rows = Math.ceil(n / cols), rh = Math.min(h * 0.085, (h * 0.6) / rows);
         s.words.forEach((word, i) => {
-          const res = s.res[i], icon = res === 1 ? '⭐' : res === 2 ? '✅' : res >= 10 ? '👾' : '➖';
+          const res = s.res[i], fixed = spellFixed(res), icon = res === 1 ? '⭐' : fixed ? '✅' : res >= 10 ? '👾' : '➖';
           const x = cols === 1 ? w * 0.6 : w * (0.45 + 0.34 * Math.floor(i / rows));
-          fitText(c, `${icon} ${word}`, x, h * 0.25 + rh * ((i % rows) + 0.5), rh * 0.7, cols === 1 ? w * 0.66 : w * 0.32, res >= 10 ? PURPLE : env.ink, 700);
+          fitText(c, `${icon} ${word}`, x, h * 0.25 + rh * ((i % rows) + 0.5), rh * 0.7, cols === 1 ? w * 0.66 : w * 0.32, res >= 10 && !fixed ? PURPLE : env.ink, 700);
         });
         btn(w * 0.02, g.by, w * 0.47, g.bh, '↺ Ξανά οι ίδιες λέξεις', PURPLE);
         btn(w * 0.51, g.by, w * 0.47, g.bh, '✏️ Νέες λέξεις', BLUE);
@@ -1781,13 +1788,34 @@ export const KIDS: Record<string, StampDef> = {
       const target = s.words[s.idx], res = s.res[s.idx] ?? 0, hint = s.hints[s.idx];
       // τι φαίνεται στη γραμμή: η σωστή λέξη (👁, ή γραφή με το χέρι χωρίς ανάγνωση), το αποτέλεσμα του ελέγχου, ή ό,τι γράφει ο μαθητής
       const whole = s.peek || s.phase === 3 || (s.phase === 2 && !s.typed);
-      const diff = s.phase === 2 && s.typed ? spellDiff(s.typed, target) : [];
+      // πρώτος έλεγχος που μόλις έγινε: φαίνεται ακόμη ό,τι είχε γραφτεί, και το τερατάκι τρώει τα λάθη του ένα ένα
+      const first = s.phase === 1 && prev?.phase === 0
+        ? (prev.typed ? spellDiff(spellNorm(prev.typed, SPELL_MAX), target) : [...s.typed].map((ch, i) => ({ a: ch === '_' ? null : ch, b: s.marks[i] ? '' : ch })))
+        : [];
+      const eat1 = at < SPELL_SNIFF + SPELL_T0 + first.filter((cell) => cell.a !== cell.b).length * SPELL_STEP + 400 && first.length > 0;
+      const diff = eat1 ? first : s.phase === 2 && s.typed ? spellDiff(s.typed, target) : [];
       const bad = diff.map((cell, i) => (cell.a === cell.b ? -1 : i)).filter((i) => i >= 0);
-      const count = whole ? target.length : s.phase === 2 ? diff.length : s.typed.length, m = Math.max(count, 1);
+      const count = whole ? target.length : s.phase === 2 || eat1 ? diff.length : s.typed.length, m = Math.max(count, 1);
       const { cw, x0 } = spellLay(w, count, eaten), ry = g.base - cw * 0.62;
       const cx = (i: number): number => x0 + (i + 0.5) * cw;
-      // ο τελικός έλεγχος μόλις έγινε: το τερατάκι περνά από τα λάθη ένα ένα· αλλιώς φαίνεται κατευθείαν το αποτέλεσμα
-      const t = s.phase === 2 && prev && prev.phase !== 2 ? at : Infinity;
+      // πριν γραφτεί οτιδήποτε, στη γραμμή φαίνεται μεγάλη η σημασία της λέξης: το τερατάκι στέκεται δίπλα της
+      const big = !whole && s.phase === 0 && !s.typed && !!hint;
+      c.save();
+      c.font = `800 ${w * 0.075}px ${FONT}`;
+      const half = big ? Math.min(c.measureText(hint).width, w * 0.62) / 2 + cw * 0.15 : 0;
+      c.restore();
+      // ο έλεγχος μόλις έγινε: το τερατάκι περνά από τα λάθη ένα ένα (στον πρώτο, αφού τα μυρίσει)· αλλιώς φαίνεται κατευθείαν το αποτέλεσμα
+      const t = eat1 ? at - SPELL_SNIFF : s.phase === 2 && prev && prev.phase !== 2 ? at : Infinity;
+      // κενή θέση: εδώ θα γραφτεί το σωστό γράμμα
+      const slot = (i: number): void => {
+        c.save();
+        c.strokeStyle = RED;
+        c.lineWidth = 2.5;
+        c.setLineDash([cw * 0.1, cw * 0.1]);
+        rrect(c, cx(i) - cw * 0.34, ry - cw * 0.46, cw * 0.68, cw * 0.92, cw * 0.1);
+        c.stroke();
+        c.restore();
+      };
       const end = SPELL_T0 + bad.length * SPELL_STEP;
       // πρόοδος: μία κουκκίδα ανά λέξη
       const pr = Math.min(h * 0.024, (w * 0.6) / n / 2.6);
@@ -1795,8 +1823,8 @@ export const KIDS: Record<string, StampDef> = {
         c.save();
         c.beginPath();
         c.arc(w / 2 + (i - (n - 1) / 2) * pr * 2.6, g.top, pr, 0, Math.PI * 2);
-        if (s.res[i] && (i !== s.idx || t >= end)) {
-          c.fillStyle = s.res[i] === 1 ? YELLOW : s.res[i] === 2 ? GOOD : PURPLE;
+        if (s.res[i] && (i !== s.idx || (s.phase === 2 && t >= end))) {
+          c.fillStyle = s.res[i] === 1 ? YELLOW : spellFixed(s.res[i]) ? GOOD : PURPLE;
           c.fill();
         } else {
           c.globalAlpha = i === s.idx ? 1 : 0.3;
@@ -1818,7 +1846,7 @@ export const KIDS: Record<string, StampDef> = {
       c.restore();
       if (whole) {
         [...target].forEach((ch, i) => text(c, ch, cx(i), ry, cw * 0.95, s.peek ? BLUE : GOOD, 800));
-      } else if (s.phase === 2) {
+      } else if (s.phase === 2 || eat1) {
         diff.forEach((cell, i) => {
           const k = bad.indexOf(i);
           if (k < 0) {
@@ -1829,6 +1857,12 @@ export const KIDS: Record<string, StampDef> = {
           if (t < eatenAt) {
             // το λάθος γράμμα μικραίνει καθώς το δαγκώνει
             if (cell.a) text(c, cell.a, cx(i), ry, cw * 0.95 * Math.max(0.05, Math.min(1, (eatenAt - t) / 150)), RED, 700);
+            else if (eat1) slot(i);
+            return;
+          }
+          if (eat1) {
+            // πρώτος έλεγχος: μένει κενή θέση, το σωστό δεν φαίνεται· γράμμα που περίσσευε απλώς χάνεται
+            if (cell.b !== null) slot(i);
             return;
           }
           // στη θέση του το σωστό, πράσινο· από κάτω μένει σβησμένο αυτό που είχε γραφτεί
@@ -1848,7 +1882,6 @@ export const KIDS: Record<string, StampDef> = {
         });
       } else {
         [...s.typed].forEach((ch, i) => {
-          const marked = s.marks[i];
           if (s.sel === i + 1) {
             // το γράμμα που έχει πιαστεί: το επόμενο πλήκτρο το αλλάζει
             rrect(c, cx(i) - cw * 0.46, ry - cw * 0.62, cw * 0.92, cw * 1.2, cw * 0.14);
@@ -1862,32 +1895,17 @@ export const KIDS: Record<string, StampDef> = {
             c.stroke();
             c.restore();
           }
-          if (ch === '_') {
-            // εδώ λείπει γράμμα
-            c.save();
-            c.strokeStyle = RED;
-            c.lineWidth = 2.5;
-            c.setLineDash([cw * 0.1, cw * 0.1]);
-            rrect(c, cx(i) - cw * 0.3, ry - cw * 0.4, cw * 0.6, cw * 0.8, cw * 0.1);
-            c.stroke();
-            c.restore();
-            text(c, '?', cx(i), ry, cw * 0.5, RED, 800);
-            return;
-          }
-          text(c, ch, cx(i), ry, cw * 0.95, marked ? RED : env.ink, 700);
-          if (marked) {
-            // κυματιστή κόκκινη γραμμή κάτω από το λάθος
-            c.save();
-            c.strokeStyle = RED;
-            c.lineWidth = Math.max(2, cw * 0.05);
-            c.beginPath();
-            for (let q = 0; q <= 8; q++) c.lineTo(cx(i) - cw * 0.36 + (cw * 0.72 * q) / 8, g.base + cw * 0.14 + (q % 2 ? -1 : 1) * cw * 0.05);
-            c.stroke();
-            c.restore();
-          }
+          // κενή θέση: το λάθος το έφαγε το τερατάκι (ή έλειπε γράμμα)
+          if (ch === '_') slot(i);
+          else text(c, ch, cx(i), ry, cw * 0.95, env.ink, 700);
         });
-        // δείκτης γραφής στο τέλος
-        if (s.phase === 0 && !s.hand && !s.sel && s.typed.length < SPELL_MAX) {
+        // πριν γραφτεί οτιδήποτε, η σημασία της λέξης φαίνεται μεγάλη πάνω στη γραμμή
+        if (big) {
+          c.save();
+          c.globalAlpha = 0.75;
+          fitText(c, hint, w / 2, ry, w * 0.075, w * 0.62, BLUE, 800);
+          c.restore();
+        } else if (s.phase === 0 && !s.hand && !s.sel && s.typed.length < SPELL_MAX) {
           c.save();
           c.globalAlpha = 0.5;
           c.lineWidth = 3;
@@ -1899,31 +1917,33 @@ export const KIDS: Record<string, StampDef> = {
           c.restore();
         }
       }
-      // το τερατάκι στέκεται στη γραμμή, αριστερά της λέξης· στον έλεγχο πηδά σε κάθε λάθος, το τρώει και μεγαλώνει, και στο τέλος κάθεται δεξιά
+      // το τερατάκι στέκεται στη γραμμή, αριστερά της λέξης· στον έλεγχο πηδά σε κάθε λάθος, το τρώει, το μασάει και μεγαλώνει· στον τελικό έλεγχο κάθεται μετά δεξιά
       const done = bad.filter((_, k) => t >= SPELL_T0 + k * SPELL_STEP + 450).length;
       const since = t - (SPELL_T0 + (done - 1) * SPELL_STEP + 450);
       const r = spellR(w, eaten - (res >= 10 && s.typed ? bad.length - done : 0)) * (done && since < 300 ? 1 + 0.2 * Math.sin((Math.PI * since) / 300) : 1);
-      const home = Math.max(r + 4, x0 - r * 1.15), rest = Math.min(w - r - 4, x0 + m * cw + r * 1.15);
+      const home = Math.max(r + 4, (big ? w / 2 - half : x0) - r * 1.15), rest = Math.min(w - r - 4, x0 + m * cw + r * 1.15);
       const ease = (q: number): number => (q <= 0 ? 0 : q >= 1 ? 1 : q * q * (3 - 2 * q));
       let mx = s.phase === 2 ? rest : home, my = g.base - r * 1.1, open = s.phase === 1 ? 0.35 : 0;
       if (t < end + 400 && bad.length) {
         const k = Math.max(0, Math.min(bad.length - 1, Math.floor((t - SPELL_T0) / SPELL_STEP)));
         const ts = SPELL_T0 + k * SPELL_STEP, from = k === 0 ? home : cx(bad[k - 1]), to = cx(bad[k]);
         if (t >= end) {
-          mx = to + (rest - to) * ease((t - end) / 400);
+          mx = to + ((eat1 ? home : rest) - to) * ease((t - end) / 400);
         } else {
           const q = ease((t - ts) / 300);
           mx = from + (to - from) * q;
           my -= Math.sin(q * Math.PI) * r * 0.8;
-          open = t < ts + 450 ? Math.min(1, Math.max(0, (t - ts - 150) / 200)) : Math.max(0, 1 - (t - ts - 450) / 120);
+          const u = t - ts - 450;
+          open = u < 0 ? Math.min(1, Math.max(0, (u + 300) / 200)) : 0.4 * Math.abs(Math.sin(u / 45)) * Math.max(0, 1 - u / 350);
+          // πριν ξεκινήσει μυρίζει: κουνιέται με το στόμα μισάνοιχτο
+          if (eat1 && t < SPELL_T0) {
+            mx += Math.sin(at / 45) * r * 0.12;
+            open = 0.6;
+          }
         }
-      } else if (s.phase === 2 && res < 10 && at < 1200) {
+      } else if (s.phase === 2 && (res < 10 || spellFixed(res)) && at < 1200) {
         // σωστή λέξη: χοροπηδά
         my -= Math.abs(Math.sin(at / 130)) * r * 0.5 * (1 - at / 1200);
-      } else if (s.phase === 1 && prev?.phase === 0 && at < 700) {
-        // πρώτος έλεγχος: μυρίζει τα λάθη
-        mx += Math.sin(at / 45) * r * 0.12;
-        open = 0.6;
       } else if (s.phase < 2 && at < 200) {
         my -= Math.sin((Math.PI * at) / 200) * r * 0.12;
       }
@@ -1933,14 +1953,15 @@ export const KIDS: Record<string, StampDef> = {
       const said = s.peek ? `Δες καλά τη λέξη! ${s.hand ? 'Πάτα το 👁 για να κρυφτεί και γράψε την.' : 'Μόλις πατήσεις γράμμα, κρύβεται.'}`
         : s.phase === 0 && hint ? `${/[a-z]/.test(target) ? 'Γράψε στα αγγλικά' : 'Γράψε'}: ${hint}`
         : s.phase === 0 ? (s.hand ? 'Γράψε με το μολύβι στο πλαίσιο αυτό που ακούς και πάτα «Έλεγχος»' : s.typed ? '' : 'Γράψε με τα γράμματα αυτό που ακούς')
-        : s.phase === 1 ? `Χμ… μυρίζω ${lathi(marked)}! ${s.hand ? 'Σβήσε, διόρθωσε και πάτα ξανά «Έλεγχος».' : 'Πάτα το κόκκινο γράμμα και διόρθωσέ το.'}`
+        : eat1 ? (t < SPELL_T0 ? `Χμ… μυρίζω ${lathi(bad.length)}!` : 'Μιαμ…')
+        : s.phase === 1 ? `Μιαμ! Έφαγα ${lathi(spellAte(res))}. ${s.hand ? 'Σβήσε, γράψε ξανά τη λέξη σωστά και πάτα «Έλεγχος».' : marked ? 'Γράψε το σωστό γράμμα στα κενά.' : 'Δες τη λέξη και πάτα ξανά «Έλεγχος».'}`
         : s.phase === 3 ? 'Έτσι γράφεται. Την έγραψες σωστά;'
         : t < end ? 'Μιαμ…'
         : res === 1 ? 'Τέλεια, με την πρώτη! Το τερατάκι έμεινε νηστικό.'
-        : res === 2 ? 'Μπράβο, το διόρθωσες! Το τερατάκι έμεινε νηστικό.'
+        : spellFixed(res) ? 'Μπράβο, το διόρθωσες!'
         : !s.typed ? 'Μιαμ! Δες πώς γράφεται και πάμε παρακάτω.'
         : `Το τερατάκι έφαγε ${lathi(bad.length)} και μεγάλωσε!`;
-      if (said) fitText(c, said, w / 2, g.msg, h * 0.04, w * 0.94, s.peek || (s.phase === 0 && hint) ? BLUE : s.phase === 1 || (s.phase === 2 && res >= 10) ? ORANGE : s.phase === 2 && t >= end ? GOOD : env.ink, 700);
+      if (said) fitText(c, said, w / 2, g.msg, h * 0.04, w * 0.94, s.peek || (s.phase === 0 && hint) ? BLUE : s.phase === 1 || (s.phase === 2 && res >= 10 && !spellFixed(res)) ? ORANGE : s.phase === 2 && t >= end ? GOOD : env.ink, 700);
       const live = s.phase < 2;
       if (s.hand) {
         // πλαίσιο για γραφή με το χέρι: γραμμές τετραδίου
@@ -2044,8 +2065,8 @@ export const KIDS: Record<string, StampDef> = {
       if (k === 3) return s.phase === 0 && !s.hand ? spellPack({ ...s, hand: true, typed: '', marks: [], sel: 0 }) : null;
       if (k === 4) {
         if (s.phase === 3) {
-          const right = x < g.bx[4] + g.bw[4] / 2, res = [...s.res];
-          res[s.idx] = right ? 1 : 11;
+          const right = x < g.bx[4] + g.bw[4] / 2, res = [...s.res], ate = spellAte(res[s.idx] ?? 0);
+          res[s.idx] = right ? (ate ? 100 + ate : 1) : 11 + ate;
           return spellPack({ ...s, phase: 2, typed: right ? s.words[s.idx] : '', res });
         }
         // με το χέρι τα υπόλοιπα τα χειρίζεται το ask (διάβασμα και καθάρισμα του πλαισίου)
@@ -2089,11 +2110,13 @@ export const KIDS: Record<string, StampDef> = {
       if (playing && (p.words.join() !== n.words.join() || p.idx !== n.idx || p.said !== n.said)) return spellSay(n);
       if (p.words.join() !== n.words.join() || p.hand !== n.hand || p.en !== n.en) return 'new';
       if (!playing) return n.words.length && p.idx < n.idx ? 'win' : 'new';
+      // όσα λάθη έφαγε μόλις τώρα: ένα δάγκωμα για το καθένα, συγχρονισμένο με την κίνηση
+      const ate = Math.min(spellEaten(n.res) - spellEaten(p.res), 12);
       if (n.phase === 2 && p.phase !== 2) {
         const res = n.res[n.idx];
-        return res === 1 ? 'win' : res === 2 ? 'cheer' : n.typed ? `munch${Math.min(res - 10, 12)}` : 'munch1';
+        return res === 1 ? 'win' : spellFixed(res) ? 'cheer' : `munch${n.typed ? ate : 1}`;
       }
-      return n.phase === 1 && p.phase === 0 ? 'hmm' : 'click';
+      return n.phase === 1 && p.phase === 0 ? `sniff${ate}` : 'click';
     },
   }),
 

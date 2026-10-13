@@ -406,6 +406,8 @@ describe('ορθογραφία με το τερατάκι', () => {
     expect(spellList('μήλο, Καλή μέρα;  , apple\nσχολείο').words).toEqual(['μήλο', 'καλή μέρα', 'apple', 'σχολείο']);
     // μετά το «=» αυτό που βλέπει ο μαθητής· ανάποδα γραμμένο, ζητείται πάλι η αγγλική
     expect(spellList('Apple = μήλο, σκύλος=dog, φως')).toEqual({ words: ['apple', 'dog', 'φως'], hints: ['μήλο', 'σκύλος', ''] });
+    // αγγλική από τις έτοιμες χωρίς «=»: παίρνει τη σημασία της· άγνωστη μένει χωρίς
+    expect(spellList('school, spaceship').hints).toEqual(['σχολείο', '']);
   });
   it('αντιστοιχίζει λάθος, περιττό και γράμμα που λείπει', () => {
     const bad = (a: string, b: string): string => spellDiff(a, b).map((c) => (c.a === c.b ? '.' : c.a && c.b ? 's' : c.a ? 'x' : '+')).join('');
@@ -453,27 +455,31 @@ describe('ορθογραφία με το τερατάκι', () => {
     expect(spellState(v)).toMatchObject({ typed: 'μήλω', sel: 0 });
     expect(spellState(key(v, 'ς')!).typed).toBe('μήλως');
   });
-  it('πρώτος έλεγχος σημαδεύει τα λάθη· ο δεύτερος δίνει ό,τι έμεινε στο τερατάκι', () => {
+  it('πρώτος έλεγχος: το τερατάκι τρώει τα λάθη και αφήνει κενές θέσεις· ο δεύτερος τρώει ό,τι έμεινε', () => {
     const typed = type(game(['καλημέρα', 'μήλο']), 'καλιμερα');
     const hint = press(typed, 3)!;
-    expect(spellState(hint)).toMatchObject({ phase: 1, typed: 'καλιμερα', sel: 4, res: [0, 0] });
+    expect(spellState(hint)).toMatchObject({ phase: 1, typed: 'καλ_μ_ρα', sel: 4, res: [12, 0] });
     expect(spellState(hint).marks).toEqual([false, false, false, true, false, true, false, false]);
-    expect(d.fx!(typed, hint)).toBe('hmm');
-    // διορθώνει το πρώτο: πιάνεται μόνο του το επόμενο σημαδεμένο
+    expect(d.fx!(typed, hint)).toBe('sniff2');
+    // γεμίζει την πρώτη κενή θέση: πιάνεται μόνη της η επόμενη
     const one = key(hint, 'η')!;
-    expect(spellState(one)).toMatchObject({ typed: 'καλημερα', sel: 6 });
-    const eaten = press(one, 3)!;
-    expect(spellState(eaten)).toMatchObject({ phase: 2, typed: 'καλημερα', res: [11, 0] });
-    expect(d.fx!(one, eaten)).toBe('munch1');
+    expect(spellState(one)).toMatchObject({ typed: 'καλημ_ρα', sel: 6 });
+    // λάθος και στη δεύτερη προσπάθεια: το τρώει κι αυτό και φαίνεται το σωστό
+    const again = key(one, 'ε')!, eaten = press(again, 3)!;
+    expect(spellState(eaten)).toMatchObject({ phase: 2, typed: 'καλημερα', res: [13, 0] });
+    expect(d.fx!(again, eaten)).toBe('munch1');
     expect(key(eaten, 'α')).toBeNull();
-    // διορθώνει και το δεύτερο: σωστή με τη δεύτερη
+    // γεμίζει σωστά και τη δεύτερη: σωστή με τη δεύτερη, και τα δύο φαγωμένα μένουν στο τερατάκι
     const both = press(key(one, 'έ')!, 3)!;
-    expect(spellState(both)).toMatchObject({ phase: 2, typed: 'καλημέρα', res: [2, 0] });
+    expect(spellState(both)).toMatchObject({ phase: 2, typed: 'καλημέρα', res: [102, 0] });
     expect(d.fx!(one, both)).toBe('cheer');
-    // γράμμα που λείπει γίνεται κενή θέση που περιμένει γράμμα
+    // γράμμα που λείπει γίνεται κενή θέση· γράμμα που περισσεύει τρώγεται και φεύγει
     const gap = spellState(press(type(game(['σχολείο']), 'σχολίο'), 3)!);
     expect(gap).toMatchObject({ typed: 'σχολ_ίο', sel: 5 });
-    expect(spellState(press(key(spellPack(gap), 'ε')!, 3)!)).toMatchObject({ phase: 2, res: [2] });
+    expect(spellState(press(key(spellPack(gap), 'ε')!, 3)!)).toMatchObject({ phase: 2, res: [101] });
+    const extra = press(type(game(['μήλο']), 'μήλοο'), 3)!;
+    expect(spellState(extra)).toMatchObject({ phase: 1, typed: 'μήλο', sel: 0, res: [11] });
+    expect(spellState(press(extra, 3)!)).toMatchObject({ phase: 2, res: [101] });
   });
   it('σωστή με την πρώτη, επόμενη λέξη, αποτελέσματα και ξανά', () => {
     let v = type(game(['μήλο', 'φως']), 'μήλο');
@@ -486,7 +492,7 @@ describe('ορθογραφία με το τερατάκι', () => {
     expect(d.fx!(right, v)).toBe('say|el-GR|φως');
     expect(d.fx!(v, press(v, 4)!)).toBe('say|el-GR|φως');
     v = press(press(press(type(v, 'φος'), 3)!, 3)!, 3)!;
-    expect(spellState(v)).toMatchObject({ idx: 2, res: [1, 11] });
+    expect(spellState(v)).toMatchObject({ idx: 2, res: [1, 12] });
     // στα αποτελέσματα: «Ξανά οι ίδιες» και «Νέες λέξεις»
     expect(spellState(d.tap!(v, d.w * 0.25, d.h * 0.93, d.w, d.h)!)).toMatchObject({ idx: 0, res: [0, 0], words: ['μήλο', 'φως'] });
     expect(spellState(d.tap!(v, d.w * 0.75, d.h * 0.93, d.w, d.h)!).words).toEqual([]);
@@ -500,7 +506,7 @@ describe('ορθογραφία με το τερατάκι', () => {
   it('αγγλική λέξη: αγγλικά πλήκτρα σε τρεις σειρές', () => {
     const v = type(game(["don't"]), "dont'", EN);
     expect(spellState(v).typed).toBe("dont'");
-    expect(spellState(press(press(v, 3)!, 3)!)).toMatchObject({ phase: 2, res: [12] });
+    expect(spellState(press(press(v, 3)!, 3)!)).toMatchObject({ phase: 2, res: [14] });
     expect(spellState(press(type(game(['cat']), 'cat', EN), 3)!).res).toEqual([1]);
   });
   it('με το χέρι: ο «Έλεγχος» διαβάζει το πλαίσιο· χωρίς ανάγνωση η τάξη κρίνει μόνη της', () => {
@@ -513,8 +519,8 @@ describe('ορθογραφία με το τερατάκι', () => {
     expect(read.mode).toBe('read');
     expect(read.area!.y).toBeCloseTo(d.h * 0.475);
     const hint = read.apply('Μίλο')!;
-    expect(spellState(hint)).toMatchObject({ phase: 1, typed: 'μίλο', sel: 0 });
-    expect(spellState(d.ask!(hint, ...button(3), d.w, d.h)!.apply('μήλο')!)).toMatchObject({ phase: 2, res: [2, 0] });
+    expect(spellState(hint)).toMatchObject({ phase: 1, typed: 'μ_λο', sel: 0, res: [11, 0] });
+    expect(spellState(d.ask!(hint, ...button(3), d.w, d.h)!.apply('μήλο')!)).toMatchObject({ phase: 2, res: [101, 0] });
     // κενή ανάγνωση (χωρίς κλειδί ή ίντερνετ): φαίνεται η σωστή και πατιέται «Σωστά» ή «Λάθος»
     const manual = read.apply('')!;
     expect(spellState(manual).phase).toBe(3);

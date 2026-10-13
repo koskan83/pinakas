@@ -2,7 +2,15 @@
   "name": "PrismaBoard",
   "short_name": "PrismaBoard",
   "start_url": "./",
-  "display": "fullscreen",
+  "display": "standalone",
+  "share_target": {
+    "action": "./share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [{ "name": "files", "accept": ["image/*", "application/pdf", ".png", ".jpg", ".jpeg", ".pdf"] }]
+    }
+  },
   "background_color": "#ffffff",
   "theme_color": "#1f2937",
   "icons": [

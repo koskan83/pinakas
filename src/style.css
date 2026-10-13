@@ -358,8 +358,8 @@ body.inking #zoomCtl { pointer-events: none; }
 #toolbar.labels > .group > button[data-l]::after { content: attr(data-l); font-size: 10.5px; line-height: 1; opacity: .8; }
 #toolbar.labels > .group > button[data-l] span svg { width: 24px; height: 24px; }
 .overlay #zoomCtl { display: none; }
-#menu { max-height: calc(100vh - 96px); overflow-y: auto; }
-#menu > * { flex-shrink: 0; }
+#menu, #setMenu { max-height: calc(100vh - 96px); overflow-y: auto; }
+#menu > *, #setMenu > * { flex-shrink: 0; }
 
 /* ---------- αποστολή στους μαθητές ---------- */
 #sendMenu { width: 440px; max-width: calc(100vw - 16px); padding: 14px; gap: 8px; }

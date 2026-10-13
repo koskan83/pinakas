@@ -122,6 +122,7 @@ export function mountUi(app: HTMLElement): void {
     <div class="gHead">Για προχωρημένους</div>
     ${mi('data-act="diag"', I.target, 'Διάγνωση αφής/γραφίδας')}
     ${mi('data-act="test"', I.check, 'Λίστα δοκιμής στην τάξη')}
+    ${mi('data-act="usage"', I.check, 'Μετρητές χρήσης (αρχείο)')}
     ${mi('data-act="news"', I.spark, 'Τι νέο')}
     <div id="verLine"></div>
   </div>
@@ -325,7 +326,7 @@ export function mountUi(app: HTMLElement): void {
     <div class="gHead" data-lv="pri" data-tab="play">Παιχνίδια</div>
     <div class="tiles" data-lv="pri" data-tab="play">
       ${tile('data-kid="build"', '<b class="em">🧱</b>', 'Κυβάκια', 'Χτίσιμο με κυβάκια: διαλέγεις υλικό και σέρνεις για να χτίσεις')}
-      ${tile('data-kid="spell"', '<b class="em">👾</b>', 'Ορθογραφία', 'Ορθογραφία: έτοιμες λέξεις ανά τάξη ή δικές σου· ο μαθητής γράφει, διορθώνει, και ό,τι λάθος μείνει το τρώει το τερατάκι και μεγαλώνει')}
+      ${tile('data-kid="spell"', '<b class="em">👾</b>', 'Ορθογραφία', 'Ορθογραφία: έτοιμες λέξεις ανά τάξη ή δικές σου· ο μαθητής γράφει, το τερατάκι τρώει τα λάθη και μεγαλώνει, και ο μαθητής γράφει το σωστό στα κενά')}
       ${tile('data-kid="hangman"', '<b class="em">🔡</b>', 'Κρεμάλα', 'Κρεμάλα: τυχαία λέξη ή δική σου, με πάτημα στα γράμματα')}
       ${tile('data-kid="dice"', '<b class="em">🎲</b>', 'Ζάρι')}
       ${tile('data-kid="poll"', '<b class="em">📊</b>', 'Ψηφοφορία', 'Ψηφοφορία της τάξης: Α Β Γ Δ ή ναι/όχι, με ραβδόγραμμα στο τέλος')}
@@ -449,7 +450,7 @@ export function mountUi(app: HTMLElement): void {
   <div id="diag" class="hidden"></div>
   <div id="toast" class="hidden"></div>
   <div id="drop" class="hidden">Άφησε το αρχείο εδώ (εικόνα, PDF ή Word)</div>
-  <input id="fileImport" type="file" accept="image/*,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden />
+  <input id="fileImport" type="file" accept="image/*,.png,.jpg,.jpeg,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden />
   <input id="fileOpen" type="file" accept=".json,application/json" hidden />
 `
   );

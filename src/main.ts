@@ -18,6 +18,7 @@ import { clearMeasShape } from './measure-ui';
 import { ai, autoKind, openAi } from './recognize-ui';
 import { endLesson, lessonPdf, openSend, pdfLogo, pickPages, setPdfLogo } from './send-ui';
 import { initToolbar } from './toolbar-pos';
+import { trackUsage, usageReport } from './usage';
 
 // ---------- εισαγωγή ----------
 
@@ -42,7 +43,8 @@ async function importFiles(files: File[]): Promise<void> {
         } finally {
           pdf.close();
         }
-      } else if (f.type.startsWith('image/')) {
+      } else if (f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp)$/i.test(f.name)) {
+        // σε κάποιες συσκευές (Android, πίνακες) ο επιλογέας αρχείων δεν δίνει τύπο: τότε μετρά η κατάληξη
         const pic = await blobToPic(f);
         board.addPicture(pic.src, pic.w, pic.h);
       } else if (/\.json$/i.test(f.name)) {
@@ -777,6 +779,8 @@ const onMenu = async (e: Event): Promise<void> => {
     openOverlay().catch((err) => toast(`Δεν άνοιξε: ${err}`, 6000));
   } else if (act === 'ai') {
     openAi();
+  } else if (act === 'usage') {
+    download(new Blob([usageReport()], { type: 'text/plain;charset=utf-8' }), `prismaboard_xrisi_${stamp()}.txt`);
   } else if (act === 'diag') {
     $('diag').classList.toggle('hidden');
   } else if (act === 'end') {
@@ -933,12 +937,13 @@ const noVoice = new Set<string>();
 function kidFx(ev: string, x?: number, y?: number): void {
   if (!primary) return;
   if (ev.startsWith('say|')) {
-    // ορθογραφία: η λέξη λέγεται δυνατά· αν η συσκευή δεν έχει φωνή για τη γλώσσα, το λέμε μία φορά
+    // ορθογραφία: η λέξη λέγεται δυνατά· αν δεν ακουστεί, το λέμε μία φορά ανά γλώσσα
     const [, lang, text] = ev.split('|');
-    if (!say(text, lang) && !noVoice.has(lang)) {
+    void say(text, lang).then((heard) => {
+      if (heard || noVoice.has(lang)) return;
       noVoice.add(lang);
-      toast(`Αυτή η συσκευή δεν έχει ${lang.startsWith('el') ? 'ελληνική' : 'αγγλική'} φωνή για να πει τη λέξη. Πες τη εσύ, ή δείξε τη με το 👁.`, 8000);
-    }
+      toast(`Δεν μπόρεσα να πω τη λέξη: η συσκευή δεν έχει ${lang.startsWith('el') ? 'ελληνική' : 'αγγλική'} φωνή και δεν βρήκα φωνή στο ίντερνετ. Πες τη εσύ, ή δείξε τη με το 👁.`, 8000);
+    });
     return;
   }
   playFx(ev, fxPrefs);
@@ -1047,6 +1052,23 @@ export const lessons = isOverlay
 board.onChange = () => lessons?.touch();
 board.kidNames = () => lessons?.names() ?? [];
 
+/** Τα αρχεία που έστειλε άλλη εφαρμογή με «Κοινοποίηση» (τα φύλαξε το sw.js)· διαβάζονται μία φορά. */
+async function sharedFiles(): Promise<File[]> {
+  if (!new URLSearchParams(location.search).has('shared')) return [];
+  history.replaceState(null, '', location.pathname);
+  try {
+    const c = await caches.open('grafida-shared'), out: File[] = [];
+    for (const req of await c.keys()) {
+      const res = await c.match(req);
+      if (res) out.push(new File([await res.blob()], decodeURIComponent(res.headers.get('x-name') ?? ''), { type: res.headers.get('content-type') ?? '' }));
+    }
+    await caches.delete('grafida-shared');
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 void (async () => {
   await lessons?.init().catch((err) => console.error(err));
   refreshUi();
@@ -1054,12 +1076,17 @@ void (async () => {
   // την πρώτη φορά σε κάθε συσκευή, μια σύντομη γνωριμία
   let seen = true;
   try { seen = localStorage.getItem(WELCOME) === '1'; } catch { /* χωρίς αποθήκευση: δεν ενοχλούμε */ }
-  if (!seen && !isOverlay) openWelcome();
+  // η εφαρμογή άνοιξε από «Κοινοποίηση» άλλης εφαρμογής: ό,τι στάλθηκε μπαίνει στο μάθημα που ήταν ανοιχτό
+  const shared = await sharedFiles();
+  if (shared.length) void importFiles(shared);
+  else if (!seen && !isOverlay) openWelcome();
   // στο πρώτο άνοιγμα της μέρας: συνέχισε το τελευταίο μάθημα ή ξεκίνα νέο για το τμήμα σου
   else if (startScr) lessons?.start();
   // μετά από ενημέρωση, μία φορά σε κάθε συσκευή: τι άλλαξε
   if (newsPending(seen) && !isOverlay) void showNews();
 })();
+
+if (!isOverlay) trackUsage();
 
 if (import.meta.env.PROD && !isNative && 'serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});

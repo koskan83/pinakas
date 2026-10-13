@@ -93,7 +93,6 @@ const SOUNDS: Record<string, () => void> = {
   good: () => { tone(660, 0.09, { gain: 0.35 }); tone(990, 0.14, { gain: 0.35, at: 0.08 }); },
   bad: () => tone(220, 0.22, { type: 'sawtooth', to: 140, gain: 0.22 }),
   lose: () => { tone(392, 0.22, { type: 'triangle', gain: 0.35 }); tone(330, 0.22, { type: 'triangle', gain: 0.35, at: 0.2 }); tone(262, 0.5, { type: 'triangle', to: 196, gain: 0.35, at: 0.4 }); },
-  hmm: () => { tone(330, 0.16, { type: 'triangle', gain: 0.32 }); tone(277, 0.3, { type: 'triangle', to: 262, gain: 0.32, at: 0.17 }); },
   equal: () => { tone(1047, 0.7, { gain: 0.35 }); tone(1568, 0.9, { gain: 0.22, at: 0.02 }); },
   dice: () => { for (let i = 0; i < 6; i++) noise(0.035, { gain: 0.3, freq: 1500 + Math.random() * 1500, at: i * 0.075 + Math.random() * 0.02 }); },
   drum: () => {
@@ -115,13 +114,22 @@ export function playFx(ev: string, prefs: FxPrefs): void {
     if (now - lastTok < 45) return;
     lastTok = now;
   }
-  const munch = /^munch(\d+)$/.exec(ev);
+  const munch = /^(munch|sniff)(\d+)$/.exec(ev);
   if (munch) {
-    // συγχρονισμένα με την κίνηση στο εργαλείο της ορθογραφίας: πρώτο δάγκωμα στα 0,8 s, μετά ένα κάθε 0,8 s
-    for (let i = 0; i < Number(munch[1]); i++) {
-      const at = 0.8 + i * 0.8;
-      noise(0.09, { gain: 0.4, freq: 700, to: 250, at });
-      tone(180, 0.1, { type: 'square', to: 90, gain: 0.16, at });
+    // συγχρονισμένα με την κίνηση στο εργαλείο της ορθογραφίας: πρώτο δάγκωμα στα 0,8 s, μετά ένα κάθε 0,8 s·
+    // στον πρώτο έλεγχο το τερατάκι πρώτα μυρίζει (δύο ρουθουνίσματα) και όλα πάνε 0,3 s πιο πίσω
+    const sniff = munch[1] === 'sniff', t0 = sniff ? 1.1 : 0.8;
+    if (sniff) for (const at of [0, 0.22]) noise(0.14, { gain: 0.22, freq: 1800, to: 3200, at });
+    for (let i = 0; i < Number(munch[2]); i++) {
+      const at = t0 + i * 0.8;
+      // «χραπ», δύο μασήματα και κατάποση
+      noise(0.1, { gain: 0.55, freq: 1100, to: 300, at });
+      tone(190, 0.11, { type: 'square', to: 85, gain: 0.2, at });
+      for (const d of [0.13, 0.25]) {
+        noise(0.06, { gain: 0.3, freq: 650, to: 260, at: at + d });
+        tone(140, 0.06, { type: 'square', to: 100, gain: 0.1, at: at + d });
+      }
+      tone(240, 0.1, { to: 520, gain: 0.22, at: at + 0.4 });
     }
     return;
   }
@@ -129,26 +137,64 @@ export function playFx(ev: string, prefs: FxPrefs): void {
 }
 
 /**
- * Λέει δυνατά ένα κείμενο με τη φωνή της συσκευής (ορθογραφία: η λέξη που πρέπει να γραφτεί). `lang` π.χ. 'el-GR'.
- * false αν η συσκευή δεν έχει φωνή για αυτή τη γλώσσα.
+ * Κρυφό πλαίσιο από το οποίο ζητείται η φωνή του διαδικτύου: η υπηρεσία απαντά μόνο σε αιτήματα χωρίς «Referer»,
+ * και αυτό ορίζεται ανά έγγραφο· έτσι δεν αλλάζει τίποτα για τα υπόλοιπα αιτήματα της εφαρμογής.
  */
-export function say(text: string, lang: string): boolean {
-  const synth = typeof speechSynthesis === 'undefined' ? null : speechSynthesis;
-  if (!synth) return false;
-  const voices = synth.getVoices(), is = (v: SpeechSynthesisVoice, l: string): boolean => v.lang.replace('_', '-').toLowerCase().startsWith(l.toLowerCase());
-  const voice = voices.find((v) => is(v, lang)) ?? voices.find((v) => is(v, lang.slice(0, 2)));
-  // η λίστα με τις φωνές μπορεί να μην έχει φορτώσει ακόμα: τότε αφήνουμε τη συσκευή να διαλέξει από τη γλώσσα
-  if (voices.length && !voice) return false;
-  synth.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = lang;
-  if (voice) u.voice = voice;
-  u.rate = 0.8;
-  synth.speak(u);
-  return true;
+let voiceFrame: HTMLIFrameElement | null = null;
+function netAudio(url: string): HTMLAudioElement | null {
+  if (!voiceFrame) {
+    voiceFrame = document.createElement('iframe');
+    voiceFrame.hidden = true;
+    voiceFrame.srcdoc = '<meta name="referrer" content="no-referrer">';
+    document.body.append(voiceFrame);
+    return null;
+  }
+  const win = voiceFrame.contentWindow as (Window & { Audio?: typeof Audio }) | null;
+  return win?.Audio ? new win.Audio(url) : null;
 }
-// οι φωνές φορτώνουν με καθυστέρηση: τις ζητάμε από νωρίς
+let speaking: HTMLAudioElement | null = null, sayNo = 0;
+/**
+ * Λέει δυνατά ένα κείμενο (ορθογραφία: η λέξη που πρέπει να γραφτεί). `lang` π.χ. 'el-GR'.
+ * Με τη φωνή της συσκευής αν έχει για αυτή τη γλώσσα· αλλιώς (συχνό σε Linux και σε Chrome χωρίς ελληνικά) με φωνή από το διαδίκτυο.
+ * false αν δεν ακούστηκε με κανέναν από τους δύο τρόπους.
+ */
+export async function say(text: string, lang: string): Promise<boolean> {
+  const synth = typeof speechSynthesis === 'undefined' ? null : speechSynthesis, no = ++sayNo;
+  const is = (v: SpeechSynthesisVoice, l: string): boolean => v.lang.replace('_', '-').toLowerCase().startsWith(l.toLowerCase());
+  const voices = synth?.getVoices() ?? [], voice = voices.find((v) => is(v, lang)) ?? voices.find((v) => is(v, lang.slice(0, 2)));
+  speaking?.pause();
+  if (synth && (voice || !voices.length)) {
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang;
+    if (voice) u.voice = voice;
+    u.rate = 0.8;
+    // άδεια λίστα φωνών: ή δεν έχει φορτώσει ακόμη (η συσκευή διαλέγει από τη γλώσσα) ή η συσκευή δεν έχει καμία·
+    // αν δεν αρχίσει να μιλά σε λίγο, η λέξη ζητείται από το διαδίκτυο
+    const started = voice ? null : new Promise<boolean>((done) => {
+      u.onstart = () => done(true);
+      u.onerror = () => done(false);
+      setTimeout(() => done(false), 700);
+    });
+    synth.speak(u);
+    if (!started || (await started)) return true;
+    // στο μεταξύ ζητήθηκε άλλη λέξη: αυτή δεν λέγεται πια
+    if (no !== sayNo) return true;
+    synth.cancel();
+  }
+  const audio = netAudio(`https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang.startsWith('en') ? 'en-GB' : lang.slice(0, 2)}&q=${encodeURIComponent(text)}`);
+  if (!audio) return false;
+  speaking = audio;
+  try {
+    await audio.play();
+    return true;
+  } catch {
+    return false;
+  }
+}
+// οι φωνές της συσκευής και το πλαίσιο της φωνής του διαδικτύου ετοιμάζονται από νωρίς
 if (typeof speechSynthesis !== 'undefined') speechSynthesis.getVoices();
+if (typeof document !== 'undefined') netAudio('');
 
 const COLORS = ['#f43f5e', '#f59e0b', '#fde047', '#22c55e', '#3b82f6', '#a855f7', '#ec4899'];
 
