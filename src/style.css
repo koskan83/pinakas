@@ -516,6 +516,16 @@ body.primary #toolbar span[data-em] > * { display: none; }
 body.primary #toolbar span[data-em]::before { content: attr(data-em); font-size: 25px; line-height: 26px; display: block; height: 26px; font-family: "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif; }
 body.primary #toolbar button:disabled span[data-em]::before { opacity: .35; filter: grayscale(1); }
 .tiles.small { grid-template-columns: repeat(11, 1fr); }
+/* Δημοτικό: καρτέλες στα Όργανα, μεγαλύτερα πλακίδια με ολόκληρα ονόματα */
+#gTabs { display: flex; gap: 4px; margin: 10px 0 2px; padding: 4px; border-radius: 14px; background: var(--bar-2); }
+.popup #gTabs button { flex: 1; height: 46px; padding: 0 6px; border-radius: 10px; text-align: center; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.popup #gTabs button.on { background: var(--accent); color: #fff; }
+body.primary #gadgetMenu .tabOff { display: none; }
+body.primary #gadgetMenu .tiles:not(.small) { grid-template-columns: repeat(5, 108px); }
+body.primary #gadgetMenu .tile small { font-size: 13px; }
+body.primary #gadgetMenu .tiles[data-tab] { animation: tabIn .14s ease-out; }
+@keyframes tabIn { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { body.primary #gadgetMenu .tiles[data-tab] { animation: none; } }
 .tile.pic { min-height: 0; padding: 6px 0; }
 .tile.pic span b.em { font-size: 24px; }
 

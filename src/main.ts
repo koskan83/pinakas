@@ -458,10 +458,13 @@ const tileKey = (b: HTMLElement): string => {
 let recent: string[] = (() => { try { return JSON.parse(localStorage.getItem(RECENT) ?? '[]') as string[]; } catch { return []; } })();
 function renderRecent(): void {
   const box = $('recentTiles');
+  const lv = document.body.classList.contains('primary') ? 'pri' : 'sec';
   box.innerHTML = '';
   for (const k of recent) {
     const [a, v] = k.split('=');
-    const src = gadgetMenu.querySelector<HTMLElement>(`.tiles:not(#recentTiles) [data-${a}="${v}"]`);
+    // μόνο ό,τι υπάρχει στη βαθμίδα που είναι ανοιχτή (η Κλήρωση έχει πλακίδιο και στις δύο)
+    const src = [...gadgetMenu.querySelectorAll<HTMLElement>(`.tiles:not(#recentTiles) [data-${a}="${v}"]`)]
+      .find((el) => (el.closest<HTMLElement>('[data-lv]')?.dataset.lv ?? lv) === lv);
     if (src) box.append(src.cloneNode(true));
   }
   const empty = box.children.length === 0;
@@ -475,6 +478,22 @@ gadgetMenu.addEventListener('click', (e) => {
   recent = [k, ...recent.filter((x) => x !== k)].slice(0, 6);
   try { localStorage.setItem(RECENT, JSON.stringify(recent)); } catch { /* χωρίς αποθήκευση */ }
 }, true);
+// στο Δημοτικό τα Όργανα χωρίζονται σε καρτέλες, για να χωράνε χωρίς κύλιση· η τελευταία μένει ανοιχτή
+const GTAB = 'grafida.gtab';
+function setGadgetTab(tab: string): void {
+  const tabs = [...gadgetMenu.querySelectorAll<HTMLElement>('[data-gtab]')];
+  if (!tabs.some((b) => b.dataset.gtab === tab)) tab = 'num';
+  for (const b of tabs) b.classList.toggle('on', b.dataset.gtab === tab);
+  for (const el of gadgetMenu.querySelectorAll<HTMLElement>('[data-tab]')) el.classList.toggle('tabOff', el.dataset.tab !== tab);
+  try { localStorage.setItem(GTAB, tab); } catch { /* χωρίς αποθήκευση */ }
+}
+setGadgetTab((() => { try { return localStorage.getItem(GTAB) ?? 'num'; } catch { return 'num'; } })());
+gadgetMenu.addEventListener('click', (e) => {
+  const tab = (e.target as HTMLElement).closest<HTMLElement>('[data-gtab]')?.dataset.gtab;
+  if (!tab) return;
+  setGadgetTab(tab);
+  placeNear(gadgetMenu, $('gadgetBtn'));
+});
 $('gadgetBtn').onclick = () => {
   renderRecent();
   refreshUi();

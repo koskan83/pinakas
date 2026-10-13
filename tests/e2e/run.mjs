@@ -495,6 +495,9 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   await page.click('#gadgetBtn');
   assert(await visible('#gadgetMenu [data-kid="balance"]'), 'δεν φαίνονται τα εργαλεία του Δημοτικού');
   assert(!(await visible('#gadgetMenu .tiles:not(#recentTiles) [data-axes="full"]')), 'οι άξονες έπρεπε να κρυφτούν στο Δημοτικό');
+  assert(!(await visible('#gadgetMenu .tiles:not(#recentTiles) [data-kid="fracbar"]')), 'τα κλάσματα φαίνονται έξω από την καρτέλα τους');
+  const menuFits = await page.evaluate(() => { const m = document.getElementById('gadgetMenu'); return m.scrollHeight <= m.clientHeight + 1; });
+  await page.click('#gTabs [data-gtab="frac"]');
   await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-kid="fracbar"]');
   let it = (await items(pi)).find((i) => i.kind === 'stamp' && i.name === 'fracbar');
   assert(it && it.v[0] === 4 && it.v[1] === 0, 'δεν μπήκε η μπάρα κλασμάτων');
@@ -517,6 +520,8 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   await page.click('#undo');
   // επιβράβευση: το αστέρι μπαίνει με κομφετί· το ζάρι «κυλάει» και καταλήγει σε αριθμό· ο ήχος κλείνει από το μενού
   await page.click('#gadgetBtn');
+  assert(await visible('#gadgetMenu .tiles:not(#recentTiles) [data-kid="fracbar"]'), 'τα Όργανα δεν θυμήθηκαν την τελευταία καρτέλα');
+  await page.click('#gTabs [data-gtab="play"]');
   await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-kid="star"]');
   const party = (await page.locator('.confetti').count()) === 1;
   await page.click('#undo');
@@ -564,6 +569,7 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   await page.click('#undo');
   await page.reload();
   await page.waitForSelector('#toolbar');
+  assert(menuFits, 'τα Όργανα του Δημοτικού θέλουν κύλιση για να φανούν');
   assert(party, 'το αστέρι δεν έφερε κομφετί');
   assert(rolled, 'το ζάρι δεν έδειξε νέο αριθμό μετά το πάτημα');
   assert(soundLabel.includes('ναι') && soundOff.includes('όχι'), `ο διακόπτης «Ήχοι» δεν άλλαξε (${soundLabel} → ${soundOff})`);
