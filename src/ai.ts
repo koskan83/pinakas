@@ -97,12 +97,12 @@ const PROMPT: Record<AiTask, string> = {
     'Other single letters (a, b, λ) may stay as parameters. Example reply:\nF: 10-2x\nD: 0 ; 5\nX: t\nY: υ\n' +
     'If the image contains no function that can be plotted reply with an empty message.',
   letters:
-    'The image shows a Greek word or short phrase handwritten by a primary-school pupil during a spelling (dictation) exercise. ' +
+    'The image shows a Greek or English word or short sentence handwritten by a primary-school pupil during a spelling (dictation) exercise. ' +
     'A program will compare it letter by letter with the correct spelling, so transcribe EXACTLY the letters the pupil wrote, ' +
     'keeping every spelling mistake: a wrong vowel (ι, η, υ, ει, οι; ο, ω; ε, αι), a missing, extra or doubled letter, σ instead of ς. ' +
     'Never correct, complete or normalise anything, even when the intended word is obvious: a corrected transcription makes the exercise useless. ' +
     'Write an accent (τόνος) only on a letter where the pupil actually drew one, and none where the pupil left it out. ' +
-    'Reply with the transcription only, in lowercase Greek letters, on one line, no quotes, no punctuation. If nothing is readable reply with an empty message.',
+    'Reply with the transcription only, in lowercase letters of the language the pupil wrote in, on one line, no quotes, no punctuation. If nothing is readable reply with an empty message.',
   figure:
     'The image shows the statement of a physics exercise (sometimes geometry) from a Greek secondary-school classroom whiteboard, printed or handwritten. ' +
     'A program will draw the figure a teacher would sketch on the board next to it, before solving: the bodies and surfaces the statement describes, ' +

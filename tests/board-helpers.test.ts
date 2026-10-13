@@ -384,20 +384,26 @@ describe('κρεμάλα', () => {
   });
 });
 
-import { spellDiff, spellNorm, spellState } from '../src/kids';
+import { spellDiff, spellList, spellNorm, spellPack, spellState, type Spell } from '../src/kids';
 
 describe('ορθογραφία με το τερατάκι', () => {
   const d = KIDS.spell;
-  const pack = (flags: number, target: string, typed: string): number[] => [flags, target.length, ...[...target].map((ch) => ch.charCodeAt(0)), ...[...typed].map((ch) => ch.charCodeAt(0))];
-  const key = (v: number[], ch: string): number[] | null => {
-    const rows = ['ςερτυθιοπ', 'ασδφγηξκλ', 'ζχψωβνμ´⌫'];
+  const game = (words: string[], more: Partial<Spell> = {}): number[] =>
+    spellPack({ phase: 0, hand: false, peek: false, ready: false, en: false, idx: 0, sel: 0, words, res: words.map(() => 0), typed: '', marks: [], ...more });
+  const EL = ['αβγδεζηθικ', 'λμνξοπρσςτ', 'υφχψω   ⌫⌫', 'άέήίόύώϊϋΐ'], EN = ['abcdefghij', 'klmnopqrst', "uvwxyz'  ⌫"];
+  const key = (v: number[], ch: string, rows = EL): number[] | null => {
     const row = rows.findIndex((r) => r.includes(ch)), col = rows[row].indexOf(ch);
-    return d.tap!(v, d.w * 0.02 + ((d.w * 0.96) / 9) * (col + 0.5), d.h * 0.46 + d.h * 0.118 * (row + 0.5), d.w, d.h);
+    return d.tap!(v, d.w * (0.02 + 0.096 * (col + 0.5)), d.h * (0.475 + (0.39 * (row + 0.5)) / rows.length), d.w, d.h);
   };
-  const button = (k: number): [number, number] => [d.w * [0.13, 0.36, 0.55, 0.82][k], d.h * 0.9];
-  it('η σωστή λέξη κρατά τόνους και πεζά, χωρίς στίξη', () => {
+  const type = (v: number[], s: string, rows = EL): number[] => [...s].reduce((acc, ch) => key(acc, ch, rows)!, v);
+  /** Τα κουμπιά κάτω: Λέξεις, 👁, τρόπος γραφής, Έλεγχος / Επόμενη. */
+  const button = (k: number): [number, number] => [d.w * [0.095, 0.225, 0.3775, 0.735][k], d.h * 0.93];
+  const press = (v: number[], k: number): number[] | null => d.tap!(v, ...button(k), d.w, d.h);
+  it('κρατά τόνους και πεζά, χωρίς στίξη, σε ελληνικά και αγγλικά', () => {
     expect(spellNorm('  Το Σχολείο!  ')).toBe('το σχολείο');
     expect(spellNorm('ΠΑΪΔΆΚΙΑ')).toBe('παϊδάκια');
+    expect(spellNorm('Don’t  Stop.')).toBe("don't stop");
+    expect(spellList('μήλο, Καλή μέρα;  , apple\nσχολείο')).toEqual(['μήλο', 'καλή μέρα', 'apple', 'σχολείο']);
   });
   it('αντιστοιχίζει λάθος, περιττό και γράμμα που λείπει', () => {
     const bad = (a: string, b: string): string => spellDiff(a, b).map((c) => (c.a === c.b ? '.' : c.a && c.b ? 's' : c.a ? 'x' : '+')).join('');
@@ -407,40 +413,111 @@ describe('ορθογραφία με το τερατάκι', () => {
     expect(bad('σχολλείο', 'σχολείο')).toMatch(/^\.{3,4}x\.{3,4}$/);
     expect(bad('οδοσ', 'οδός')).toBe('..ss');
   });
-  it('πλήκτρα: γράμματα, τόνος στο τελευταίο φωνήεν, σβήσιμο, έλεγχος και ξανά', () => {
-    let v = pack(0, 'μήλο', '');
-    for (const ch of 'μη´λω') v = key(v, ch)!;
-    expect(spellState(v).typed).toBe('μήλω');
-    expect(key(pack(0, 'μήλο', 'μ'), '´')).toBeNull();
-    expect(spellState(key(pack(0, 'μήλο', 'ι'), '´')!).typed).toBe('ί');
-    expect(spellState(key(pack(0, 'μήλο', 'ΐ'), '´')!).typed).toBe('ι');
-    expect(spellState(key(v, '⌫')!).typed).toBe('μήλ');
-    const done = d.tap!(v, ...button(3), d.w, d.h)!;
-    expect(spellState(done)).toEqual({ done: true, hand: false, target: 'μήλο', typed: 'μήλω' });
-    expect(d.fx!(v, done)).toBe('munch1');
-    expect(key(done, 'α')).toBeNull();
-    expect(d.fx!(pack(0, 'μήλο', 'μήλο'), pack(1, 'μήλο', 'μήλο'))).toBe('win');
-    expect(spellState(d.tap!(done, ...button(2), d.w, d.h)!)).toEqual({ done: false, hand: false, target: 'μήλο', typed: '' });
-    // χωρίς σωστή λέξη τα πλήκτρα δεν γράφουν
-    expect(key([0, 0], 'α')).toBeNull();
+  it('η κατάσταση γράφεται και διαβάζεται ίδια· η παλιά (μία λέξη) ξεκινά από την αρχή', () => {
+    const s: Spell = { phase: 1, hand: true, peek: true, ready: true, en: true, idx: 1, sel: 2, words: ['μήλο', 'good morning'], res: [12, 0], typed: 'go_d', marks: [false, false, true, false] };
+    expect(spellState(spellPack(s))).toEqual(s);
+    expect(spellState([1, 4, 956, 942, 955, 959, 956]).words).toEqual([]);
+    expect(spellState(d.init!).words).toEqual([]);
   });
-  it('με το χέρι: το πλαίσιο δεν είναι κουμπί, ο «Έλεγχος» διαβάζει ό,τι γράφτηκε και το «Ξανά» το σβήνει', () => {
-    const hand = d.tap!(pack(0, 'μήλο', 'μη'), ...button(0), d.w, d.h)!;
-    expect(spellState(hand)).toEqual({ done: false, hand: true, target: 'μήλο', typed: '' });
+  it('αρχή: έτοιμες λέξεις ανά τάξη (η πρώτη φαίνεται), αγγλικά, ή δικές σου με κόμμα', () => {
+    const ready = spellState(d.tap!(d.init!, d.w * 0.12, d.h * 0.57, d.w, d.h)!);
+    expect(ready.words.length).toBe(8);
+    expect(new Set(ready.words).size).toBe(8);
+    expect(ready).toMatchObject({ ready: true, peek: true, idx: 0, en: false });
+    const en = d.tap!(d.init!, d.w * 0.6, d.h * 0.42, d.w, d.h)!;
+    expect(spellState(en).en).toBe(true);
+    expect(d.tap!(en, d.w * 0.6, d.h * 0.42, d.w, d.h)).toBeNull();
+    expect(spellState(d.tap!(en, d.w * 0.12, d.h * 0.57, d.w, d.h)!).words.every((x) => /^[a-z]+$/.test(x))).toBe(true);
+    const own = d.ask!(d.init!, d.w / 2, d.h * 0.79, d.w, d.h)!;
+    expect(own).toMatchObject({ secret: true, voice: 'el-GR' });
+    expect(d.ask!(en, d.w / 2, d.h * 0.79, d.w, d.h)!.voice).toBe('en-GB');
+    expect(own.apply(' , ')).toBeNull();
+    expect(spellState(own.apply('Μήλο, καλή μέρα')!)).toMatchObject({ words: ['μήλο', 'καλή μέρα'], res: [0, 0], ready: false, peek: false });
+  });
+  it('πλήκτρα: τονισμένα με ένα πάτημα, σβήσιμο, αλλαγή γράμματος στη μέση', () => {
+    let v = type(game(['μήλο']), 'μιλω');
+    expect(spellState(v).typed).toBe('μιλω');
+    expect(spellState(key(v, '⌫')!).typed).toBe('μιλ');
+    // πάτημα στο δεύτερο γράμμα το πιάνει· το επόμενο πλήκτρο το αλλάζει και η γραφή γυρίζει στο τέλος
+    const cw = d.w * 0.08, x0 = (d.w - 4 * cw) / 2;
+    v = d.tap!(v, x0 + cw * 1.5, d.h * 0.345 - cw * 0.6, d.w, d.h)!;
+    expect(spellState(v).sel).toBe(2);
+    v = key(v, 'ή')!;
+    expect(spellState(v)).toMatchObject({ typed: 'μήλω', sel: 0 });
+    expect(spellState(key(v, 'ς')!).typed).toBe('μήλως');
+  });
+  it('πρώτος έλεγχος σημαδεύει τα λάθη· ο δεύτερος δίνει ό,τι έμεινε στο τερατάκι', () => {
+    const typed = type(game(['καλημέρα', 'μήλο']), 'καλιμερα');
+    const hint = press(typed, 3)!;
+    expect(spellState(hint)).toMatchObject({ phase: 1, typed: 'καλιμερα', sel: 4, res: [0, 0] });
+    expect(spellState(hint).marks).toEqual([false, false, false, true, false, true, false, false]);
+    expect(d.fx!(typed, hint)).toBe('hmm');
+    // διορθώνει το πρώτο: πιάνεται μόνο του το επόμενο σημαδεμένο
+    const one = key(hint, 'η')!;
+    expect(spellState(one)).toMatchObject({ typed: 'καλημερα', sel: 6 });
+    const eaten = press(one, 3)!;
+    expect(spellState(eaten)).toMatchObject({ phase: 2, typed: 'καλημερα', res: [11, 0] });
+    expect(d.fx!(one, eaten)).toBe('munch1');
+    expect(key(eaten, 'α')).toBeNull();
+    // διορθώνει και το δεύτερο: σωστή με τη δεύτερη
+    const both = press(key(one, 'έ')!, 3)!;
+    expect(spellState(both)).toMatchObject({ phase: 2, typed: 'καλημέρα', res: [2, 0] });
+    expect(d.fx!(one, both)).toBe('cheer');
+    // γράμμα που λείπει γίνεται κενή θέση που περιμένει γράμμα
+    const gap = spellState(press(type(game(['σχολείο']), 'σχολίο'), 3)!);
+    expect(gap).toMatchObject({ typed: 'σχολ_ίο', sel: 5 });
+    expect(spellState(press(key(spellPack(gap), 'ε')!, 3)!)).toMatchObject({ phase: 2, res: [2] });
+  });
+  it('σωστή με την πρώτη, επόμενη λέξη, αποτελέσματα και ξανά', () => {
+    let v = type(game(['μήλο', 'φως']), 'μήλο');
+    const right = press(v, 3)!;
+    expect(spellState(right)).toMatchObject({ phase: 2, res: [1, 0] });
+    expect(d.fx!(v, right)).toBe('win');
+    v = press(right, 3)!;
+    expect(spellState(v)).toMatchObject({ phase: 0, idx: 1, typed: '' });
+    v = press(press(press(type(v, 'φος'), 3)!, 3)!, 3)!;
+    expect(spellState(v)).toMatchObject({ idx: 2, res: [1, 11] });
+    // στα αποτελέσματα: «Ξανά οι ίδιες» και «Νέες λέξεις»
+    expect(spellState(d.tap!(v, d.w * 0.25, d.h * 0.93, d.w, d.h)!)).toMatchObject({ idx: 0, res: [0, 0], words: ['μήλο', 'φως'] });
+    expect(spellState(d.tap!(v, d.w * 0.75, d.h * 0.93, d.w, d.h)!).words).toEqual([]);
+  });
+  it('το 👁 δείχνει τη λέξη και το πρώτο πλήκτρο την κρύβει', () => {
+    const shown = press(game(['μήλο']), 1)!;
+    expect(spellState(shown).peek).toBe(true);
+    expect(spellState(key(shown, 'μ')!)).toMatchObject({ peek: false, typed: 'μ' });
+    expect(spellState(press(shown, 1)!).peek).toBe(false);
+  });
+  it('αγγλική λέξη: αγγλικά πλήκτρα σε τρεις σειρές', () => {
+    const v = type(game(["don't"]), "dont'", EN);
+    expect(spellState(v).typed).toBe("dont'");
+    expect(spellState(press(press(v, 3)!, 3)!)).toMatchObject({ phase: 2, res: [12] });
+    expect(spellState(press(type(game(['cat']), 'cat', EN), 3)!).res).toEqual([1]);
+  });
+  it('με το χέρι: ο «Έλεγχος» διαβάζει το πλαίσιο· χωρίς ανάγνωση η τάξη κρίνει μόνη της', () => {
+    const hand = press(game(['μήλο', 'φως']), 2)!;
+    expect(spellState(hand).hand).toBe(true);
+    // το πλαίσιο δεν είναι κουμπί, και τα κουμπιά του τα χειρίζεται το ask
     expect(d.tap!(hand, d.w / 2, d.h * 0.6, d.w, d.h)).toBeNull();
-    expect(d.tap!(hand, ...button(3), d.w, d.h)).toBeNull();
+    expect(press(hand, 3)).toBeNull();
     const read = d.ask!(hand, ...button(3), d.w, d.h)!;
     expect(read.mode).toBe('read');
-    expect(read.area!.y).toBeCloseTo(d.h * 0.46);
-    const done = read.apply('Μίλο\n')!;
-    expect(spellState(done)).toEqual({ done: true, hand: true, target: 'μήλο', typed: 'μίλο' });
-    expect(read.apply('  ')).toBeNull();
-    const again = d.ask!(done, ...button(2), d.w, d.h)!;
-    expect(again.mode).toBe('clear');
-    expect(spellState(again.apply('')!)).toEqual({ done: false, hand: true, target: 'μήλο', typed: '' });
-    // η «Λέξη» ρωτά πάντα· με το χέρι καθαρίζει και το πλαίσιο
-    expect(d.ask!(hand, ...button(1), d.w, d.h)!.then?.mode).toBe('clear');
-    expect(d.ask!(pack(0, 'μήλο', ''), ...button(1), d.w, d.h)!.then).toBeUndefined();
-    expect(d.ask!(pack(0, 'μήλο', ''), ...button(3), d.w, d.h)).toBeNull();
+    expect(read.area!.y).toBeCloseTo(d.h * 0.475);
+    const hint = read.apply('Μίλο')!;
+    expect(spellState(hint)).toMatchObject({ phase: 1, typed: 'μίλο', sel: 0 });
+    expect(spellState(d.ask!(hint, ...button(3), d.w, d.h)!.apply('μήλο')!)).toMatchObject({ phase: 2, res: [2, 0] });
+    // κενή ανάγνωση (χωρίς κλειδί ή ίντερνετ): φαίνεται η σωστή και πατιέται «Σωστά» ή «Λάθος»
+    const manual = read.apply('')!;
+    expect(spellState(manual).phase).toBe(3);
+    expect(d.ask!(manual, ...button(3), d.w, d.h)).toBeNull();
+    expect(spellState(d.tap!(manual, d.w * 0.61, d.h * 0.93, d.w, d.h)!)).toMatchObject({ phase: 2, res: [1, 0] });
+    const wrong = d.tap!(manual, d.w * 0.86, d.h * 0.93, d.w, d.h)!;
+    expect(spellState(wrong)).toMatchObject({ phase: 2, res: [11, 0], typed: '' });
+    // η «Επόμενη», οι «Λέξεις» και η αλλαγή σε πλήκτρα σβήνουν ό,τι γράφτηκε στο πλαίσιο
+    const next = d.ask!(wrong, ...button(3), d.w, d.h)!;
+    expect(next.mode).toBe('clear');
+    expect(spellState(next.apply('')!)).toMatchObject({ phase: 0, idx: 1, hand: true });
+    expect(d.ask!(hand, ...button(0), d.w, d.h)!.mode).toBe('clear');
+    expect(spellState(d.ask!(hand, ...button(2), d.w, d.h)!.apply('')!).hand).toBe(false);
+    expect(d.ask!(game(['μήλο']), ...button(3), d.w, d.h)).toBeNull();
   });
 });

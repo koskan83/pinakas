@@ -544,6 +544,8 @@ body.primary #gadgetMenu .tiles[data-tab] { animation: tabIn .14s ease-out; }
 .askIn input:focus { outline: none; border-color: #3b82f6; }
 .askIn input.secret { -webkit-text-security: disc; }
 .askIn .eye { width: 60px; height: 60px; border-radius: 14px; background: var(--bar-2); font-size: 26px; }
+.askIn .mic.on { background: #dc2626; animation: micOn 1s ease-in-out infinite alternate; }
+@keyframes micOn { to { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0.25); } }
 .askPicks { display: flex; flex-wrap: wrap; gap: 8px; }
 .askPicks button { padding: 10px 16px; border-radius: 999px; background: var(--bar-2); color: var(--fg); font-size: 18px; }
 .askActs { display: flex; gap: 10px; }

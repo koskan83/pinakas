@@ -93,6 +93,7 @@ const SOUNDS: Record<string, () => void> = {
   good: () => { tone(660, 0.09, { gain: 0.35 }); tone(990, 0.14, { gain: 0.35, at: 0.08 }); },
   bad: () => tone(220, 0.22, { type: 'sawtooth', to: 140, gain: 0.22 }),
   lose: () => { tone(392, 0.22, { type: 'triangle', gain: 0.35 }); tone(330, 0.22, { type: 'triangle', gain: 0.35, at: 0.2 }); tone(262, 0.5, { type: 'triangle', to: 196, gain: 0.35, at: 0.4 }); },
+  hmm: () => { tone(330, 0.16, { type: 'triangle', gain: 0.32 }); tone(277, 0.3, { type: 'triangle', to: 262, gain: 0.32, at: 0.17 }); },
   equal: () => { tone(1047, 0.7, { gain: 0.35 }); tone(1568, 0.9, { gain: 0.22, at: 0.02 }); },
   dice: () => { for (let i = 0; i < 6; i++) noise(0.035, { gain: 0.3, freq: 1500 + Math.random() * 1500, at: i * 0.075 + Math.random() * 0.02 }); },
   drum: () => {

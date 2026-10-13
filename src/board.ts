@@ -147,7 +147,7 @@ export class Board {
   /** Τα ονόματα των μαθητών του τμήματος του ανοιχτού μαθήματος (για την κλήρωση)· κενό αν δεν υπάρχουν. */
   kidNames: () => string[] = () => [];
   onAsk: (q: KidAsk) => Promise<string | null> = () => Promise.resolve(null);
-  /** Διάβασμα χειρόγραφου για εργαλείο του Δημοτικού (ορθογραφία με το χέρι): οι γραμμές γραφής με αυτά τα id ως κείμενο, ή null. */
+  /** Διάβασμα χειρόγραφου για εργαλείο του Δημοτικού (ορθογραφία με το χέρι): οι γραμμές γραφής με αυτά τα id ως κείμενο· κενό αν δεν διαβάστηκαν, null αν δεν υπάρχει τίποτα να διαβαστεί. */
   onRead: (ids: string[]) => Promise<string | null> = () => Promise.resolve(null);
   onMergeAxes: (target: AxesItem, dropped: AxesItem) => AxesItem | null = () => null;
   onPointerInfo: (e: PointerEvent, count: number) => void = () => {};
@@ -652,8 +652,9 @@ export class Board {
     const d = STAMPS[name];
     if (!d) return;
     const [cx, cy] = this.center();
-    // τα μεγάλα εργαλεία του Δημοτικού μικραίνουν ώστε να χωράνε στην οθόνη
-    const f = d.kid ? Math.min(1, (this.W * 0.9) / this.page.view.k / d.w, (Math.max(this.H - this.bottomInset, 100) * 0.85) / this.page.view.k / d.h) : 1;
+    // τα μεγάλα εργαλεία του Δημοτικού μικραίνουν ώστε να χωράνε στην οθόνη· τα παιχνίδια όλης της τάξης μεγαλώνουν κιόλας ώστε να τη γεμίσουν
+    const fit = Math.min((this.W * (d.big ? 0.96 : 0.9)) / this.page.view.k / d.w, (Math.max(this.H - this.bottomInset, 100) * (d.big ? 0.95 : 0.85)) / this.page.view.k / d.h);
+    const f = d.big ? fit : d.kid ? Math.min(1, fit) : 1;
     const it: StampItem = { kind: 'stamp', id: uid(), name, x: cx - (d.w * f) / 2, y: cy - (d.h * f) / 2, w: d.w * f, h: d.h * f, color: this.color, width: 3, ...(d.init ? { v: [...d.init] } : {}) };
     this.addAndSelect(it);
     if (d.cheer) this.kidChanged(it, [], 'cheer');

@@ -371,7 +371,7 @@ function placeSelBar(): void {
 }
 board.onUi = refreshUi;
 board.onKidFull = (it) => openBuildView(board, it.id, (ev) => kidFx(ev));
-board.onAsk = (q) => ask(q.title, { hint: q.hint, secret: q.secret, max: 24 });
+board.onAsk = (q) => ask(q.title, { hint: q.hint, secret: q.secret, max: q.max ?? 24, voice: q.voice });
 board.onMergeAxes = (target, dropped) => {
   const pal = [...inkPalette().slice(1), '#ea580c', '#7c3aed'];
   const fns = [...(target.fns ?? [])];
