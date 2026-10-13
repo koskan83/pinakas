@@ -57,6 +57,10 @@ export interface StampDef {
    * το σύρσιμο μετακινεί το εργαλείο ως συνήθως. `st`: πρόχειρη μνήμη για όσο κρατά η κίνηση.
    */
   paint?(v: number[], x: number, y: number, w: number, h: number, st: Record<string, number>, first: boolean): number[] | null;
+  /** Τι «έγινε» όταν η κατάσταση άλλαξε από prev σε next (π.χ. 'win', 'tok'), για ήχο και πανηγυρισμό· αν λείπει, απλό 'click'. */
+  fx?(prev: number[], next: number[]): string | null;
+  /** Επιβράβευση (αστέρι, μπράβο): μπαίνει στον πίνακα με αναπήδημα και κομφετί. */
+  cheer?: boolean;
   /** true αν το σημείο είναι το κουμπί «όλη η οθόνη» του εργαλείου (ή η πόρτα επιστροφής, όταν είναι ήδη σε όλη την οθόνη). */
   fullAt?(x: number, y: number, w: number, h: number): boolean;
 }

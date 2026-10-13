@@ -8,7 +8,7 @@ import { STAMPS } from './stamps';
 
 const COLS = 24, ROWS = 14;
 
-export function openBuildView(board: Board, id: string): void {
+export function openBuildView(board: Board, id: string, onFx: (ev: string) => void = () => {}): void {
   const d = STAMPS.build;
   let v = board.kidState(id);
   if (!v || !d.drawKid || !d.paint || document.getElementById('buildView')) return;
@@ -81,6 +81,7 @@ export function openBuildView(board: Board, id: string): void {
     ptrs.set(e.pointerId, st);
     const next = d.paint!(v!, x, y, gw, H, st, true);
     if (next) {
+      onFx(d.fx?.(v!, next) ?? 'click');
       v = next;
       dirty = true;
       draw();
@@ -92,6 +93,7 @@ export function openBuildView(board: Board, id: string): void {
     const [x, y] = at(e);
     const next = d.paint!(v!, x, y, gw, H, st, false);
     if (next) {
+      onFx(d.fx?.(v!, next) ?? 'click');
       v = next;
       dirty = true;
       draw();

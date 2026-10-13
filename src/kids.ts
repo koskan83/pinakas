@@ -18,6 +18,8 @@ export interface KidEnv {
   bg: string;
   /** Το εργαλείο γεμίζει όλη την οθόνη (κυβάκια): το τελευταίο κουμπί του γίνεται «πόρτα» επιστροφής. */
   full?: boolean;
+  /** Η κατάσταση μόλις άλλαξε: πριν από πόσα ms και ποια ήταν, για να κινηθεί ομαλά (ζυγαριά, ζάρι, κλήρωση, κρεμάλα). */
+  anim?: { t: number; prev: number[] };
 }
 
 const el = (n: number, d = 2): string => (+n.toFixed(d) || 0).toLocaleString('el', { maximumFractionDigits: d }).replace('-', '−');
@@ -176,10 +178,12 @@ const readScale = (v: number[]): Scale => {
 const writeScale = (s: Scale): number[] => [s.show ? 1 : 0, s.left.length, ...s.left, ...s.right];
 const sum = (a: number[]): number => a.reduce((p, q) => p + q, 0);
 /** Γεωμετρία της ζυγαριάς για την τρέχουσα κλίση: θέσεις δίσκων και βαριδιών. */
-function scaleGeom(s: Scale, w: number, h: number): { th: number; px: number; py: number; ends: [number, number][]; pans: [number, number][]; half: number; box: number; spots: { side: 0 | 1; k: number; x: number; y: number }[] } {
+/** Η κλίση του ζυγού: προς το μεγαλύτερο άθροισμα, ως ένα όριο. */
+const scaleTilt = (s: Scale): number => Math.max(-0.2, Math.min(0.2, (sum(s.right) - sum(s.left)) * 0.035));
+function scaleGeom(s: Scale, w: number, h: number, tilt?: number): { th: number; px: number; py: number; ends: [number, number][]; pans: [number, number][]; half: number; box: number; spots: { side: 0 | 1; k: number; x: number; y: number }[] } {
   const L = sum(s.left), R = sum(s.right);
   // γέρνει προς το μεγαλύτερο άθροισμα· η κλίση μεγαλώνει με τη διαφορά ως ένα όριο
-  const th = Math.max(-0.2, Math.min(0.2, (R - L) * 0.035));
+  const th = tilt ?? scaleTilt(s);
   const px = w / 2, py = h * 0.2, arm = w * 0.33;
   const ends: [number, number][] = [[px - arm * Math.cos(th), py - arm * Math.sin(th)], [px + arm * Math.cos(th), py + arm * Math.sin(th)]];
   const drop = h * 0.3;
@@ -895,7 +899,10 @@ export const KIDS: Record<string, StampDef> = {
       const p = [0.27, 0.5, 0.73];
       const dots: Record<number, [number, number][]> = { 1: [[1, 1]], 2: [[0, 0], [2, 2]], 3: [[0, 0], [1, 1], [2, 2]], 4: [[0, 0], [2, 0], [0, 2], [2, 2]], 5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], 6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]] };
       c.fillStyle = '#1e293b';
-      for (const [i, j] of dots[Math.max(1, Math.min(6, v[0] ?? 1))]) {
+      // «κυλάει» για μισό δευτερόλεπτο πριν δείξει τον αριθμό
+      const rolling = env.anim && env.anim.t < 520;
+      const face = rolling ? 1 + ((Math.floor(env.anim!.t / 65) * 5 + (v[0] ?? 1)) % 6) : Math.max(1, Math.min(6, v[0] ?? 1));
+      for (const [i, j] of dots[face]) {
         c.beginPath();
         c.arc(w * p[i], h * p[j], w * 0.085, 0, Math.PI * 2);
         c.fill();
@@ -903,6 +910,7 @@ export const KIDS: Record<string, StampDef> = {
       void env;
     },
     tap: (v) => { let n = 1 + Math.floor(Math.random() * 6); if (n === v[0]) n = 1 + (n % 6); return [n]; },
+    fx: () => 'dice',
   }),
 
   lottery: kid({
@@ -917,7 +925,13 @@ export const KIDS: Record<string, StampDef> = {
       c.restore();
       c.lineWidth = Math.max(2.5, w * 0.014);
       c.stroke();
-      text(c, v[0] ? String(v[0]) : '?', w / 2, top * 0.52, top * 0.52, env.ink, 800);
+      // οι αριθμοί γυρίζουν γρήγορα πριν σταματήσει
+      const spin = env.anim && env.anim.t < 780 && v[0] > 0 && env.anim.prev[1] === v[1];
+      const shown = spin ? 1 + ((Math.floor(env.anim!.t / 55) * 7 + v[0]) % n) : v[0];
+      c.save();
+      if (spin) c.globalAlpha = 0.55;
+      text(c, shown ? String(shown) : '?', w / 2, top * 0.52, top * 0.52, env.ink, 800);
+      c.restore();
       const r = (h - top) * 0.36, y = top + (h - top) / 2;
       knob(c, w * 0.16, y, r, '−', env);
       knob(c, w * 0.84, y, r, '+', env);
@@ -934,12 +948,21 @@ export const KIDS: Record<string, StampDef> = {
       if (inR(x, y, w * 0.84, sy, r)) return n < 99 ? [0, n + 1] : null;
       return null;
     },
+    fx: (prev, next) => (next[0] > 0 && prev[1] === next[1] ? 'drum' : 'click'),
   }),
 
   balance: kid({
     label: 'Ζυγαριά', w: 660, h: 430, init: [1, 0],
     drawKid(c, w, h, v, env) {
-      const s = readScale(v), g = scaleGeom(s, w, h);
+      const s = readScale(v);
+      // μόλις αλλάξουν τα βάρη ο ζυγός πηγαίνει στη νέα θέση ταλαντευόμενος, όπως μια αληθινή ζυγαριά
+      let tilt = scaleTilt(s);
+      const an = env.anim && env.anim.t < 1400 ? env.anim : null;
+      if (an) {
+        const p = an.t / 1000;
+        tilt += (scaleTilt(readScale(an.prev)) - tilt) * Math.exp(-4.2 * p) * Math.cos(9 * p);
+      }
+      const g = scaleGeom(s, w, h, tilt);
       const L = sum(s.left), R = sum(s.right);
       c.lineCap = 'round';
       c.lineJoin = 'round';
@@ -1008,7 +1031,9 @@ export const KIDS: Record<string, StampDef> = {
           text(c, String(n), x, cy + 1, cr * 1.05, '#ffffff', 700);
         }
       });
-      text(c, s.show ? `${L} ${L === R ? '=' : L > R ? '>' : '<'} ${R}` : '?', w / 2, cg.my + 1, w * 0.04, env.ink, 800);
+      // όταν ισορροπήσει με βαρίδια και στις δύο πλευρές, η ισότητα «ανάβει» πράσινη για λίγο
+      const glow = an && s.show && L === R && L > 0 && an.t < 1200 ? Math.sin((an.t / 1200) * Math.PI) : 0;
+      text(c, s.show ? `${L} ${L === R ? '=' : L > R ? '>' : '<'} ${R}` : '?', w / 2, cg.my + 1, w * 0.04 * (1 + glow * 0.5), glow > 0.05 ? GREEN : env.ink, 800);
     },
     tap(v, x, y, w, h) {
       const s = readScale(v), g = scaleGeom(s, w, h);
@@ -1030,6 +1055,11 @@ export const KIDS: Record<string, StampDef> = {
       }
       if (Math.abs(x - w / 2) < w * 0.1 && Math.abs(y - cg.my) < h * 0.08) return writeScale({ ...s, show: !s.show });
       return null;
+    },
+    fx(prev, next) {
+      const p = readScale(prev), n = readScale(next);
+      const eq = (q: Scale): boolean => sum(q.left) === sum(q.right) && sum(q.left) > 0;
+      return eq(n) && !eq(p) ? 'equal' : 'click';
     },
   }),
 
@@ -1132,6 +1162,16 @@ export const KIDS: Record<string, StampDef> = {
       out[0] = k;
       return out;
     },
+    fx(prev, next) {
+      const a = bcells(prev), b = bcells(next);
+      let put = 0, gone = 0;
+      for (let i = 0; i < b.length; i++) {
+        if (a[i] === b[i]) continue;
+        if (b[i]) put++;
+        else gone++;
+      }
+      return put ? 'tok' : gone ? 'wipe' : 'click';
+    },
   }),
 
   hangman: kid({
@@ -1151,6 +1191,10 @@ export const KIDS: Record<string, StampDef> = {
       const hx = w * 0.23, r = h * 0.07;
       c.lineWidth = Math.max(4, w * 0.008);
       c.save();
+      // μόλις άλλαξε κάτι: λάθος γράμμα κουνάει τον ανθρωπάκο, σωστό «σκάει» στη θέση του
+      const an = env.anim, was = an ? hangState(an.prev) : null;
+      const fresh = an && was && was.word === st.word ? an : null;
+      if (fresh && st.wrong > was!.wrong && fresh.t < 450) c.translate(Math.sin(fresh.t / 28) * w * 0.012 * (1 - fresh.t / 450), 0);
       c.strokeStyle = st.lost ? RED : env.ink;
       c.beginPath();
       if (st.wrong > 0) { c.moveTo(hx + r, h * 0.18 + r); c.arc(hx, h * 0.18 + r, r, 0, Math.PI * 2); }
@@ -1170,7 +1214,9 @@ export const KIDS: Record<string, StampDef> = {
         [...st.word].forEach((ch, i) => {
           if (ch === ' ') return;
           const cx = x0 + cw * (i + 0.5), open = (st.mask & (1 << ABC.indexOf(ch))) !== 0;
-          if (open || st.lost) text(c, ch, cx, y, cw * 0.82, open ? env.ink : RED, 700);
+          const bit = 1 << ABC.indexOf(ch);
+          const pop = fresh && open && !(was!.mask & bit) && fresh.t < 380 ? 1 + 0.9 * (1 - fresh.t / 380) : 1;
+          if (open || st.lost) text(c, ch, cx, y, cw * 0.82 * pop, open ? (pop > 1 ? GREEN : env.ink) : RED, 700);
           c.beginPath();
           c.moveTo(cx - cw * 0.36, y + cw * 0.6);
           c.lineTo(cx + cw * 0.36, y + cw * 0.6);
@@ -1239,10 +1285,17 @@ export const KIDS: Record<string, StampDef> = {
       if (st.mask & (1 << i)) return null;
       return [st.mask | (1 << i), ...v.slice(1)];
     },
+    fx(prev, next) {
+      const p = hangState(prev), n = hangState(next);
+      if (p.word !== n.word) return 'new';
+      if (n.won && !p.won) return 'win';
+      if (n.lost && !p.lost) return 'lose';
+      return n.wrong > p.wrong ? 'bad' : 'good';
+    },
   }),
 
   star: kid({
-    label: 'Αστέρι', w: 140, h: 140,
+    label: 'Αστέρι', w: 140, h: 140, cheer: true,
     drawKid(c, w, h) {
       star(c, w / 2, h * 0.53, w * 0.48);
       c.fillStyle = YELLOW;
@@ -1255,7 +1308,7 @@ export const KIDS: Record<string, StampDef> = {
   }),
 
   smile: kid({
-    label: 'Φατσούλα', w: 140, h: 140,
+    label: 'Φατσούλα', w: 140, h: 140, cheer: true,
     drawKid(c, w, h) {
       const r = w * 0.46;
       c.beginPath();
@@ -1279,7 +1332,7 @@ export const KIDS: Record<string, StampDef> = {
   }),
 
   bravo: kid({
-    label: 'Μπράβο!', w: 300, h: 120,
+    label: 'Μπράβο!', w: 300, h: 120, cheer: true,
     drawKid(c, w, h) {
       rrect(c, 3, 3, w - 6, h - 6, h * 0.3);
       c.fillStyle = GREEN;

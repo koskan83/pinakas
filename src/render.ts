@@ -12,6 +12,7 @@ import { ANGLE_KEY, HL_ALPHA, angleSides, fmt, fmtU, hlFlat, measureAngles, meas
 /** Ό,τι χρειάζεται η σχεδίαση από τον πίνακα. */
 export interface RenderHost {
   doc: Doc;
+  kidAnim: Map<string, { t0: number; prev: number[] }>;
   readonly page: Page;
   selected: string | null;
   fnPreview: { index: number | null; expr: string; color: string } | null;
@@ -630,7 +631,18 @@ export class Renderer {
     c.lineWidth = s.width;
     c.lineCap = 'round';
     c.lineJoin = 'round';
-    if (d.drawKid) d.drawKid(c, s.w, s.h, s.v ?? d.init ?? [], { ink: this.b.ink(s.color), bg: isDark(this.b.doc.bg) ? '#14201b' : '#ffffff' });
+    if (d.drawKid) {
+      const an = this.b.kidAnim.get(s.id);
+      const t = an ? performance.now() - an.t0 : 0;
+      // επιβράβευση που μόλις μπήκε: «σκάει» με μικρό αναπήδημα
+      if (an && d.cheer && t < 520) {
+        const p = t / 520, k = 1 + 0.45 * Math.exp(-5 * p) * Math.cos(11 * p) - Math.exp(-9 * p);
+        c.translate(s.w / 2, s.h / 2);
+        c.scale(Math.max(0.05, k), Math.max(0.05, k));
+        c.translate(-s.w / 2, -s.h / 2);
+      }
+      d.drawKid(c, s.w, s.h, s.v ?? d.init ?? [], { ink: this.b.ink(s.color), bg: isDark(this.b.doc.bg) ? '#14201b' : '#ffffff', ...(an ? { anim: { t, prev: an.prev } } : {}) });
+    }
     else d.draw(c, s.w, s.h, d.spring ? this.b.springState(s) : undefined);
     c.restore();
   }

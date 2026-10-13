@@ -519,3 +519,7 @@ body.primary #toolbar button:disabled span[data-em]::before { opacity: .35; filt
 #buildView { position: fixed; inset: 0; z-index: 80; background: #fff; touch-action: none; }
 #buildView canvas { width: 100%; height: 100%; display: block; touch-action: none; }
 @media print { #buildView { display: none !important; } }
+
+/* κομφετί: πάνω απ' όλα, χωρίς να πιάνει αγγίγματα */
+.confetti { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 95; pointer-events: none; }
+@media print { .confetti { display: none !important; } }

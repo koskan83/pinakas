@@ -92,6 +92,8 @@ export function mountUi(app: HTMLElement): void {
     <div class="gHead">Εφαρμογή</div>
     ${mi('data-act="full"', I.full, 'Πλήρης οθόνη')}
     ${mi('data-act="overlay" id="overlayAct" class="hidden"', I.screen, 'Γράψιμο πάνω από άλλα προγράμματα')}
+    ${mi('data-act="fxsound" data-lv="pri"', I.spark, 'Ήχοι')}
+    ${mi('data-act="fxclick" data-lv="pri"', I.spark, 'Ήχος «κλικ» στα κουμπιά των εργαλείων')}
     ${mi('data-act="level"', I.target, 'Αλλαγή σε Δημοτικό')}
     ${mi('data-act="help"', I.doc, 'Οδηγίες χρήσης')}
     ${mi('data-act="more"', I.target, 'Ρυθμίσεις και αρχεία…')}

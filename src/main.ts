@@ -9,6 +9,7 @@ import { STAMPS } from './stamps';
 import { PEN_ICON, PenKind } from './ui';
 import { ask, confirmBox, notice } from './dialog';
 import { openBuildView } from './build-view';
+import { confetti, loadFx, playFx, saveFx } from './fx';
 import { NEWS, VERSION, newsPending } from './news';
 import { BUILTIN, type Template } from './pages';
 import { $, HL_PALETTE, MORE_COLORS, PALETTE, SIZES, SIZE_NAME, app, board, curtain, curtainTop, download, fileName, layoutBar, spot, stamp, timer, toast } from './app';
@@ -368,7 +369,7 @@ function placeSelBar(): void {
   el.style.top = `${y}px`;
 }
 board.onUi = refreshUi;
-board.onKidFull = (it) => openBuildView(board, it.id);
+board.onKidFull = (it) => openBuildView(board, it.id, (ev) => kidFx(ev));
 board.onAsk = (q) => ask(q.title, { hint: q.hint, secret: q.secret, max: 24 });
 board.onMergeAxes = (target, dropped) => {
   const pal = [...inkPalette().slice(1), '#ea580c', '#7c3aed'];
@@ -515,7 +516,7 @@ gadgetMenu.addEventListener('click', (e) => {
     board.addStamp(kidTool);
     refreshUi();
     // τα κυβάκια ανοίγουν κατευθείαν σε όλη την οθόνη· η πόρτα στο τέλος των υλικών γυρίζει στον πίνακα
-    if (kidTool === 'build' && board.selectionIds[0]) openBuildView(board, board.selectionIds[0]);
+    if (kidTool === 'build' && board.selectionIds[0]) openBuildView(board, board.selectionIds[0], (ev) => kidFx(ev));
     return;
   }
   const shape = t.closest<HTMLElement>('[data-shape]')?.dataset.shape;
@@ -701,6 +702,13 @@ const onMenu = async (e: Event): Promise<void> => {
     setPdfLogo(!pdfLogo);
   } else if (act === 'labels') {
     setLabels(!$('toolbar').classList.contains('labels'));
+  } else if (act === 'fxsound' || act === 'fxclick') {
+    if (act === 'fxsound') fxPrefs.sound = !fxPrefs.sound;
+    else fxPrefs.click = !fxPrefs.click;
+    saveFx(fxPrefs);
+    showFxPrefs();
+    kidFx(act === 'fxsound' ? 'new' : 'click');
+    return;
   } else if (act === 'level') {
     setLevel(!primary);
     toast(primary ? 'Δημοτικό: απλή γραμμή εργαλείων. Τα εργαλεία του είναι στα Όργανα.' : 'Γυμνάσιο – Λύκειο: όλα τα εργαλεία.', 4000);
@@ -880,8 +888,34 @@ window.addEventListener('keydown', (e) => {
 // ---------- Δημοτικό ή Γυμνάσιο–Λύκειο: ποια εργαλεία φαίνονται ----------
 const LEVEL = 'grafida.level';
 let primary = false;
+
+// ήχοι, κίνηση και πανηγυρισμοί: μόνο στο Δημοτικό
+const fxPrefs = loadFx();
+function showFxPrefs(): void {
+  const mark = (act: string, on: boolean, name: string): void => {
+    const b = document.querySelector<HTMLElement>(`#menu [data-act="${act}"]`);
+    if (!b) return;
+    b.classList.toggle('on', on);
+    b.lastChild!.textContent = `${name}: ${on ? 'ναι' : 'όχι'}`;
+  };
+  mark('fxsound', fxPrefs.sound, 'Ήχοι');
+  mark('fxclick', fxPrefs.sound && fxPrefs.click, 'Ήχος «κλικ» στα κουμπιά των εργαλείων');
+}
+showFxPrefs();
+/** Ήχος για κάτι που έγινε σε εργαλείο του Δημοτικού· στις επιτυχίες και κομφετί από το σημείο (x, y) της οθόνης. */
+function kidFx(ev: string, x?: number, y?: number): void {
+  if (!primary) return;
+  playFx(ev, fxPrefs);
+  if (ev === 'win') confetti(x, y, 180);
+  else if (ev === 'cheer') confetti(x, y, 70);
+}
+board.onKidFx = (ev, it) => {
+  const [x, y] = board.toScreen(it.x + it.w / 2, it.y + it.h / 2);
+  kidFx(ev, x, y);
+};
 function setLevel(pri: boolean, save = true): void {
   primary = pri;
+  board.kidMotion = pri;
   document.body.classList.toggle('primary', pri);
   // εργαλείο που δεν υπάρχει στο Δημοτικό δεν μένει ενεργό
   if (pri && board.tool === 'measure') board.setTool('select');

@@ -515,6 +515,25 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   await page.click('#undo');
   await page.click('#undo');
   await page.click('#undo');
+  // επιβράβευση: το αστέρι μπαίνει με κομφετί· το ζάρι «κυλάει» και καταλήγει σε αριθμό· ο ήχος κλείνει από το μενού
+  await page.click('#gadgetBtn');
+  await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-kid="star"]');
+  const party = (await page.locator('.confetti').count()) === 1;
+  await page.click('#undo');
+  await page.click('#gadgetBtn');
+  await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-kid="dice"]');
+  await page.mouse.click(mid.x, mid.y - 60);
+  await sleep(900);
+  const die = (await items(pi)).find((i) => i.kind === 'stamp' && i.name === 'dice');
+  const rolled = die && die.v[0] >= 1 && die.v[0] <= 6 && die.v[0] !== 5;
+  await page.click('#undo');
+  await page.click('#undo');
+  await page.click('#menuBtn');
+  const soundLabel = await page.textContent('#menu [data-act="fxsound"]');
+  await page.click('#menu [data-act="fxsound"]');
+  await page.click('#menuBtn');
+  const soundOff = await page.textContent('#menu [data-act="fxsound"]');
+  await page.click('#menu [data-act="fxsound"]');
   // κυβάκια: όσο κρατάς πατημένο για να χτίσεις, το εργαλείο πρέπει να μένει στην οθόνη
   await page.click('#gadgetBtn');
   await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-kid="build"]');
@@ -545,6 +564,9 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   await page.click('#undo');
   await page.reload();
   await page.waitForSelector('#toolbar');
+  assert(party, 'το αστέρι δεν έφερε κομφετί');
+  assert(rolled, 'το ζάρι δεν έδειξε νέο αριθμό μετά το πάτημα');
+  assert(soundLabel.includes('ναι') && soundOff.includes('όχι'), `ο διακόπτης «Ήχοι» δεν άλλαξε (${soundLabel} → ${soundOff})`);
   assert(fullOpen && barHidden, 'τα κυβάκια δεν άνοιξαν σε όλη την οθόνη ή φαίνεται ακόμα η γραμμή εργαλείων');
   assert(fullBlocks >= 2, `σε όλη την οθόνη το σύρσιμο έχτισε ${fullBlocks} κυβάκια αντί για τουλάχιστον 2`);
   assert(fullClosed, 'η πόρτα δεν γύρισε πίσω στον πίνακα');

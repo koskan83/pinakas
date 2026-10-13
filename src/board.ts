@@ -136,6 +136,12 @@ export class Board {
   onUi: () => void = () => {};
   /** Όταν άξονες με συναρτήσεις αφεθούν πάνω σε άλλους: επιστρέφει τους ενωμένους άξονες, ή null για απλή μετακίνηση. */
   /** Ερώτηση προς τον χρήστη από εργαλείο του Δημοτικού (π.χ. λέξη της κρεμάλας). */
+  /** Εργαλεία του Δημοτικού που μόλις άλλαξαν: για λίγο ζωγραφίζονται «εν κινήσει» (βλ. KidEnv.anim). */
+  kidAnim = new Map<string, { t0: number; prev: number[] }>();
+  /** Κίνηση στα εργαλεία του Δημοτικού (ανάβει μόνο στο Δημοτικό). */
+  kidMotion = false;
+  /** Κάτι έγινε σε εργαλείο του Δημοτικού ('click', 'win', 'tok'…): για ήχο και πανηγυρισμό. */
+  onKidFx: (ev: string, it: StampItem) => void = () => {};
   /** Πατήθηκε το «όλη η οθόνη» ενός εργαλείου του Δημοτικού (κυβάκια). */
   onKidFull: (it: StampItem) => void = () => {};
   onAsk: (q: KidAsk) => Promise<string | null> = () => Promise.resolve(null);
@@ -411,6 +417,24 @@ export class Board {
     this.onUi();
   }
 
+  /** Η κατάσταση ενός εργαλείου άλλαξε (ή μια επιβράβευση μόλις μπήκε): ήχος, και κίνηση για όσο κρατά. */
+  kidChanged(it: StampItem, prev: number[], ev?: string): void {
+    const d = STAMPS[it.name];
+    const what = ev ?? (d?.fx ? d.fx(prev, it.v ?? []) : 'click');
+    if (what) this.onKidFx(what, it);
+    if (!this.kidMotion) return;
+    const idle = this.kidAnim.size === 0;
+    this.kidAnim.set(it.id, { t0: performance.now(), prev });
+    if (!idle) return;
+    const tick = (): void => {
+      const now = performance.now();
+      for (const [id, a] of this.kidAnim) if (now - a.t0 > 1500) this.kidAnim.delete(id);
+      this.redraw();
+      if (this.kidAnim.size) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
   /** Η κατάσταση ενός εργαλείου του Δημοτικού, ή null αν δεν υπάρχει στη σελίδα. */
   kidState(id: string): number[] | null {
     const it = this.page.items.find((x) => x.id === id);
@@ -441,6 +465,8 @@ export class Board {
     const v = d.paint(it.v ?? d.init ?? [], lx - it.x, ly - it.y, it.w, it.h, ps.kid!, first);
     if (!v) return false;
     this.page.items[this.page.items.indexOf(it)] = { ...it, v };
+    const ev = d.fx ? d.fx(it.v ?? d.init ?? [], v) : null;
+    if (ev) this.onKidFx(ev, it);
     return true;
   }
 
@@ -458,6 +484,7 @@ export class Board {
       const next: StampItem = { ...before, v };
       this.page.items[this.page.items.indexOf(before)] = next;
       this.push({ t: 'mod', p: this.cur, before, after: next });
+      this.kidChanged(next, before.v ?? d.init ?? []);
       this.redraw();
     };
     const q = d.ask?.(cur, lx - it.x, ly - it.y, it.w, it.h);
@@ -565,7 +592,9 @@ export class Board {
     const [cx, cy] = this.center();
     // τα μεγάλα εργαλεία του Δημοτικού μικραίνουν ώστε να χωράνε στην οθόνη
     const f = d.kid ? Math.min(1, (this.W * 0.9) / this.page.view.k / d.w, (Math.max(this.H - this.bottomInset, 100) * 0.85) / this.page.view.k / d.h) : 1;
-    this.addAndSelect({ kind: 'stamp', id: uid(), name, x: cx - (d.w * f) / 2, y: cy - (d.h * f) / 2, w: d.w * f, h: d.h * f, color: this.color, width: 3, ...(d.init ? { v: [...d.init] } : {}) });
+    const it: StampItem = { kind: 'stamp', id: uid(), name, x: cx - (d.w * f) / 2, y: cy - (d.h * f) / 2, w: d.w * f, h: d.h * f, color: this.color, width: 3, ...(d.init ? { v: [...d.init] } : {}) };
+    this.addAndSelect(it);
+    if (d.cheer) this.kidChanged(it, [], 'cheer');
   }
 
   /** Κενός πίνακας (πλέγμα, ορίζουσα ή μήτρα) στο κέντρο της οθόνης· γράφεις μέσα στα κελιά με το στυλό. */
