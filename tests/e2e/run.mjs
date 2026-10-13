@@ -728,7 +728,7 @@ for (const t of tests) {
     console.log(`  ✓ ${t.name}`);
   } catch (err) {
     failed++;
-    console.log(`  ✗ ${t.name}\n      ${String(err.message ?? err).split('\n')[0]}`);
+    console.log(`  ✗ ${t.name}\n      ${String(err.message ?? err).split("\n").slice(0, 4).join(" | ")}`);
     // καθαρή κατάσταση για το επόμενο σενάριο
     await page.keyboard.press('Escape').catch(() => {});
     await page.evaluate(() => document.querySelectorAll('.popup, #pagePick, #lib, #qrBig, #welcome').forEach((e) => e.classList.add('hidden'))).catch(() => {});

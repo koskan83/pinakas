@@ -172,7 +172,27 @@ function fracTap(v: number[], x: number, y: number, w: number, sy: number, hh: n
 const ones = (m: number): number => { let k = 0; for (let i = 0; i < 25; i++) if (m & (1 << i)) k++; return k; };
 
 /** Υλικό δεκάδων: όρια των τριών στηλών (ως κλάσμα του πλάτους) και ύψος της κεφαλίδας. */
-const BCOL = [0, 0.44, 0.72, 1], BHEAD = 0.24;
+const BHEAD = 0.24;
+/** Όρια των στηλών ανά πλήθος στηλών: 3 (Ε Δ Μ), 4 (και χιλιάδες), 5 (και δεκάδες χιλιάδες). */
+const BCOLS_BY: Record<number, number[]> = { 3: [0, 0.44, 0.72, 1], 4: [0, 0.26, 0.56, 0.79, 1], 5: [0, 0.19, 0.38, 0.61, 0.8, 1] };
+/** Όνομα και χρώμα κάθε θέσης, από τις μονάδες προς τα πάνω. */
+const BNAMES = ['Μονάδες', 'Δεκάδες', 'Εκατοντάδες', 'Χιλιάδες', 'Δεκάδες χιλιάδες'];
+const BFILLS = [YELLOW, BLUE, GREEN, RED, PURPLE];
+/** Πόσες στήλες δείχνει το υλικό (τρίτο στοιχείο της κατάστασης· αν λείπει, οι τρεις κλασικές). */
+const blockCols = (v: number[]): number => (v[2] === 4 || v[2] === 5 ? v[2] : 3);
+/** Τα δύο κουμπιά κάτω αριστερά: «μία στήλη ακόμα» και «μία λιγότερη». */
+const blockBtns = (w: number, h: number): { add: number; del: number; y: number; pw: number; ph: number } =>
+  ({ add: w * 0.12, del: w * 0.88, y: h * 0.92, pw: w * 0.21, ph: h * 0.085 });
+/** Μικρό κουμπί-ετικέτα. */
+function pill(c: C, cx: number, cy: number, pw: number, ph: number, label: string, env: KidEnv): void {
+  rrect(c, cx - pw / 2, cy - ph / 2, pw, ph, ph / 2);
+  c.save();
+  c.fillStyle = env.ink;
+  c.globalAlpha = 0.12;
+  c.fill();
+  c.restore();
+  text(c, label, cx, cy + 1, Math.min(ph * 0.5, (pw * 1.7) / label.length), env.ink, 700);
+}
 
 // ---------- χρήματα ----------
 /** Αξία σε λεπτά και όψη κάθε χαρτονομίσματος ή κέρματος. */
@@ -807,34 +827,64 @@ export const KIDS: Record<string, StampDef> = {
   blocks: kid({
     label: 'Εκατοντάδες, δεκάδες, μονάδες', w: 620, h: 400, init: [234, 1],
     drawKid(c, w, h, v, env) {
-      const n = Math.max(0, Math.min(999, v[0] ?? 0));
-      const digits = [Math.floor(n / 100), Math.floor(n / 10) % 10, n % 10];
-      const cols = BCOL.map((q) => q * w);
+      const nc = blockCols(v), n = Math.max(0, Math.min(10 ** nc - 1, v[0] ?? 0));
+      const cols = BCOLS_BY[nc].map((q) => q * w);
       const head = h * BHEAD, foot = h * 0.16;
-      const names = ['Εκατοντάδες', 'Δεκάδες', 'Μονάδες'], fills = [GREEN, BLUE, YELLOW];
       c.lineWidth = 1.5;
-      for (let k = 0; k < 3; k++) {
-        const x0 = cols[k], x1 = cols[k + 1], mid = (x0 + x1) / 2;
+      for (let k = 0; k < nc; k++) {
+        // θέση της στήλης: 0 = μονάδες, 1 = δεκάδες, … 4 = δεκάδες χιλιάδες
+        const place = nc - 1 - k, digit = Math.floor(n / 10 ** place) % 10;
+        const x0 = cols[k], x1 = cols[k + 1], mid = (x0 + x1) / 2, cw = x1 - x0;
         c.save();
         c.globalAlpha = 0.35;
-        c.strokeRect(x0, 0, x1 - x0, h - foot);
+        c.strokeRect(x0, 0, cw, h - foot);
         c.restore();
-        // επάνω το όνομα της στήλης· από κάτω − και +, με το ψηφίο της ανάμεσα
-        const r = head * 0.2, ky = head * 0.68;
-        text(c, names[k], mid, head * 0.22, Math.min(head * 0.3, ((x1 - x0) * 1.5) / names[k].length), env.ink, 700);
+        // επάνω το όνομα της στήλης (σε δύο γραμμές αν είναι δύο λέξεις)· από κάτω − και +, με το ψηφίο της ανάμεσα
+        const r = Math.min(head * 0.2, cw * 0.15), ky = head * 0.68;
+        const lines = BNAMES[place].split(' ');
+        const fs = Math.min(head * (lines.length > 1 ? 0.2 : 0.3), (cw * 1.5) / Math.max(...lines.map((l) => l.length)));
+        lines.forEach((l, i) => text(c, l, mid, head * 0.22 + (i - (lines.length - 1) / 2) * fs * 1.05, fs, env.ink, 700));
         knob(c, x0 + r * 1.5, ky, r, '−', env);
         knob(c, x1 - r * 1.5, ky, r, '+', env);
         // όταν ο αριθμός είναι κρυμμένος («Ποιος αριθμός είναι;») κρύβονται και τα ψηφία
-        text(c, v[1] ? String(digits[k]) : '?', mid, ky + 1, head * 0.36, env.ink, 800);
+        text(c, v[1] ? String(digit) : '?', mid, ky + 1, Math.min(head * 0.36, cw * 0.24), env.ink, 800);
         const top = head + 6, room = h - foot - top - 6;
         c.save();
-        c.fillStyle = fills[k];
+        c.fillStyle = BFILLS[place];
         c.strokeStyle = '#334155';
         c.lineWidth = 1;
-        if (k === 0) {
+        if (place === 4 || place === 1) {
+          // ράβδοι: δέκα κυβάκια (δεκάδες) ή δέκα κύβοι των χιλίων (δεκάδες χιλιάδες), όρθιες
+          const bw = Math.min((cw - 12) / 9 - 4, room / 10);
+          for (let i = 0; i < digit; i++) {
+            const x = x0 + 8 + i * (bw + 4), bh = Math.min(room, bw * 10);
+            c.fillRect(x, top, bw, bh);
+            c.beginPath();
+            c.rect(x, top, bw, bh);
+            for (let g = 1; g < 10; g++) { c.moveTo(x, top + (bh * g) / 10); c.lineTo(x + bw, top + (bh * g) / 10); }
+            if (place === 4) { c.moveTo(x + bw / 2, top); c.lineTo(x + bw / 2, top + bh); }
+            c.stroke();
+          }
+        } else if (place === 3) {
+          // κύβοι των 1000: τετράγωνο με «βάθος» πάνω και δεξιά, τρεις σε κάθε σειρά
+          const s = Math.min((cw - 16) / 3 - 6, room / 3 - 6), d = s * 0.22, f = s - d;
+          for (let i = 0; i < digit; i++) {
+            const x = x0 + 10 + (i % 3) * (s + 6), y = top + Math.floor(i / 3) * (s + 6) + d;
+            c.beginPath();
+            c.moveTo(x, y); c.lineTo(x + d, y - d); c.lineTo(x + f + d, y - d); c.lineTo(x + f + d, y + f - d); c.lineTo(x + f, y + f); c.lineTo(x, y + f);
+            c.closePath();
+            c.fill();
+            c.stroke();
+            c.beginPath();
+            c.rect(x, y, f, f);
+            c.moveTo(x + f, y); c.lineTo(x + f + d, y - d);
+            c.stroke();
+            text(c, '1000', x + f / 2, y + f / 2 + 1, f * 0.3, '#ffffff', 700);
+          }
+        } else if (place === 2) {
           // πλάκες των 100: τετράγωνα 10 × 10, τρεις σε κάθε σειρά
-          const s = Math.min((x1 - x0 - 16) / 3 - 6, room / 3 - 6);
-          for (let i = 0; i < digits[0]; i++) {
+          const s = Math.min((cw - 16) / 3 - 6, room / 3 - 6);
+          for (let i = 0; i < digit; i++) {
             const x = x0 + 10 + (i % 3) * (s + 6), y = top + Math.floor(i / 3) * (s + 6);
             c.fillRect(x, y, s, s);
             c.beginPath();
@@ -844,20 +894,9 @@ export const KIDS: Record<string, StampDef> = {
             }
             c.stroke();
           }
-        } else if (k === 1) {
-          // ράβδοι των 10: όρθιες, με δέκα κυβάκια
-          const bw = Math.min((x1 - x0 - 12) / 9 - 4, room / 10);
-          for (let i = 0; i < digits[1]; i++) {
-            const x = x0 + 8 + i * (bw + 4), bh = Math.min(room, bw * 10);
-            c.fillRect(x, top, bw, bh);
-            c.beginPath();
-            c.rect(x, top, bw, bh);
-            for (let g = 1; g < 10; g++) { c.moveTo(x, top + (bh * g) / 10); c.lineTo(x + bw, top + (bh * g) / 10); }
-            c.stroke();
-          }
         } else {
-          const s = Math.min((x1 - x0 - 16) / 3 - 6, room / 3 - 6, w * 0.045);
-          for (let i = 0; i < digits[2]; i++) {
+          const s = Math.min((cw - 16) / 3 - 6, room / 3 - 6, w * 0.045);
+          for (let i = 0; i < digit; i++) {
             const x = x0 + 10 + (i % 3) * (s + 6), y = top + Math.floor(i / 3) * (s + 6);
             c.fillRect(x, y, s, s);
             c.strokeRect(x, y, s, s);
@@ -865,17 +904,27 @@ export const KIDS: Record<string, StampDef> = {
         }
         c.restore();
       }
-      text(c, v[1] ? String(n) : 'Ποιος αριθμός είναι;', w / 2, h - foot / 2 + 2, foot * (v[1] ? 0.7 : 0.42), env.ink, 700);
+      text(c, v[1] ? el(n, 0) : 'Ποιος αριθμός είναι;', w / 2, h - foot / 2 + 2, foot * (v[1] ? 0.7 : 0.42), env.ink, 700);
+      // κάτω αριστερά: μία στήλη ακόμα προς τα αριστερά (χιλιάδες, δεκάδες χιλιάδες) ή μία λιγότερη
+      const g = blockBtns(w, h);
+      if (nc < 5) pill(c, g.add, g.y, g.pw, g.ph, `＋ ${nc === 3 ? 'Χιλιάδες' : 'Δεκ. χιλιάδες'}`, env);
+      if (nc > 3) pill(c, g.del, g.y, g.pw, g.ph, '− στήλη', env);
     },
     tap(v, x, y, w, h) {
-      const n = Math.max(0, Math.min(999, v[0] ?? 0));
-      const cols = BCOL.map((q) => q * w), head = h * BHEAD, foot = h * 0.16, r = head * 0.2, ky = head * 0.68;
-      if (y > h - foot && y <= h) return [n, v[1] ? 0 : 1];
-      for (let k = 0; k < 3; k++) {
+      const nc = blockCols(v), max = 10 ** nc - 1, n = Math.max(0, Math.min(max, v[0] ?? 0));
+      const cols = BCOLS_BY[nc].map((q) => q * w), head = h * BHEAD, foot = h * 0.16, ky = head * 0.68;
+      const out = (num: number, show: number, k = nc): number[] => (k > 3 ? [num, show, k] : [num, show]);
+      const g = blockBtns(w, h);
+      if (Math.abs(y - g.y) <= g.ph * 0.7) {
+        if (nc < 5 && Math.abs(x - g.add) <= g.pw / 2) return out(n, v[1] ?? 1, nc + 1);
+        if (nc > 3 && Math.abs(x - g.del) <= g.pw / 2) return out(n % 10 ** (nc - 1), v[1] ?? 1, nc - 1);
+      }
+      if (y > h - foot && y <= h) return out(n, v[1] ? 0 : 1);
+      for (let k = 0; k < nc; k++) {
         // πάνω από 9 η στήλη μηδενίζει και περνά ένα στην αριστερή της (κρατούμενο)· κάτω από 0 «δανείζεται» από εκεί
-        const unit = [100, 10, 1][k];
-        if (inR(x, y, cols[k] + r * 1.5, ky, r * 1.2)) return n - unit >= 0 ? [n - unit, v[1] ?? 1] : null;
-        if (inR(x, y, cols[k + 1] - r * 1.5, ky, r * 1.2)) return n + unit <= 999 ? [n + unit, v[1] ?? 1] : null;
+        const unit = 10 ** (nc - 1 - k), r = Math.min(head * 0.2, (cols[k + 1] - cols[k]) * 0.15);
+        if (inR(x, y, cols[k] + r * 1.5, ky, r * 1.2)) return n - unit >= 0 ? out(n - unit, v[1] ?? 1) : null;
+        if (inR(x, y, cols[k + 1] - r * 1.5, ky, r * 1.2)) return n + unit <= max ? out(n + unit, v[1] ?? 1) : null;
       }
       return null;
     },
