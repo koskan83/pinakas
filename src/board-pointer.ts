@@ -704,7 +704,17 @@ export function up(bd: Board, e: PointerEvent): void {
       return;
     case 'kid': {
       const before = ps.kidOrig!;
-      const after = bd.page.items.find((x) => x.id === before.id);
+      let after = bd.page.items.find((x) => x.id === before.id);
+      if (after && after !== before && after.kind === 'stamp') {
+        // το εργαλείο μπορεί να «κλείσει» την κίνηση (π.χ. το ρολόι: βρέθηκε η ώρα της άσκησης)
+        const end = STAMPS[after.name]?.drop?.(after.v ?? []);
+        if (end) {
+          const done = { ...after, v: end.v };
+          bd.page.items[bd.page.items.indexOf(after)] = done;
+          after = done;
+          bd.onKidFx(end.ev, done);
+        }
+      }
       if (after && after !== before) bd.push({ t: 'mod', p: bd.cur, before, after });
       ps.kidOrig = undefined;
       bd.redraw();

@@ -693,6 +693,52 @@ test('Τμήμα με ονόματα: η Κλήρωση βγάζει μαθητ�
   assert(reset[0] === 0 && !reset[2], 'το ⟳ δεν ξεκίνησε νέο γύρο');
 });
 
+test('Άσκηση με το 🎯: το ρολόι ζητά ώρα και το σωστό μετράει όταν αφήσεις τους δείκτες εκεί· το κλάσμα ζητά κομμάτια', async () => {
+  const level = async () => { await page.click('#menuBtn'); await page.click('#menu [data-act="level"]'); };
+  const kid = async (name) => (await items()).find((i) => i.kind === 'stamp' && i.name === name);
+  await level();
+  await page.click('#gadgetBtn');
+  await page.click('#gTabs [data-gtab="time"]');
+  await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-kid="clock"]');
+  const box = await kid('clock');
+  const cx = box.x + box.w / 2, cy = box.y + box.w / 2, r = box.w * 0.47;
+  const at = (turn, q) => [cx + r * q * Math.sin(turn * 2 * Math.PI), cy - r * q * Math.cos(turn * 2 * Math.PI)];
+  await page.mouse.click(box.x + box.w * 0.92, box.y + box.w * 0.08);
+  const asked = (await kid('clock')).v;
+  const goal = asked[2] - 1;
+  // πρώτα ο ωροδείκτης (πιο μέσα), μετά ο λεπτοδείκτης (κοντά στους αριθμούς)
+  await drag(...at(0, 0.3), ...at((Math.floor(goal / 60) + (asked[0] % 60) / 60) / 12, 0.3));
+  const half = (await kid('clock')).v;
+  await drag(...at(0.5, 0.8), ...at((goal % 60) / 60, 0.8));
+  const found = (await kid('clock')).v;
+  await page.mouse.click(cx, box.y + box.w + 20);
+  const closed = (await kid('clock')).v;
+  await page.click('#undo');
+  await page.click('#undo');
+  await page.click('#undo');
+  await page.click('#undo');
+  await page.click('#undo');
+  // κλάσμα σε μπάρα: χρωματίζεις από αριστερά όσα κομμάτια ζητούνται
+  await page.click('#gadgetBtn');
+  await page.click('#gTabs [data-gtab="frac"]');
+  await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-kid="fracbar"]');
+  const bar = await kid('fracbar');
+  await page.mouse.click(bar.x + bar.w * 0.32, bar.y + bar.h * 0.75);
+  const task = (await kid('fracbar')).v;
+  for (let i = 0; i < task[3]; i++) await page.mouse.click(bar.x + (bar.w * (i + 0.5)) / task[0], bar.y + bar.h * 0.2);
+  const solved = (await kid('fracbar')).v;
+  const party = await page.locator('.confetti').count();
+  for (let i = 0; i < task[3] + 2; i++) await page.click('#undo');
+  await level();
+  assert(asked[1] === 0 && goal % 5 === 0 && goal !== asked[0], `το 🎯 του ρολογιού δεν έβαλε άσκηση (${asked})`);
+  assert(half[2] === asked[2], 'ο στόχος χάθηκε όταν κουνήθηκε ο ωροδείκτης');
+  assert(found[0] === goal && found[3] === 1, `οι δείκτες έμειναν στο ${found[0]} αντί για ${goal}, ή δεν μέτρησε ως σωστό`);
+  assert(closed.length === 2 && closed[1] === 1, 'το πλαίσιο της ώρας δεν τελείωσε την άσκηση');
+  assert(task[1] === 0 && task[3] >= 1 && task[3] < task[0], `το 🎯 του κλάσματος δεν έβαλε άσκηση (${task})`);
+  assert(solved[3] === task[3] && solved[1] === (1 << task[3]) - 1, `δεν χρωματίστηκαν τα κομμάτια της άσκησης (${solved})`);
+  assert(party >= 1, 'το σωστό κλάσμα δεν έφερε πανηγυρισμό');
+});
+
 test('Πρώτο άνοιγμα της μέρας: «Τι κάνουμε σήμερα;» με νέο μάθημα για το τμήμα', async () => {
   await sleep(2000);
   // τα μαθήματα «γίνονται» προχθεσινά

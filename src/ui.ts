@@ -268,14 +268,14 @@ export function mountUi(app: HTMLElement): void {
     </div>
     <div class="gHead" data-lv="pri" data-tab="frac">Κλάσματα</div>
     <div class="tiles" data-lv="pri" data-tab="frac">
-      ${tile('data-kid="fracpie"', K.fracpie, 'Πίτα', 'Κλάσμα σε κύκλο: πατάς κομμάτια και χρωματίζονται')}
-      ${tile('data-kid="fracbar"', K.fracbar, 'Μπάρα', 'Κλάσμα σε μπάρα: για σύγκριση και ισοδύναμα κλάσματα')}
+      ${tile('data-kid="fracpie"', K.fracpie, 'Πίτα', 'Κλάσμα σε κύκλο: πατάς κομμάτια και χρωματίζονται. Το 🎯 βάζει άσκηση')}
+      ${tile('data-kid="fracbar"', K.fracbar, 'Μπάρα', 'Κλάσμα σε μπάρα: για σύγκριση και ισοδύναμα κλάσματα. Το 🎯 βάζει άσκηση')}
       ${tile('data-kid="fracpizza"', '<b class="em">🍕</b>', 'Πίτσα', 'Κλάσμα σε πίτσα: τα κομμάτια που παίρνεις φαίνονται ολόκληρα')}
       ${tile('data-kid="fracchoc"', '<b class="em">🍫</b>', 'Σοκολάτα', 'Κλάσμα σε σοκολάτα: τα κομμάτια που παίρνεις φαίνονται ολόκληρα')}
     </div>
     <div class="gHead" data-lv="pri" data-tab="time">Χρόνος και χρήματα</div>
     <div class="tiles" data-lv="pri" data-tab="time">
-      ${tile('data-kid="clock"', '<b class="em">🕒</b>', 'Ρολόι', 'Ρολόι: πατάς γύρω γύρω για τα λεπτά, πιο μέσα για την ώρα')}
+      ${tile('data-kid="clock"', '<b class="em">🕒</b>', 'Ρολόι', 'Ρολόι: σέρνεις τους δείκτες. Το 🎯 βάζει άσκηση («Δείξε 7:45»)')}
       ${tile('data-kid="money"', '<b class="em">💶</b>', 'Χρήματα', 'Κέρματα και χαρτονομίσματα ευρώ')}
       ${tile('data-gadget="timer"', I.timer, 'Χρονόμετρο')}
     </div>

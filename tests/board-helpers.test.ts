@@ -113,6 +113,50 @@ describe('μέτρηση μέσα σε άξονες', () => {
 
 import { KIDS } from '../src/kids';
 
+describe('άσκηση με το 🎯 στα εργαλεία του Δημοτικού', () => {
+  const at = (name: string, v: number[], fx: number, fy: number): number[] | null => {
+    const d = KIDS[name];
+    return d.tap!(v, fx * d.w, fy * d.h, d.w, d.h);
+  };
+  it('κλάσμα: το 🎯 ζητά γνήσιο κλάσμα σε άδειο σχήμα και κρατά την όψη', () => {
+    for (let i = 0; i < 30; i++) {
+      const v = at('fracbar', [4, 5, 1], 0.32, 0.75)!;
+      expect(v[1]).toBe(0);
+      expect(v[2]).toBe(1);
+      expect(v[3]).toBeGreaterThanOrEqual(1);
+      expect(v[3]).toBeLessThan(v[0]);
+    }
+  });
+  it('κλάσμα: ο στόχος μένει όσο χρωματίζεις, πανηγυρισμός μόλις γίνουν όσα ζητούνται, και φεύγει αν αλλάξει ο παρονομαστής', () => {
+    const d = KIDS.fracbar;
+    const one = at('fracbar', [4, 0, 0, 2], 0.1, 0.2)!;
+    expect(one).toEqual([4, 1, 0, 2]);
+    expect(d.fx!([4, 0, 0, 2], one)).toBe('click');
+    const two = at('fracbar', one, 0.9, 0.2)!;
+    expect(two).toEqual([4, 9, 0, 2]);
+    expect(d.fx!(one, two)).toBe('win');
+    expect(at('fracbar', two, 0.68, 0.75)).toEqual([4, 9, 1, 2]);
+    expect(at('fracbar', two, 0.86, 0.75)).toEqual([5, 0]);
+    expect(d.fx!([4, 0], [4, 1])).toBe('click');
+  });
+  it('ρολόι: το 🎯 ζητά άλλη ώρα ανά 5 λεπτά και κρύβει την ψηφιακή· σωστό μόνο όταν αφήσεις τους δείκτες εκεί', () => {
+    const d = KIDS.clock;
+    const v = d.tap!([185, 1], d.w * 0.92, d.w * 0.08, d.w, d.h)!;
+    expect(v[0]).toBe(185);
+    expect(v[1]).toBe(0);
+    expect((v[2] - 1) % 5).toBe(0);
+    expect(v[2] - 1).not.toBe(185);
+    expect(d.drop!([185, 0, 186])).toEqual({ v: [185, 0, 186, 1], ev: 'win' });
+    expect(d.drop!([180, 0, 186])).toBeNull();
+    expect(d.drop!([185, 0, 186, 1])).toBeNull();
+    expect(d.drop!([185, 1])).toBeNull();
+    // οι δείκτες κρατούν τον στόχο όσο σέρνονται, και το πλαίσιο της ώρας τελειώνει την άσκηση
+    const c = d.w / 2, r = d.w * 0.47;
+    expect(d.paint!([185, 0, 186, 1], c, c - r * 0.8, d.w, d.h, {}, true)).toEqual([180, 0, 186, 0]);
+    expect(d.tap!([185, 0, 186, 1], d.w / 2, d.w + 10, d.w, d.h)).toEqual([185, 1]);
+  });
+});
+
 describe('εργαλεία Δημοτικού', () => {
   const tap = (name: string, v: number[], x: number, y: number): number[] | null => {
     const d = KIDS[name];

@@ -86,15 +86,19 @@ const LINES: [from: number, to: number, step: number][] = [[0, 10, 1], [0, 20, 1
 
 // ---------- κλάσματα ----------
 /** Κάτω λωρίδα με − [κλάσμα] + : κοινή σε πίτα και μπάρα. */
-function fracStrip(c: C, w: number, y: number, hh: number, n: number, k: number, env: KidEnv): void {
+function fracStrip(c: C, w: number, y: number, hh: number, n: number, k: number, env: KidEnv, goal = 0): void {
   const r = hh * 0.3;
   knob(c, w * 0.14, y, r, '−', env);
   knob(c, w * 0.86, y, r, '+', env);
   // το κλάσμα γραμμένο κατακόρυφα: αριθμητής, γραμμή, παρονομαστής
   const fs = hh * 0.32;
-  text(c, String(k), w / 2, y - fs * 0.56, fs, env.ink, 700);
-  text(c, String(n), w / 2, y + fs * 0.62, fs, env.ink, 700);
+  // άσκηση: γράφεται το κλάσμα που ζητείται· γίνεται πράσινο με ✓ όταν χρωματιστούν τόσα κομμάτια
+  const done = goal > 0 && k === goal, ink = done ? GOOD : env.ink;
+  if (done) text(c, '✓', w / 2 + fs * 1.5, y, fs * 1.5, GOOD, 800);
+  text(c, String(goal || k), w / 2, y - fs * 0.56, fs, ink, 700);
+  text(c, String(n), w / 2, y + fs * 0.62, fs, ink, 700);
   c.save();
+  c.strokeStyle = ink;
   c.lineWidth = Math.max(2, fs * 0.09);
   c.beginPath();
   c.moveTo(w / 2 - fs * 0.5, y);
@@ -103,7 +107,29 @@ function fracStrip(c: C, w: number, y: number, hh: number, n: number, k: number,
   c.restore();
 }
 /** Η όψη «πίτσα / σοκολάτα» (τρίτο στοιχείο της κατάστασης) μένει όταν αλλάζουν τα κομμάτια. */
-const skinKeep = (v: number[], next: number[] | null): number[] | null => (next && v[2] ? [next[0], next[1], 1] : next);
+const skinKeep = (v: number[], next: number[] | null): number[] | null => {
+  if (!next) return next;
+  // η άσκηση (τέταρτο στοιχείο: πόσα κομμάτια ζητούνται) μένει όσο δεν αλλάζει ο παρονομαστής
+  const goal = next[0] === (v[0] || 4) ? v[3] ?? 0 : 0;
+  if (goal) return [next[0], next[1], v[2] ? 1 : 0, goal];
+  return v[2] ? [next[0], next[1], 1] : next;
+};
+/** Το πράσινο του «σωστό». */
+const GOOD = '#16a34a';
+/** Νέα άσκηση κλάσματος: τυχαίος παρονομαστής και αριθμητής, άδειο σχήμα. */
+function fracGoal(v: number[]): number[] {
+  const ns = [2, 3, 4, 5, 6, 8, 10];
+  let n = v[0] || 4, k = v[3] ?? 0;
+  while (n === (v[0] || 4) && k === (v[3] ?? 0)) {
+    n = ns[Math.floor(Math.random() * ns.length)];
+    k = 1 + Math.floor(Math.random() * (n - 1));
+  }
+  return [n, 0, v[2] ? 1 : 0, k];
+}
+/** Πανηγυρισμός όταν τα χρωματισμένα κομμάτια γίνουν όσα ζητά η άσκηση. */
+const fracFx = (prev: number[], next: number[]): string => (next[3] && ones(next[1] ?? 0) === next[3] && ones(prev[1] ?? 0) !== next[3] ? 'win' : 'click');
+/** Ώρα σε μορφή 7:45 από λεπτά μετά τις 12. */
+const clockText = (mins: number): string => `${Math.floor(mins / 60) || 12}:${String(mins % 60).padStart(2, '0')}`;
 /** Μικρό κουμπί που αλλάζει την όψη του κλάσματος· με περίγραμμα όταν είναι αναμμένο. */
 function skinBtn(c: C, x: number, y: number, r: number, emoji: string, on: boolean, env: KidEnv): void {
   c.save();
@@ -711,12 +737,14 @@ export const KIDS: Record<string, StampDef> = {
       }
       if (n === 1 && !v[2]) { c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.stroke(); }
       skinBtn(c, w * 0.9, w * 0.1, w * 0.085, '🍕', !!v[2], env);
+      skinBtn(c, w * 0.1, w * 0.1, w * 0.085, '🎯', !!v[3], env);
       c.fillStyle = env.ink;
-      fracStrip(c, w, w + (h - w) / 2, h - w, n, ones(v[1] ?? 0), env);
+      fracStrip(c, w, w + (h - w) / 2, h - w, n, ones(v[1] ?? 0), env, v[3] ?? 0);
     },
     tap(v, x, y, w, h) {
       const n = v[0] || 4, cx = w / 2, cy = w / 2;
-      if (inR(x, y, w * 0.9, w * 0.1, w * 0.1)) return [n, v[1] ?? 0, v[2] ? 0 : 1];
+      if (inR(x, y, w * 0.9, w * 0.1, w * 0.1)) return [n, v[1] ?? 0, v[2] ? 0 : 1, ...(v[3] ? [v[3]] : [])];
+      if (inR(x, y, w * 0.1, w * 0.1, w * 0.1)) return fracGoal(v);
       if (Math.hypot(x - cx, y - cy) <= w * 0.46) {
         let a = Math.atan2(y - cy, x - cx) + Math.PI / 2;
         if (a < 0) a += 2 * Math.PI;
@@ -724,6 +752,7 @@ export const KIDS: Record<string, StampDef> = {
       }
       return skinKeep(v, fracTap(v, x, y, w, w + (h - w) / 2, h - w));
     },
+    fx: fracFx,
   }),
 
   fracbar: kid({
@@ -752,15 +781,18 @@ export const KIDS: Record<string, StampDef> = {
       }
       const sy = bh + (h - bh) / 2;
       skinBtn(c, w * 0.68, sy, (h - bh) * 0.24, '🍫', !!v[2], env);
+      skinBtn(c, w * 0.32, sy, (h - bh) * 0.24, '🎯', !!v[3], env);
       c.fillStyle = env.ink;
-      fracStrip(c, w, sy, h - bh, n, ones(v[1] ?? 0), env);
+      fracStrip(c, w, sy, h - bh, n, ones(v[1] ?? 0), env, v[3] ?? 0);
     },
     tap(v, x, y, w, h) {
       const n = v[0] || 4, bh = h * 0.5, sy = bh + (h - bh) / 2;
       if (y >= 0 && y <= bh && x >= 0 && x <= w) return skinKeep(v, [n, (v[1] ?? 0) ^ (1 << Math.min(n - 1, Math.floor((x / w) * n)))]);
-      if (inR(x, y, w * 0.68, sy, (h - bh) * 0.3)) return [n, v[1] ?? 0, v[2] ? 0 : 1];
+      if (inR(x, y, w * 0.68, sy, (h - bh) * 0.3)) return [n, v[1] ?? 0, v[2] ? 0 : 1, ...(v[3] ? [v[3]] : [])];
+      if (inR(x, y, w * 0.32, sy, (h - bh) * 0.3)) return fracGoal(v);
       return skinKeep(v, fracTap(v, x, y, w, sy, h - bh));
     },
+    fx: fracFx,
   }),
 
   clock: kid({
@@ -813,7 +845,10 @@ export const KIDS: Record<string, StampDef> = {
       c.restore();
       c.lineWidth = Math.max(1.5, w * 0.006);
       c.stroke();
-      text(c, v[1] ? `${hr}:${String(mins % 60).padStart(2, '0')}` : '? : ??', w / 2, sy + 1, (h - w) * 0.46, env.ink, 700);
+      // άσκηση (τρίτο στοιχείο: η ώρα που ζητείται, +1· τέταρτο: βρέθηκε): «Δείξε 7:45» και ✓ όταν αφήσεις τους δείκτες εκεί
+      if (v[2]) fitText(c, v[3] ? `✓ ${clockText(v[2] - 1)}` : `Δείξε ${clockText(v[2] - 1)}`, w / 2, sy + 1, (h - w) * 0.4, w * 0.5, v[3] ? GOOD : env.ink, 700);
+      else text(c, v[1] ? `${hr}:${String(mins % 60).padStart(2, '0')}` : '? : ??', w / 2, sy + 1, (h - w) * 0.46, env.ink, 700);
+      skinBtn(c, w * 0.92, w * 0.08, w * 0.07, '🎯', !!v[2], env);
     },
     // οι δείκτες σέρνονται: έξω κοντά στους αριθμούς ο λεπτοδείκτης (ανά 5 λεπτά), πιο μέσα ο ωροδείκτης
     paint(v, x, y, w, _h, st, first) {
@@ -826,12 +861,22 @@ export const KIDS: Record<string, StampDef> = {
       }
       let a = Math.atan2(x - cx, cy - y);
       if (a < 0) a += 2 * Math.PI;
-      if (st.hand === 1) return [Math.floor(mins / 60) * 60 + (Math.round((a / (2 * Math.PI)) * 12) % 12) * 5, v[1] ?? 1];
-      return [(Math.round((a / (2 * Math.PI)) * 12 - (mins % 60) / 60 + 12) % 12) * 60 + (mins % 60), v[1] ?? 1];
+      const goal = v[2] ? [v[2], 0] : [];
+      if (st.hand === 1) return [Math.floor(mins / 60) * 60 + (Math.round((a / (2 * Math.PI)) * 12) % 12) * 5, v[1] ?? 1, ...goal];
+      return [(Math.round((a / (2 * Math.PI)) * 12 - (mins % 60) / 60 + 12) % 12) * 60 + (mins % 60), v[1] ?? 1, ...goal];
     },
-    tap(v, _x, y, w, h) {
+    // όταν αφήσεις τους δείκτες πάνω στην ώρα της άσκησης: σωστό (όχι όσο απλώς περνάς από εκεί)
+    drop: (v) => (v[2] && !v[3] && v[0] === v[2] - 1 ? { v: [v[0], v[1] ?? 0, v[2], 1], ev: 'win' } : null),
+    tap(v, x, y, w, h) {
       const mins = ((v[0] ?? 0) % 720 + 720) % 720;
-      return y > w && y <= h ? [mins, v[1] ? 0 : 1] : null;
+      if (inR(x, y, w * 0.92, w * 0.08, w * 0.08)) {
+        // νέα άσκηση: τυχαία ώρα ανά 5 λεπτά, διαφορετική από αυτή που δείχνει το ρολόι· η ψηφιακή ώρα κρύβεται
+        let t = mins;
+        while (t === mins || t === (v[2] ?? 0) - 1) t = Math.floor(Math.random() * 144) * 5;
+        return [mins, 0, t + 1, 0];
+      }
+      // πάτημα στο πλαίσιο της ώρας: κρύβει ή δείχνει την ψηφιακή ώρα· μέσα σε άσκηση, την τελειώνει
+      return y > w && y <= h ? [mins, v[2] ? 1 : v[1] ? 0 : 1] : null;
     },
   }),
 
