@@ -144,6 +144,8 @@ export class Board {
   onKidFx: (ev: string, it: StampItem) => void = () => {};
   /** Πατήθηκε το «όλη η οθόνη» ενός εργαλείου του Δημοτικού (κυβάκια). */
   onKidFull: (it: StampItem) => void = () => {};
+  /** Τα ονόματα των μαθητών του τμήματος του ανοιχτού μαθήματος (για την κλήρωση)· κενό αν δεν υπάρχουν. */
+  kidNames: () => string[] = () => [];
   onAsk: (q: KidAsk) => Promise<string | null> = () => Promise.resolve(null);
   onMergeAxes: (target: AxesItem, dropped: AxesItem) => AxesItem | null = () => null;
   onPointerInfo: (e: PointerEvent, count: number) => void = () => {};
@@ -495,7 +497,7 @@ export class Board {
         if (v) apply(v);
       });
     } else {
-      const v = d.tap?.(cur, lx - it.x, ly - it.y, it.w, it.h);
+      const v = d.tap?.(cur, lx - it.x, ly - it.y, it.w, it.h, { names: this.kidNames() });
       if (!v) return false;
       apply(v);
     }

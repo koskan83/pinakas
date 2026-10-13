@@ -13,6 +13,7 @@ import { ANGLE_KEY, HL_ALPHA, angleSides, fmt, fmtU, hlFlat, measureAngles, meas
 export interface RenderHost {
   doc: Doc;
   kidAnim: Map<string, { t0: number; prev: number[] }>;
+  kidNames(): string[];
   readonly page: Page;
   selected: string | null;
   fnPreview: { index: number | null; expr: string; color: string } | null;
@@ -641,7 +642,7 @@ export class Renderer {
         c.scale(Math.max(0.05, k), Math.max(0.05, k));
         c.translate(-s.w / 2, -s.h / 2);
       }
-      d.drawKid(c, s.w, s.h, s.v ?? d.init ?? [], { ink: this.b.ink(s.color), bg: isDark(this.b.doc.bg) ? '#14201b' : '#ffffff', ...(an ? { anim: { t, prev: an.prev } } : {}) });
+      d.drawKid(c, s.w, s.h, s.v ?? d.init ?? [], { ink: this.b.ink(s.color), bg: isDark(this.b.doc.bg) ? '#14201b' : '#ffffff', names: this.b.kidNames(), ...(an ? { anim: { t, prev: an.prev } } : {}) });
     }
     else d.draw(c, s.w, s.h, d.spring ? this.b.springState(s) : undefined);
     c.restore();

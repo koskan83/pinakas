@@ -660,6 +660,59 @@ test('Μαθήματα: νέο μάθημα, τμήμα, μετονομασία 
   await page.waitForFunction(() => document.getElementById('lessonName').textContent === 'Δοκιμή Β2 νέο');
 });
 
+test('Τμήμα με ονόματα: η Κλήρωση βγάζει μαθητές χωρίς επανάληψη', async () => {
+  await page.click('#libOpen');
+  await page.waitForSelector('#lib:not(.hidden)');
+  await page.click('#libGroups [data-group="Β2"]');
+  await page.click('#libGroups [data-lib="roster"]');
+  await page.waitForSelector('#ask textarea');
+  await page.fill('#ask textarea', 'Άννα\nΒασίλης\n\nΓιώργος\nΆννα');
+  await page.click('#ask .go');
+  await page.waitForFunction(() => /3\s*$/.test(document.querySelector('#libGroups [data-lib="roster"]')?.textContent ?? ''));
+  await page.click('#lib [data-lib="close"]');
+  await page.click('#gadgetBtn');
+  await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-kid="lottery"][data-lv="sec"]');
+  const lot = async () => (await items()).find((i) => i.kind === 'stamp' && i.name === 'lottery');
+  const box = await lot();
+  const picks = [];
+  for (let k = 0; k < 4; k++) {
+    await page.mouse.click(box.x + box.w / 2, box.y + box.h * 0.3);
+    await sleep(120);
+    picks.push((await lot()).v);
+  }
+  await page.mouse.click(box.x + box.w * 0.16, box.y + box.h * 0.87);
+  const reset = (await lot()).v;
+  assert(new Set(picks.slice(0, 3).map((v) => v[0])).size === 3 && picks[2][2] === 7, `στους 3 μαθητές δεν βγήκαν και οι 3 (${picks.map((v) => v[0])})`);
+  assert(picks[3][0] !== picks[2][0] && [1, 2, 4].includes(picks[3][2]), 'ο νέος γύρος δεν άρχισε σωστά');
+  assert(reset[0] === 0 && !reset[2], 'το ⟳ δεν ξεκίνησε νέο γύρο');
+});
+
+test('Πρώτο άνοιγμα της μέρας: «Τι κάνουμε σήμερα;» με νέο μάθημα για το τμήμα', async () => {
+  await sleep(2000);
+  // τα μαθήματα «γίνονται» προχθεσινά
+  await page.evaluate(() => new Promise((res) => {
+    const r = indexedDB.open('grafida');
+    r.onsuccess = () => {
+      const tx = r.result.transaction('kv', 'readwrite');
+      const st = tx.objectStore('kv');
+      const g = st.get('lessons');
+      g.onsuccess = () => st.put(JSON.stringify(JSON.parse(g.result).map((m) => ({ ...m, updated: m.updated - 2 * 86400000 }))), 'lessons');
+      tx.oncomplete = () => res();
+    };
+  }));
+  await page.reload();
+  await page.waitForSelector('#start:not(.hidden)');
+  assert((await page.textContent('#stCont')).includes('Δοκιμή Β2 νέο'), 'δεν προτείνει να συνεχίσεις το τελευταίο μάθημα');
+  await page.click('#stGroups [data-st="new"][data-g="Β2"]');
+  await page.waitForFunction(() => document.getElementById('lessonName').textContent.startsWith('Β2 '));
+  assert(!(await visible('#start')), 'η οθόνη έναρξης δεν έκλεισε');
+  assert((await items()).length === 0, 'το νέο μάθημα δεν είναι άδειο');
+  await page.reload();
+  await page.waitForSelector('#toolbar');
+  await sleep(400);
+  assert(!(await visible('#start')), 'η οθόνη έναρξης ξαναβγήκε την ίδια μέρα');
+});
+
 test('Αντίγραφο μαθημάτων στο Drive', async () => {
   const before = drive.uploads;
   await page.click('#libOpen');

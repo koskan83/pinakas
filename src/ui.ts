@@ -50,6 +50,7 @@ const I = {
   ruler: IC('<rect x="2" y="8" width="20" height="8" rx="1"/><path d="M6 8v3M10 8v4M14 8v3M18 8v4"/>'),
   protractor: P('M3 17a9 9 0 0 1 18 0zM12 17v-3M7.5 12.500l1.500 1.500M16.5 12.5l-1.5 1.5'),
   compass: IC('<circle cx="12" cy="4.500" r="1.500"/><path d="M12 6L6 21M12 6l6 15M8.500 14h7"/>'),
+  lottery: IC('<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.300 2.700-6 6-6s6 2.700 6 6"/><path d="M17 4.500l1 2 2.200.300-1.600 1.500.400 2.200-2-1.100-2 1.100.400-2.200"/>'),
   physics: IC('<path d="M2 12h2l1.500-4 2.500 8 2.500-8 2.500 8 1.500-4h1.500"/><rect x="16" y="8" width="6" height="8" rx="1"/>'),
   timer: IC('<circle cx="12" cy="13.500" r="7.500"/><path d="M12 13.500V9.500M9.500 3h5M12 3v3"/>'),
   curtain: IC('<rect x="3" y="4" width="18" height="16" rx="1.500"/><path d="M3 12h18M7 12v8M12 12v8M17 12v8"/>'),
@@ -295,6 +296,7 @@ export function mountUi(app: HTMLElement): void {
       ${tile('data-gadget="protractor"', I.protractor, 'Μοιρογν.', 'Μοιρογνωμόνιο')}
       ${tile('data-gadget="compass"', I.compass, 'Διαβήτης')}
       ${tile('data-ins="stamps" data-lv="sec"', I.physics, 'Φυσική…', 'Σχήματα φυσικής')}
+      ${tile('data-kid="lottery" data-lv="sec"', I.lottery, 'Κλήρωση', 'Κλήρωση: βγάζει τυχαίο μαθητή του τμήματος (ή αριθμό, αν το τμήμα δεν έχει ονόματα)')}
     </div>
     <div class="gHead" data-lv="pri">Εικόνες για μέτρημα</div>
     <div class="tiles small" data-lv="pri">
@@ -305,7 +307,7 @@ export function mountUi(app: HTMLElement): void {
       ${tile('data-kid="build"', '<b class="em">🧱</b>', 'Κυβάκια', 'Χτίσιμο με κυβάκια: διαλέγεις υλικό και σέρνεις για να χτίσεις')}
       ${tile('data-kid="hangman"', '<b class="em">🔡</b>', 'Κρεμάλα', 'Κρεμάλα: τυχαία λέξη ή δική σου, με πάτημα στα γράμματα')}
       ${tile('data-kid="dice"', '<b class="em">🎲</b>', 'Ζάρι')}
-      ${tile('data-kid="lottery"', '<b class="em">🎟️</b>', 'Κλήρωση', 'Κλήρωση αριθμού (π.χ. ποιος μαθητής θα σηκωθεί)')}
+      ${tile('data-kid="lottery"', '<b class="em">🎟️</b>', 'Κλήρωση', 'Κλήρωση: βγάζει τυχαίο μαθητή του τμήματος (ή αριθμό, αν το τμήμα δεν έχει ονόματα)')}
     </div>
     <div class="gHead" data-lv="pri">Επιβράβευση</div>
     <div class="tiles" data-lv="pri">

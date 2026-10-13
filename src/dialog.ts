@@ -110,6 +110,38 @@ export function ask(title: string, o: AskOptions = {}): Promise<string | null> {
   });
 }
 
+/** Ζητά κείμενο πολλών γραμμών (π.χ. τα ονόματα ενός τμήματος, ένα σε κάθε γραμμή). null αν ακυρώθηκε. */
+export function askLines(title: string, o: { value?: string; hint?: string; ok?: string } = {}): Promise<string | null> {
+  return new Promise((res) => {
+    const { back, box } = shell(title, o.hint);
+    const ta = document.createElement('textarea');
+    ta.className = 'askText';
+    ta.value = o.value ?? '';
+    ta.spellcheck = false;
+    ta.rows = 10;
+    const acts = document.createElement('div');
+    acts.className = 'askActs';
+    const no = button('Άκυρο', 'no'), yes = button(o.ok ?? 'Εντάξει', 'go');
+    acts.append(no, yes);
+    box.append(ta, acts);
+    const done = (v: string | null): void => {
+      if (open !== cancel) return;
+      open = null;
+      back.remove();
+      res(v);
+    };
+    const cancel = (): void => done(null);
+    open = cancel;
+    no.onclick = cancel;
+    yes.onclick = () => done(ta.value);
+    ta.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') cancel();
+    });
+    ta.focus();
+  });
+}
+
 /** Ζητά επιβεβαίωση. `danger`: το κουμπί της ενέργειας γίνεται κόκκινο (διαγραφές). */
 export function confirmBox(title: string, ok = 'Ναι', danger = false, hint?: string): Promise<boolean> {
   return new Promise((res) => {

@@ -3,7 +3,7 @@
 import { Doc, newDoc, uid } from './model';
 import { backupLesson, driveClientId, driveConnect, driveReady, listLessonBackups, readBackup, trashBackup } from './drive';
 import { deleteLesson, kvGet, kvSet, loadDoc, loadLesson, saveLesson } from './storage';
-import { ask, confirmBox } from './dialog';
+import { ask, askLines, confirmBox } from './dialog';
 
 export interface LessonMeta {
   id: string;
@@ -21,10 +21,13 @@ interface Backup {
   grafida: 'backup';
   v: 1;
   lessons: { meta: LessonMeta; doc: Doc }[];
+  /** Τα ονόματα των μαθητών κάθε τμήματος (μόνο στο αντίγραφο σε αρχείο, ποτέ στο Drive). */
+  rosters?: Record<string, string[]>;
 }
 
 const INDEX = 'lessons';
 const CURRENT = 'lesson.current';
+const ROSTERS = 'rosters';
 
 /** Τι έχει ανέβει στο Drive από αυτή τη συσκευή. */
 interface SafeState {
@@ -62,6 +65,8 @@ export interface LessonHost {
   setDoc(doc: Doc): void;
   /** Μικρογραφία της πρώτης σελίδας του ανοιχτού πίνακα. */
   thumb(): Promise<string | undefined>;
+  /** Ξαναζωγραφίζει τον πίνακα (π.χ. άλλαξαν τα ονόματα του τμήματος που δείχνει η κλήρωση). */
+  redraw(): void;
   download(blob: Blob, name: string): void;
   toast(msg: string, ms?: number): void;
 }
@@ -85,6 +90,9 @@ export class Lessons {
   /** Το τμήμα που φαίνεται στη βιβλιοθήκη· κενό = όλα. */
   private filter = (() => { try { return localStorage.getItem(GROUP) ?? ''; } catch { return ''; } })();
   private busy = false;
+  /** Τα ονόματα των μαθητών κάθε τμήματος. Μένουν μόνο σε αυτή τη συσκευή. */
+  private rosters: Record<string, string[]> = {};
+  private startEl: HTMLElement;
 
   constructor(private host: LessonHost, parent: HTMLElement) {
     parent.insertAdjacentHTML(
@@ -108,8 +116,11 @@ export class Lessons {
         <div id="libGroups"></div>
         <div id="libGrid"></div>
         <input id="libFile" type="file" accept=".json,application/json" hidden />
-      </div>`,
+      </div>
+      <div id="start" class="hidden"><div id="stBox"></div></div>`,
     );
+    this.startEl = parent.querySelector<HTMLElement>('#start')!;
+    this.startEl.addEventListener('click', (e) => void this.startClick(e));
     this.el = parent.querySelector<HTMLElement>('#lib')!;
     this.label = parent.querySelector<HTMLElement>('#lessonName')!;
     // το εικονίδιο ανοίγει τα μαθήματα· το ίδιο το όνομα μετονομάζει το ανοιχτό μάθημα
@@ -128,9 +139,9 @@ export class Lessons {
     });
   }
 
-  /** «Μάθημα 14/10/2026», με αρίθμηση αν υπάρχει ήδη. */
-  private defaultName(): string {
-    const base = `Μάθημα ${new Date().toLocaleDateString('el')}`;
+  /** «Μάθημα 14/10/2026» (ή «Β2 14/10/2026» για τμήμα), με αρίθμηση αν υπάρχει ήδη. */
+  private defaultName(group = ''): string {
+    const base = `${group || 'Μάθημα'} ${new Date().toLocaleDateString('el')}`;
     let name = base;
     for (let n = 2; this.index.some((m) => m.name === name); n++) name = `${base} (${n})`;
     return name;
@@ -145,6 +156,7 @@ export class Lessons {
     // ζητάμε από τον browser να μη σβήσει τα δεδομένα όταν γεμίσει ο δίσκος
     void navigator.storage?.persist?.().catch(() => false);
     this.index = (await kvGet<LessonMeta[]>(INDEX)) ?? [];
+    this.rosters = (await kvGet<Record<string, string[]>>(ROSTERS)) ?? {};
     if (this.index.length === 0) {
       // πρώτη φορά: ο πίνακας της παλιάς έκδοσης γίνεται το πρώτο μάθημα
       const old = await loadDoc();
@@ -153,6 +165,84 @@ export class Lessons {
     const want = await kvGet<string>(CURRENT);
     const meta = this.index.find((m) => m.id === want) ?? this.index[0];
     await this.show(meta.id);
+  }
+
+  /** Τα ονόματα των μαθητών του τμήματος του ανοιχτού μαθήματος· κενό αν δεν έχει τμήμα ή λίστα. */
+  names(): string[] {
+    const g = this.current?.group;
+    return (g && this.rosters[g]) || [];
+  }
+
+  /** Αλλάζει τη λίστα μαθητών ενός τμήματος: ένα όνομα σε κάθε γραμμή. */
+  private async editRoster(group: string): Promise<void> {
+    const have = this.rosters[group] ?? [];
+    const text = await askLines(`Μαθητές του ${group}`, {
+      value: have.join('\n'),
+      hint: 'Ένα όνομα σε κάθε γραμμή (μπορείς να τα επικολλήσεις από λίστα). Μένουν μόνο σε αυτή τη συσκευή. Με αυτά η Κλήρωση βγάζει όνομα αντί για αριθμό.',
+      ok: 'Αποθήκευση',
+    });
+    if (text === null) return;
+    const names = [...new Set(text.split(/\r?\n/).map((s) => s.trim().slice(0, 40)).filter(Boolean))].slice(0, 60);
+    if (names.length) this.rosters[group] = names;
+    else delete this.rosters[group];
+    await kvSet(ROSTERS, this.rosters);
+    this.host.redraw();
+  }
+
+  /**
+   * Η οθόνη «Τι κάνουμε σήμερα;»: βγαίνει στο πρώτο άνοιγμα της μέρας, όταν το ανοιχτό μάθημα είναι παλιότερο.
+   * Ένα πάτημα συνεχίζει το τελευταίο μάθημα ή ανοίγει νέο για το τμήμα που έχεις τώρα.
+   */
+  start(): void {
+    const cur = this.current;
+    if (!cur) return;
+    const day = (t: number): string => new Date(t).toDateString();
+    if (day(cur.updated) === day(Date.now())) return;
+    // μία μόνο άγραφη σελίδα: δεν υπάρχει κάτι να συνεχίσεις ή να διαλέξεις
+    if (this.index.length === 1 && this.host.getDoc().pages.every((p) => p.items.length === 0)) return;
+    const when = (t: number): string => new Date(t).toLocaleDateString('el', { weekday: 'long', day: 'numeric', month: 'long' });
+    const last = (g: string): LessonMeta | undefined => this.index.filter((m) => m.group === g).sort((a, b) => b.updated - a.updated)[0];
+    const rows = this.groups
+      .map((g) => ({ g, m: last(g)! }))
+      .sort((a, b) => b.m.updated - a.m.updated)
+      .slice(0, 6)
+      .map(({ g, m }) => `<div class="row"><span class="grp">${esc(g)}</span>
+        <button data-st="new" data-g="${esc(g)}">＋ Νέο μάθημα</button>
+        ${m.id === cur.id ? '' : `<button data-st="open" data-id="${m.id}" class="last"><small>Τελευταίο · ${new Date(m.updated).toLocaleDateString('el', { day: 'numeric', month: 'numeric' })}</small>${esc(m.name)}</button>`}</div>`)
+      .join('');
+    this.startEl.querySelector('#stBox')!.innerHTML = `
+      <div id="stHead"><b>${new Date().getHours() < 12 ? 'Καλημέρα' : 'Καλησπέρα'}! Τι κάνουμε σήμερα;</b><span>${when(Date.now())}</span></div>
+      <button id="stCont" data-st="cont">
+        <span class="th">${cur.thumb ? `<img src="${cur.thumb}" alt="" />` : ''}</span>
+        <span class="tx"><small>Συνέχισε από εκεί που έμεινες</small><b>${cur.group ? `<i class="grp">${esc(cur.group)}</i>` : ''}${esc(cur.name)}</b><small>${when(cur.updated)} · ${cur.pages} ${cur.pages === 1 ? 'σελίδα' : 'σελίδες'}</small></span>
+      </button>
+      ${rows ? `<div id="stGroups">${rows}</div>` : ''}
+      <div id="stActs"><button data-st="lib">Όλα τα μαθήματα</button><button data-st="new" data-g="" class="go">＋ Νέο μάθημα</button></div>`;
+    this.startEl.classList.remove('hidden');
+  }
+
+  private async startClick(e: Event): Promise<void> {
+    const t = e.target as HTMLElement;
+    const b = t.closest<HTMLElement>('[data-st]');
+    // πάτημα έξω από το πλαίσιο: συνεχίζεις όπως ήσουν
+    if (!b && t !== this.startEl) return;
+    this.startEl.classList.add('hidden');
+    const act = b?.dataset.st;
+    if (act === 'lib') return this.open();
+    if (act === 'open' && b!.dataset.id && b!.dataset.id !== this.cur) {
+      await this.flush(false);
+      return this.show(b!.dataset.id);
+    }
+    if (act === 'new') {
+      const g = b!.dataset.g ?? '';
+      await this.flush(false);
+      const meta = await this.add(newDoc(), this.defaultName(g));
+      if (g) {
+        meta.group = g;
+        await kvSet(INDEX, this.index);
+      }
+      await this.show(meta.id);
+    }
   }
 
   /** Καλείται σε κάθε αλλαγή του πίνακα: αποθηκεύει λίγο αργότερα. */
@@ -397,6 +487,10 @@ export class Lessons {
     bar.innerHTML = `<span>Τμήμα</span>` + ['', ...groups]
       .map((g) => `<button data-group="${esc(g)}" class="${g === this.filter ? 'on' : ''}">${g ? esc(g) : 'Όλα'} <small>${this.index.filter((m) => !g || m.group === g).length}</small></button>`)
       .join('');
+    if (this.filter) {
+      const n = this.rosters[this.filter]?.length ?? 0;
+      bar.innerHTML += `<button data-lib="roster" class="roster" title="Τα ονόματα των μαθητών του τμήματος, για την Κλήρωση">${n ? `Μαθητές του ${esc(this.filter)} <small>${n}</small>` : `＋ Μαθητές του ${esc(this.filter)}`}</button>`;
+    }
     const list = [...this.index].filter((m) => !this.filter || m.group === this.filter).sort((a, b) => b.updated - a.updated);
     this.el.querySelector('#libGrid')!.innerHTML = list
       .map((m) => {
@@ -433,6 +527,10 @@ export class Lessons {
       }
       await this.show(meta.id);
       return this.close();
+    }
+    if (top === 'roster') {
+      if (this.filter) await this.editRoster(this.filter);
+      return this.render();
     }
     const grp = t.closest<HTMLElement>('[data-group]');
     if (grp) {
@@ -480,10 +578,12 @@ export class Lessons {
       if (meta.id === this.cur) await this.show(this.index[0].id);
     }
     this.render();
+    // το τμήμα του ανοιχτού μαθήματος μπορεί να άλλαξε: η κλήρωση δείχνει άλλα ονόματα
+    this.host.redraw();
   }
 
   private async backup(): Promise<void> {
-    const out: Backup = { grafida: 'backup', v: 1, lessons: [] };
+    const out: Backup = { grafida: 'backup', v: 1, lessons: [], rosters: this.rosters };
     for (const meta of this.index) {
       const doc = await loadLesson(meta.id);
       if (doc) out.lessons.push({ meta, doc });
@@ -512,7 +612,16 @@ export class Lessons {
         if (r === 'new') added++; else if (r === 'upd') updated++; else skipped++;
       }
       await kvSet(INDEX, this.index);
+      // λίστες μαθητών: μπαίνουν μόνο για τμήματα που δεν έχουν ήδη λίστα εδώ
+      let lists = 0;
+      for (const [g, names] of Object.entries(data.rosters ?? {})) {
+        if (this.rosters[g]?.length || !Array.isArray(names)) continue;
+        this.rosters[g] = names.filter((n) => typeof n === 'string').slice(0, 60);
+        lists++;
+      }
+      if (lists) await kvSet(ROSTERS, this.rosters);
       this.render();
+      this.host.redraw();
       this.host.toast(`Επαναφορά: ${added} νέα, ${updated} ενημερώθηκαν, ${skipped} έμειναν όπως ήταν`, 6000);
     } catch (err) {
       this.host.toast(`Το αρχείο δεν είναι αντίγραφο μαθημάτων (${err instanceof Error ? err.message : err})`, 6000);

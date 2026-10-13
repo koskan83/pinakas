@@ -995,8 +995,9 @@ setLabels((() => { try { return localStorage.getItem('grafida.labels') !== '0'; 
 // το διαφανές παράθυρο δεν έχει μαθήματα και δεν πειράζει ό,τι είναι αποθηκευμένο
 export const lessons = isOverlay
   ? null
-  : new Lessons({ getDoc: () => board.doc, setDoc: (d) => board.loadDoc(d), thumb: () => board.thumb(), download, toast }, app);
+  : new Lessons({ getDoc: () => board.doc, setDoc: (d) => board.loadDoc(d), thumb: () => board.thumb(), redraw: () => board.redraw(), download, toast }, app);
 board.onChange = () => lessons?.touch();
+board.kidNames = () => lessons?.names() ?? [];
 
 void (async () => {
   await lessons?.init().catch((err) => console.error(err));
@@ -1006,6 +1007,8 @@ void (async () => {
   let seen = true;
   try { seen = localStorage.getItem(WELCOME) === '1'; } catch { /* χωρίς αποθήκευση: δεν ενοχλούμε */ }
   if (!seen && !isOverlay) openWelcome();
+  // στο πρώτο άνοιγμα της μέρας: συνέχισε το τελευταίο μάθημα ή ξεκίνα νέο για το τμήμα σου
+  else lessons?.start();
   // μετά από ενημέρωση, μία φορά σε κάθε συσκευή: τι άλλαξε
   if (newsPending(seen) && !isOverlay) void showNews();
 })();

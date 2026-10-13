@@ -20,6 +20,8 @@ export interface KidEnv {
   full?: boolean;
   /** Η κατάσταση μόλις άλλαξε: πριν από πόσα ms και ποια ήταν, για να κινηθεί ομαλά (ζυγαριά, ζάρι, κλήρωση, κρεμάλα). */
   anim?: { t: number; prev: number[] };
+  /** Τα ονόματα των μαθητών του τμήματος, αν το μάθημα ανήκει σε τμήμα με λίστα (κλήρωση με ονόματα). */
+  names?: string[];
 }
 
 const el = (n: number, d = 2): string => (+n.toFixed(d) || 0).toLocaleString('el', { maximumFractionDigits: d }).replace('-', '−');
@@ -32,6 +34,15 @@ function text(c: C, t: string, x: number, y: number, size: number, color?: strin
   if (color) c.fillStyle = color;
   c.fillText(t, x, y);
   c.restore();
+}
+
+/** Κείμενο που μικραίνει όσο χρειάζεται για να χωρέσει σε πλάτος maxW. */
+function fitText(c: C, t: string, x: number, y: number, size: number, maxW: number, color?: string, weight = 600): void {
+  c.save();
+  c.font = `${weight} ${size}px ${FONT}`;
+  const m = c.measureText(t).width;
+  c.restore();
+  text(c, t, x, y, m > maxW ? (size * maxW) / m : size, color, weight);
 }
 
 /** Στρογγυλό κουμπί με σύμβολο (−, +, ⟳). */
@@ -1076,9 +1087,10 @@ export const KIDS: Record<string, StampDef> = {
   }),
 
   lottery: kid({
-    label: 'Κλήρωση αριθμού', w: 240, h: 270, init: [0, 25],
+    label: 'Κλήρωση', w: 240, h: 270, init: [0, 25],
     drawKid(c, w, h, v, env) {
-      const n = v[1] || 25, top = h * 0.74;
+      const names = env.names?.length ? env.names : null;
+      const n = names ? names.length : v[1] || 25, top = h * 0.74;
       rrect(c, 2, 2, w - 4, top - 4, w * 0.12);
       c.save();
       c.fillStyle = PURPLE;
@@ -1092,15 +1104,43 @@ export const KIDS: Record<string, StampDef> = {
       const shown = spin ? 1 + ((Math.floor(env.anim!.t / 55) * 7 + v[0]) % n) : v[0];
       c.save();
       if (spin) c.globalAlpha = 0.55;
-      text(c, shown ? String(shown) : '?', w / 2, top * 0.52, top * 0.52, env.ink, 800);
+      if (names) fitText(c, names[shown - 1] ?? '?', w / 2, top * 0.52, top * 0.3, w * 0.86, env.ink, 800);
+      else text(c, shown ? String(shown) : '?', w / 2, top * 0.52, top * 0.52, env.ink, 800);
       c.restore();
       const r = (h - top) * 0.36, y = top + (h - top) / 2;
+      if (names) {
+        // με ονόματα: περνούν όλοι πριν ξαναβγεί κάποιος· το ⟳ ξεκινά νέο γύρο
+        let left = 0;
+        for (let i = 0; i < n; i++) if (!bit(v, 2, i)) left++;
+        knob(c, w * 0.16, y, r, '⟳', env);
+        fitText(c, `έμειναν ${left} από ${n}`, w * 0.62, y + 1, (h - top) * 0.3, w * 0.6, env.ink, 600);
+        return;
+      }
       knob(c, w * 0.16, y, r, '−', env);
       knob(c, w * 0.84, y, r, '+', env);
       text(c, `1 έως ${n}`, w / 2, y + 1, (h - top) * 0.36, env.ink, 600);
     },
-    tap(v, x, y, w, h) {
+    tap(v, x, y, w, h, env) {
       const n = v[1] || 25, top = h * 0.74, r = (h - top) * 0.36, sy = top + (h - top) / 2;
+      const names = env?.names?.length ? env.names : null;
+      if (names) {
+        if (inR(x, y, w * 0.16, sy, r)) return [0, n];
+        if (y < 0 || y >= top) return null;
+        const N = names.length;
+        let from = v;
+        const free: number[] = [];
+        for (let i = 0; i < N; i++) if (!bit(v, 2, i)) free.push(i);
+        if (free.length === 0) {
+          // βγήκαν όλοι: νέος γύρος, που δεν αρχίζει με τον ίδιο μαθητή
+          from = [v[0], n];
+          for (let i = 0; i < N; i++) if (i !== v[0] - 1 || N === 1) free.push(i);
+        }
+        const i = free[Math.floor(Math.random() * free.length)];
+        const out = flip(from, 2, i);
+        out[0] = i + 1;
+        out[1] = n;
+        return out;
+      }
       if (y >= 0 && y < top) {
         let k = 1 + Math.floor(Math.random() * n);
         if (k === v[0] && n > 1) k = 1 + (k % n);
