@@ -50,9 +50,19 @@ if (isOverlay) {
 // ---------- helpers ----------
 
 let toastTimer = 0;
-export function toast(msg: string, ms = 3000): void {
+/** Σύντομο μήνυμα πάνω στη μέση. `action`: κουμπί δίπλα στο μήνυμα (π.χ. «Αναίρεση»). */
+export function toast(msg: string, ms = 3000, action?: { label: string; run: () => void }): void {
   const t = $('toast');
   t.textContent = msg;
+  if (action) {
+    const b = document.createElement('button');
+    b.textContent = action.label;
+    b.onclick = () => {
+      t.classList.add('hidden');
+      action.run();
+    };
+    t.append(b);
+  }
   t.classList.remove('hidden');
   clearTimeout(toastTimer);
   if (ms > 0) toastTimer = window.setTimeout(() => t.classList.add('hidden'), ms);

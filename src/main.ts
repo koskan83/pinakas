@@ -7,7 +7,7 @@ import { GadgetKind } from './gadgets';
 import { isNative, isOverlay, nativeScreenshot, openOverlay } from './native';
 import { STAMPS } from './stamps';
 import { PEN_ICON, PenKind } from './ui';
-import { ask, confirmBox, notice } from './dialog';
+import { ask, notice } from './dialog';
 import { openBuildView } from './build-view';
 import { confetti, loadFx, playFx, saveFx } from './fx';
 import { NEWS, VERSION, newsPending } from './news';
@@ -764,7 +764,9 @@ const onMenu = async (e: Event): Promise<void> => {
   } else if (act === 'clear') {
     board.clearPage();
   } else if (act === 'delpage') {
-    void confirmBox('Να διαγραφεί η σελίδα;', 'Διαγραφή', true).then((y) => y && board.deletePage());
+    // χωρίς ερώτηση: η σελίδα σβήνει αμέσως και το μήνυμα έχει «Αναίρεση» για λίγα δευτερόλεπτα
+    const gone = board.deletePage();
+    if (gone.page.items.length) toast('Η σελίδα διαγράφηκε', 9000, { label: 'Αναίρεση', run: () => board.restorePage(gone) });
   } else if (act === 'full') {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await document.documentElement.requestFullscreen().catch(() => {});
@@ -888,6 +890,8 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     board.duplicateSelected();
   } else if (e.key === 'Escape') {
+    closePopups();
+    lessons?.dismiss();
     board.stopReplay();
   } else if (e.key === 'Delete' || e.key === 'Backspace') {
     board.deleteSelected();
@@ -1034,4 +1038,22 @@ void (async () => {
 
 if (import.meta.env.PROD && !isNative && 'serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+// Πίνακας που μένει ανοιχτός για μέρες δεν παίρνει ποτέ τη νέα έκδοση: όταν ανέβει καινούρια, ένα μήνυμα προτείνει ανανέωση.
+if (import.meta.env.PROD && !isNative) {
+  // η λίστα αρχείων της έκδοσης αλλάζει σε κάθε δημοσίευση
+  const buildId = (): Promise<string | null> => fetch('./precache.json', { cache: 'no-store' }).then((r) => (r.ok ? r.text() : null)).catch(() => null);
+  let mine: string | null = null, told = false, last = Date.now();
+  void buildId().then((s) => { mine = s; });
+  const check = async (): Promise<void> => {
+    if (told || !mine || document.visibilityState !== 'visible' || Date.now() - last < 30 * 60000) return;
+    last = Date.now();
+    const now = await buildId();
+    if (!now || now === mine) return;
+    told = true;
+    toast('Υπάρχει νέα έκδοση του PrismaBoard', 0, { label: 'Ανανέωση', run: () => void (lessons?.flush(true) ?? Promise.resolve()).then(() => location.reload()) });
+  };
+  document.addEventListener('visibilitychange', () => void check());
+  setInterval(() => void check(), 10 * 60000);
 }

@@ -280,8 +280,10 @@ export class Board {
     this.onChange();
   }
 
-  deletePage(): void {
-    if (this.doc.pages.length === 1) {
+  /** Σβήνει την τρέχουσα σελίδα. Επιστρέφει ό,τι χρειάζεται η `restorePage` για να τη φέρει πίσω. */
+  deletePage(): { page: Page; at: number; only: boolean } {
+    const gone = { page: this.page, at: this.cur, only: this.doc.pages.length === 1 };
+    if (gone.only) {
       this.doc.pages[0] = newPage();
     } else {
       this.doc.pages.splice(this.cur, 1);
@@ -294,6 +296,19 @@ export class Board {
     this.redraw();
     this.onChange();
     this.onUi();
+    return gone;
+  }
+
+  /** Φέρνει πίσω σελίδα που μόλις σβήστηκε, στη θέση που ήταν. */
+  restorePage(gone: { page: Page; at: number; only: boolean }): void {
+    const at = Math.min(gone.at, this.doc.pages.length);
+    // η μοναδική σελίδα είχε αντικατασταθεί από κενή: αν έμεινε κενή, ξαναπαίρνει τη θέση της
+    if (gone.only && this.doc.pages.length === 1 && this.doc.pages[0].items.length === 0) this.doc.pages[0] = gone.page;
+    else this.doc.pages.splice(at, 0, gone.page);
+    this.undoStack = [];
+    this.redoStack = [];
+    this.goto(Math.min(at, this.doc.pages.length - 1));
+    this.onChange();
   }
 
   /** Προσθέτει σελίδες στο τέλος. Αν ο πίνακας έχει μία κενή σελίδα, την αντικαθιστά. */

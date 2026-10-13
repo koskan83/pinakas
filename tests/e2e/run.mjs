@@ -408,6 +408,23 @@ test('Νέα σελίδα και μετακίνηση ανάμεσα στις σ
 });
 
 let pdfPath = '';
+test('Διαγραφή σελίδας με «Αναίρεση»· το Esc κλείνει τα μενού', async () => {
+  const before = await doc();
+  const label = await page.textContent('#pageLabel');
+  await page.click('#menuBtn');
+  await page.click('#menu [data-act="delpage"]');
+  const fewer = (await doc()).pages.length;
+  await page.click('#toast button');
+  const after = await doc();
+  await page.click('#gadgetBtn');
+  const opened = await visible('#gadgetMenu');
+  await page.keyboard.press('Escape');
+  assert(fewer === before.pages.length - 1, 'η σελίδα δεν διαγράφηκε');
+  assert(JSON.stringify(after.pages) === JSON.stringify(before.pages), 'η «Αναίρεση» δεν έφερε τη σελίδα πίσω όπως ήταν');
+  assert((await page.textContent('#pageLabel')) === label, 'μετά την αναίρεση δεν είμαστε στην ίδια σελίδα');
+  assert(opened && !(await visible('#gadgetMenu')), 'το Esc δεν έκλεισε τα Όργανα');
+});
+
 test('Εξαγωγή σε PDF με επιλογή σελίδων', async () => {
   pdfPath = await download(async () => {
     await page.click('#menuBtn');

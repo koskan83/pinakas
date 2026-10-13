@@ -144,6 +144,7 @@ body.inking #toolbar { pointer-events: none; }
   background: #111827; color: #fff; padding: 12px 20px; border-radius: 12px; font-size: 16px; max-width: 80vw;
   box-shadow: 0 6px 20px rgba(0,0,0,.35);
 }
+#toast button { margin-left: 14px; padding: 8px 16px; border: 0; border-radius: 9px; background: var(--go); color: #06262b; font: inherit; font-weight: 700; cursor: pointer; }
 #drop {
   position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
   background: rgba(37,99,235,.18); border: 6px dashed var(--accent); font-size: 32px; color: #1e3a8a; font-weight: 700;

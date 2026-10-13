@@ -470,6 +470,12 @@ export class Lessons {
     this.el.classList.add('hidden');
   }
 
+  /** Κλείνει τη βιβλιοθήκη και το «Τι κάνουμε σήμερα;» (πλήκτρο Esc). */
+  dismiss(): void {
+    this.close();
+    this.startEl.classList.add('hidden');
+  }
+
   private get groups(): string[] {
     return [...new Set(this.index.map((m) => m.group).filter((g): g is string => !!g))].sort((a, b) => a.localeCompare(b, 'el'));
   }
