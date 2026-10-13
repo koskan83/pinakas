@@ -595,6 +595,37 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
   assert(!barAfterTap, 'μετά από πάτημα σε κουμπί του εργαλείου εμφανίστηκε η μπάρα «Διαγραφή / ×2»');
 });
 
+test('Οι εικόνες του PDF σώζονται χωριστά από το μάθημα και γυρίζουν ίδιες μετά από κλείσιμο', async () => {
+  const pics = (d) => d.pages.flatMap((p) => p.items).filter((i) => i.kind === 'image' && i.src.length > 8192).map((i) => i.src);
+  // μια γραμμή ακόμα: η αποθήκευση που ακολουθεί δεν πρέπει να πειράξει τις εικόνες
+  await pen();
+  await drag(200, 200, 260, 220);
+  await sleep(2000);
+  const before = pics(await doc());
+  const stored = await page.evaluate(() => new Promise((res) => {
+    const r = indexedDB.open('grafida');
+    r.onsuccess = () => {
+      const st = r.result.transaction('kv').objectStore('kv');
+      const keys = st.getAllKeys();
+      keys.onsuccess = () => {
+        const cur = st.get('lesson.current');
+        cur.onsuccess = () => {
+          const id = JSON.parse(cur.result);
+          const d = st.get(`lesson:${id}`);
+          d.onsuccess = () => res({ imgs: keys.result.filter((k) => String(k).startsWith(`img:${id}:`)).length, inline: d.result.includes('data:image/jpeg') });
+        };
+      };
+    };
+  }));
+  await page.reload();
+  await page.waitForSelector('#toolbar');
+  const after = pics(await doc());
+  assert(before.length >= 1, 'το μάθημα δεν έχει τις εικόνες του PDF');
+  assert(!stored.inline, 'οι εικόνες γράφτηκαν ξανά μέσα στο μάθημα');
+  assert(stored.imgs === new Set(before).size, `στη συσκευή υπάρχουν ${stored.imgs} εικόνες αντί για ${new Set(before).size}`);
+  assert(after.length === before.length && after.every((s, i) => s === before[i]), 'μετά το ξανάνοιγμα οι εικόνες δεν είναι ίδιες');
+});
+
 test('Μαθήματα: νέο μάθημα, τμήμα, μετονομασία από το όνομα, και όλα μένουν μετά από κλείσιμο', async () => {
   await page.click('#libOpen');
   await page.waitForSelector('#lib:not(.hidden)');

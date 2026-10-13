@@ -2,7 +2,7 @@
 
 import { Doc, newDoc, uid } from './model';
 import { backupLesson, driveClientId, driveConnect, driveReady, listLessonBackups, readBackup, trashBackup } from './drive';
-import { kvDel, kvGet, kvSet, loadDoc } from './storage';
+import { deleteLesson, kvGet, kvSet, loadDoc, loadLesson, saveLesson } from './storage';
 import { ask, confirmBox } from './dialog';
 
 export interface LessonMeta {
@@ -25,7 +25,6 @@ interface Backup {
 
 const INDEX = 'lessons';
 const CURRENT = 'lesson.current';
-const key = (id: string): string => `lesson:${id}`;
 
 /** Τι έχει ανέβει στο Drive από αυτή τη συσκευή. */
 interface SafeState {
@@ -173,7 +172,7 @@ export class Lessons {
     const doc = this.host.getDoc();
     meta.updated = Date.now();
     meta.pages = doc.pages.length;
-    await kvSet(key(meta.id), doc);
+    await saveLesson(meta.id, doc);
     if (withThumb) {
       this.thumbAt = Date.now();
       meta.thumb = (await this.host.thumb().catch(() => undefined)) ?? meta.thumb;
@@ -192,13 +191,13 @@ export class Lessons {
   private async add(doc: Doc, name: string): Promise<LessonMeta> {
     const meta: LessonMeta = { id: uid(), name, updated: Date.now(), pages: doc.pages.length };
     this.index.unshift(meta);
-    await kvSet(key(meta.id), doc);
+    await saveLesson(meta.id, doc);
     await kvSet(INDEX, this.index);
     return meta;
   }
 
   private async show(id: string): Promise<void> {
-    const doc = (await kvGet<Doc>(key(id))) ?? newDoc();
+    const doc = (await loadLesson(id, true)) ?? newDoc();
     this.cur = id;
     this.loading = true;
     try {
@@ -284,7 +283,7 @@ export class Lessons {
       let done = 0;
       for (const meta of todo) {
         if (!quiet) this.host.toast(`Αντίγραφο στο Drive… ${done + 1} από ${todo.length}`, 0);
-        const doc = await kvGet<Doc>(key(meta.id));
+        const doc = await loadLesson(meta.id);
         if (!doc) continue;
         const { thumb: _thumb, ...slim } = meta;
         const out: Backup = { grafida: 'backup', v: 1, lessons: [{ meta: slim, doc }] };
@@ -357,7 +356,7 @@ export class Lessons {
     if (!meta?.id || doc?.v !== 1 || !Array.isArray(doc.pages)) return null;
     const have = this.index.find((m) => m.id === meta.id);
     if (have && have.updated >= meta.updated) return null;
-    await kvSet(key(meta.id), doc);
+    await saveLesson(meta.id, doc);
     if (have) Object.assign(have, { ...meta, thumb: meta.thumb ?? have.thumb });
     else this.index.push(meta);
     // το ανοιχτό μάθημα ξαναφορτώνεται για να φανεί η νεότερη μορφή του
@@ -463,16 +462,16 @@ export class Lessons {
       meta.updated = Date.now();
       await kvSet(INDEX, this.index);
     } else if (act === 'copy') {
-      const doc = await kvGet<Doc>(key(meta.id));
+      const doc = await loadLesson(meta.id);
       if (doc) Object.assign(await this.add(doc, `${meta.name} (αντίγραφο)`), { thumb: meta.thumb, group: meta.group });
       await kvSet(INDEX, this.index);
     } else if (act === 'file') {
-      const doc = await kvGet<Doc>(key(meta.id));
+      const doc = await loadLesson(meta.id);
       if (doc) this.host.download(new Blob([JSON.stringify(doc)], { type: 'application/json' }), `${meta.name.replace(/[\\/:*?"<>|]/g, '_')}.json`);
     } else if (act === 'del') {
       if (!(await confirmBox(`Να διαγραφεί το μάθημα «${meta.name}»;`, 'Διαγραφή', true, 'Δεν αναιρείται.'))) return;
       this.index = this.index.filter((m) => m.id !== meta.id);
-      await kvDel(key(meta.id));
+      await deleteLesson(meta.id);
       // αν έχει αντίγραφο στο Drive, θα πάει στον κάδο του στο επόμενο αντίγραφο και δεν θα ξαναέρθει από εκεί
       if (meta.id in this.safe.ids) this.safe.gone.push(meta.id);
       this.saveSafe();
@@ -486,7 +485,7 @@ export class Lessons {
   private async backup(): Promise<void> {
     const out: Backup = { grafida: 'backup', v: 1, lessons: [] };
     for (const meta of this.index) {
-      const doc = await kvGet<Doc>(key(meta.id));
+      const doc = await loadLesson(meta.id);
       if (doc) out.lessons.push({ meta, doc });
     }
     const d = new Date();

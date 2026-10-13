@@ -29,9 +29,8 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      # σενάρια που πατάνε κουμπιά στην χτισμένη εφαρμογή· προς το παρόν δεν μπλοκάρουν τη δημοσίευση
+      # σενάρια που πατάνε κουμπιά στην χτισμένη εφαρμογή· αν κάποιο αποτύχει, η έκδοση δεν δημοσιεύεται
       - run: node tests/e2e/run.mjs
-        continue-on-error: true
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
