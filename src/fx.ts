@@ -114,6 +114,16 @@ export function playFx(ev: string, prefs: FxPrefs): void {
     if (now - lastTok < 45) return;
     lastTok = now;
   }
+  const munch = /^munch(\d+)$/.exec(ev);
+  if (munch) {
+    // συγχρονισμένα με την κίνηση στο εργαλείο της ορθογραφίας: πρώτο δάγκωμα στα 0,8 s, μετά ένα κάθε 0,8 s
+    for (let i = 0; i < Number(munch[1]); i++) {
+      const at = 0.8 + i * 0.8;
+      noise(0.09, { gain: 0.4, freq: 700, to: 250, at });
+      tone(180, 0.1, { type: 'square', to: 90, gain: 0.16, at });
+    }
+    return;
+  }
   SOUNDS[ev]?.();
 }
 

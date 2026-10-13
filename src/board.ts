@@ -2,7 +2,7 @@ import {
   AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TableStyle, TextItem, Tool, View, angleEnds, cloneItem, distToSeg, erasePartial, hitItem, inLasso, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, pointInPolygon, reboxShape, recognizeShape, rotateItem, roundAngle, scaleItem, translateItem, trianglePts, uid, unrot,
 } from './model';
 import { Params } from './expr';
-import { STAMPS, SpringState, type KidAsk } from './stamps';
+import { STAMPS, SpringState, type KidArea, type KidAsk } from './stamps';
 import { CM, GadgetDrag, GadgetKind, Gadgets } from './gadgets';
 import { ANGLE_KEY, angleSides, eraseMeasures, fmt, measureAngles, measureSides, trigPoint, sideLen, sideText, unitsFor } from './measure';
 import { Renderer } from './render';
@@ -137,7 +137,7 @@ export class Board {
   /** Όταν άξονες με συναρτήσεις αφεθούν πάνω σε άλλους: επιστρέφει τους ενωμένους άξονες, ή null για απλή μετακίνηση. */
   /** Ερώτηση προς τον χρήστη από εργαλείο του Δημοτικού (π.χ. λέξη της κρεμάλας). */
   /** Εργαλεία του Δημοτικού που μόλις άλλαξαν: για λίγο ζωγραφίζονται «εν κινήσει» (βλ. KidEnv.anim). */
-  kidAnim = new Map<string, { t0: number; prev: number[] }>();
+  kidAnim = new Map<string, { t0: number; prev: number[]; ms: number }>();
   /** Κίνηση στα εργαλεία του Δημοτικού (ανάβει μόνο στο Δημοτικό). */
   kidMotion = false;
   /** Κάτι έγινε σε εργαλείο του Δημοτικού ('click', 'win', 'tok'…): για ήχο και πανηγυρισμό. */
@@ -147,6 +147,8 @@ export class Board {
   /** Τα ονόματα των μαθητών του τμήματος του ανοιχτού μαθήματος (για την κλήρωση)· κενό αν δεν υπάρχουν. */
   kidNames: () => string[] = () => [];
   onAsk: (q: KidAsk) => Promise<string | null> = () => Promise.resolve(null);
+  /** Διάβασμα χειρόγραφου για εργαλείο του Δημοτικού (ορθογραφία με το χέρι): οι γραμμές γραφής με αυτά τα id ως κείμενο, ή null. */
+  onRead: (ids: string[]) => Promise<string | null> = () => Promise.resolve(null);
   onMergeAxes: (target: AxesItem, dropped: AxesItem) => AxesItem | null = () => null;
   onPointerInfo: (e: PointerEvent, count: number) => void = () => {};
   /** Καλείται όταν ολοκληρωθεί μια γραμμή του στυλό (για την αυτόματη αναγνώριση). */
@@ -441,11 +443,11 @@ export class Board {
     if (what) this.onKidFx(what, it);
     if (!this.kidMotion) return;
     const idle = this.kidAnim.size === 0;
-    this.kidAnim.set(it.id, { t0: performance.now(), prev });
+    this.kidAnim.set(it.id, { t0: performance.now(), prev, ms: d?.animMs ?? 1500 });
     if (!idle) return;
     const tick = (): void => {
       const now = performance.now();
-      for (const [id, a] of this.kidAnim) if (now - a.t0 > 1500) this.kidAnim.delete(id);
+      for (const [id, a] of this.kidAnim) if (now - a.t0 > a.ms) this.kidAnim.delete(id);
       this.redraw();
       if (this.kidAnim.size) requestAnimationFrame(tick);
     };
@@ -487,6 +489,26 @@ export class Board {
     return true;
   }
 
+  /** Οι γραμμές γραφής της σελίδας που το κέντρο τους πέφτει μέσα στο ορθογώνιο. */
+  private strokesIn(b: Box): string[] {
+    return this.page.items
+      .filter((x) => {
+        if (x.kind !== 'stroke' || x.hl) return false;
+        const ib = itemBounds(x), cx = (ib.x0 + ib.x1) / 2, cy = (ib.y0 + ib.y1) / 2;
+        return cx >= b.x0 && cx <= b.x1 && cy >= b.y0 && cy <= b.y1;
+      })
+      .map((x) => x.id);
+  }
+
+  /** Σβήνει στοιχεία της σελίδας με ένα βήμα αναίρεσης, χωρίς να πειράξει την επιλογή. */
+  private deleteItems(ids: string[]): void {
+    if (!ids.length) return;
+    const set = new Set(ids), before = this.page.items.slice();
+    this.page.items = before.filter((x) => !set.has(x.id));
+    this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
+    this.redraw();
+  }
+
   /**
    * Πάτημα στο σημείο `at` ενός εργαλείου του Δημοτικού. true αν έπεσε σε κουμπί του (και έγινε ό,τι κάνει το κουμπί).
    */
@@ -507,10 +529,19 @@ export class Board {
     const q = d.ask?.(cur, lx - it.x, ly - it.y, it.w, it.h);
     if (q) {
       const page = this.cur;
-      void this.onAsk(q).then((text) => {
-        const v = text == null || page !== this.cur ? null : q.apply(text);
+      const inArea = (a: KidArea): string[] => this.strokesIn({ x0: it.x + a.x, y0: it.y + a.y, x1: it.x + a.x + a.w, y1: it.y + a.y + a.h });
+      if (q.area && q.mode === 'clear') {
+        this.deleteItems(inArea(q.area));
+        const v = q.apply('');
         if (v) apply(v);
-      });
+      } else {
+        void (q.area ? this.onRead(inArea(q.area)) : this.onAsk(q)).then((text) => {
+          const v = text == null || page !== this.cur ? null : q.apply(text);
+          if (!v) return;
+          if (q.then) this.deleteItems(inArea(q.then.area));
+          apply(v);
+        });
+      }
     } else {
       const v = d.tap?.(cur, lx - it.x, ly - it.y, it.w, it.h, { names: this.kidNames() });
       if (!v) return false;

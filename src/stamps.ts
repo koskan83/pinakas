@@ -28,10 +28,20 @@ export interface SpringGeom {
   r: number;
 }
 
+/** Περιοχή μέσα στο κουτί του εργαλείου (στις μονάδες του). */
+export interface KidArea { x: number; y: number; w: number; h: number }
 export interface KidAsk {
   title: string;
   hint?: string;
   secret?: boolean;
+  /**
+   * Αντί για ερώτηση προς τον χρήστη, η «απάντηση» βγαίνει από ό,τι έχει γραφτεί με το μολύβι στην περιοχή:
+   * 'read' = το διαβάζει η υπηρεσία αναγνώρισης και δίνεται στο apply· 'clear' = σβήνεται και το apply παίρνει κενό.
+   */
+  area?: KidArea;
+  mode?: 'read' | 'clear';
+  /** Μετά από ερώτηση που απαντήθηκε: σβήνεται και ό,τι είχε γραφτεί σε αυτή την περιοχή. */
+  then?: { area: KidArea; mode: 'clear' };
   apply(text: string): number[] | null;
 }
 
@@ -47,6 +57,8 @@ export interface StampDef {
   kid?: boolean;
   /** Αρχική κατάσταση. */
   init?: number[];
+  /** Πόσο κρατά η κίνηση μετά από κάθε αλλαγή (ms)· αν λείπει, ενάμισι δευτερόλεπτο. */
+  animMs?: number;
   drawKid?(c: C, w: number, h: number, v: number[], env: KidEnv): void;
   /** Πάτημα στο σημείο (x, y) του κουτιού: η νέα κατάσταση, ή null αν δεν έπεσε πουθενά. */
   tap?(v: number[], x: number, y: number, w: number, h: number, env?: { names?: string[] }): number[] | null;

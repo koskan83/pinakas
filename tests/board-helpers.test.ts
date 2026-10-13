@@ -383,3 +383,64 @@ describe('κρεμάλα', () => {
     expect(key(w, 'Ι')).toBeNull();
   });
 });
+
+import { spellDiff, spellNorm, spellState } from '../src/kids';
+
+describe('ορθογραφία με το τερατάκι', () => {
+  const d = KIDS.spell;
+  const pack = (flags: number, target: string, typed: string): number[] => [flags, target.length, ...[...target].map((ch) => ch.charCodeAt(0)), ...[...typed].map((ch) => ch.charCodeAt(0))];
+  const key = (v: number[], ch: string): number[] | null => {
+    const rows = ['ςερτυθιοπ', 'ασδφγηξκλ', 'ζχψωβνμ´⌫'];
+    const row = rows.findIndex((r) => r.includes(ch)), col = rows[row].indexOf(ch);
+    return d.tap!(v, d.w * 0.02 + ((d.w * 0.96) / 9) * (col + 0.5), d.h * 0.46 + d.h * 0.118 * (row + 0.5), d.w, d.h);
+  };
+  const button = (k: number): [number, number] => [d.w * [0.13, 0.36, 0.55, 0.82][k], d.h * 0.9];
+  it('η σωστή λέξη κρατά τόνους και πεζά, χωρίς στίξη', () => {
+    expect(spellNorm('  Το Σχολείο!  ')).toBe('το σχολείο');
+    expect(spellNorm('ΠΑΪΔΆΚΙΑ')).toBe('παϊδάκια');
+  });
+  it('αντιστοιχίζει λάθος, περιττό και γράμμα που λείπει', () => {
+    const bad = (a: string, b: string): string => spellDiff(a, b).map((c) => (c.a === c.b ? '.' : c.a && c.b ? 's' : c.a ? 'x' : '+')).join('');
+    expect(bad('σχολείο', 'σχολείο')).toBe('.......');
+    expect(bad('σχολίο', 'σχολείο')).toBe('....+..');
+    expect(bad('σχωλειο', 'σχολείο')).toBe('..s..s.');
+    expect(bad('σχολλείο', 'σχολείο')).toMatch(/^\.{3,4}x\.{3,4}$/);
+    expect(bad('οδοσ', 'οδός')).toBe('..ss');
+  });
+  it('πλήκτρα: γράμματα, τόνος στο τελευταίο φωνήεν, σβήσιμο, έλεγχος και ξανά', () => {
+    let v = pack(0, 'μήλο', '');
+    for (const ch of 'μη´λω') v = key(v, ch)!;
+    expect(spellState(v).typed).toBe('μήλω');
+    expect(key(pack(0, 'μήλο', 'μ'), '´')).toBeNull();
+    expect(spellState(key(pack(0, 'μήλο', 'ι'), '´')!).typed).toBe('ί');
+    expect(spellState(key(pack(0, 'μήλο', 'ΐ'), '´')!).typed).toBe('ι');
+    expect(spellState(key(v, '⌫')!).typed).toBe('μήλ');
+    const done = d.tap!(v, ...button(3), d.w, d.h)!;
+    expect(spellState(done)).toEqual({ done: true, hand: false, target: 'μήλο', typed: 'μήλω' });
+    expect(d.fx!(v, done)).toBe('munch1');
+    expect(key(done, 'α')).toBeNull();
+    expect(d.fx!(pack(0, 'μήλο', 'μήλο'), pack(1, 'μήλο', 'μήλο'))).toBe('win');
+    expect(spellState(d.tap!(done, ...button(2), d.w, d.h)!)).toEqual({ done: false, hand: false, target: 'μήλο', typed: '' });
+    // χωρίς σωστή λέξη τα πλήκτρα δεν γράφουν
+    expect(key([0, 0], 'α')).toBeNull();
+  });
+  it('με το χέρι: το πλαίσιο δεν είναι κουμπί, ο «Έλεγχος» διαβάζει ό,τι γράφτηκε και το «Ξανά» το σβήνει', () => {
+    const hand = d.tap!(pack(0, 'μήλο', 'μη'), ...button(0), d.w, d.h)!;
+    expect(spellState(hand)).toEqual({ done: false, hand: true, target: 'μήλο', typed: '' });
+    expect(d.tap!(hand, d.w / 2, d.h * 0.6, d.w, d.h)).toBeNull();
+    expect(d.tap!(hand, ...button(3), d.w, d.h)).toBeNull();
+    const read = d.ask!(hand, ...button(3), d.w, d.h)!;
+    expect(read.mode).toBe('read');
+    expect(read.area!.y).toBeCloseTo(d.h * 0.46);
+    const done = read.apply('Μίλο\n')!;
+    expect(spellState(done)).toEqual({ done: true, hand: true, target: 'μήλο', typed: 'μίλο' });
+    expect(read.apply('  ')).toBeNull();
+    const again = d.ask!(done, ...button(2), d.w, d.h)!;
+    expect(again.mode).toBe('clear');
+    expect(spellState(again.apply('')!)).toEqual({ done: false, hand: true, target: 'μήλο', typed: '' });
+    // η «Λέξη» ρωτά πάντα· με το χέρι καθαρίζει και το πλαίσιο
+    expect(d.ask!(hand, ...button(1), d.w, d.h)!.then?.mode).toBe('clear');
+    expect(d.ask!(pack(0, 'μήλο', ''), ...button(1), d.w, d.h)!.then).toBeUndefined();
+    expect(d.ask!(pack(0, 'μήλο', ''), ...button(3), d.w, d.h)).toBeNull();
+  });
+});

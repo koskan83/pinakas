@@ -365,6 +365,102 @@ function scaleGeom(s: Scale, w: number, h: number, tilt?: number): { th: number;
   return { th, px, py, ends, pans, half, box, spots };
 }
 
+// ---------- ορθογραφία με το τερατάκι ----------
+const SPELL_KEYS = ['ςερτυθιοπ', 'ασδφγηξκλ', 'ζχψωβνμ´⌫'];
+/** Ο τόνος μπαίνει μετά το γράμμα, όπως στο χέρι: κάθε πάτημα στο ´ αλλάζει το τελευταίο φωνήεν (ι → ί → ϊ → ΐ → ι). */
+const SPELL_TONOS = ['αά', 'εέ', 'ηή', 'οό', 'ωώ', 'ιίϊΐ', 'υύϋΰ'];
+const SPELL_MAX = 26;
+/** Πόσο κρατά το φάγωμα ενός λάθους (ms) και πότε αρχίζει το πρώτο. */
+const SPELL_STEP = 800, SPELL_T0 = 350;
+/** Η σωστή λέξη ή φράση όπως συγκρίνεται: πεζά με τους τόνους τους, χωρίς στίξη και διπλά κενά. */
+export function spellNorm(text: string): string {
+  return text.toLocaleLowerCase('el').replace(/[^α-ωάέήίόύώϊϋΐΰ ]/g, '').replace(/ +/g, ' ').trim().slice(0, 24).trim();
+}
+/**
+ * Η κατάσταση του εργαλείου: [1 = ελέγχθηκε, +2 = ο μαθητής γράφει με το χέρι (αλλιώς με τα πλήκτρα), πόσα γράμματα έχει η σωστή λέξη,
+ * η σωστή λέξη…, ό,τι έγραψε ο μαθητής…]. Στη γραφή με το χέρι, αυτό που έγραψε το διαβάζει η υπηρεσία αναγνώρισης τη στιγμή του ελέγχου.
+ */
+export function spellState(v: number[]): { done: boolean; hand: boolean; target: string; typed: string } {
+  const n = v[1] ?? 0, f = v[0] ?? 0;
+  return { done: (f & 1) === 1, hand: (f & 2) === 2, target: String.fromCharCode(...v.slice(2, 2 + n)), typed: String.fromCharCode(...v.slice(2 + n)) };
+}
+const spellPack = (done: boolean, target: string, typed: string, hand = false): number[] => [(done ? 1 : 0) + (hand ? 2 : 0), target.length, ...[...target].map((ch) => ch.charCodeAt(0)), ...[...typed].map((ch) => ch.charCodeAt(0))];
+/**
+ * Αντιστοιχίζει ό,τι γράφτηκε με το σωστό, γράμμα προς γράμμα: `a` αυτό που έγραψε ο μαθητής, `b` το σωστό.
+ * Λάθος γράμμα έχει και τα δύο διαφορετικά· γράμμα που περισσεύει δεν έχει `b`· γράμμα που λείπει δεν έχει `a`.
+ */
+export function spellDiff(typed: string, target: string): { a: string | null; b: string | null }[] {
+  const n = typed.length, m = target.length;
+  const d: number[][] = Array.from({ length: n + 1 }, (_, i) => Array.from({ length: m + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= n; i++) for (let j = 1; j <= m; j++) d[i][j] = Math.min(d[i - 1][j - 1] + (typed[i - 1] === target[j - 1] ? 0 : 1), d[i - 1][j] + 1, d[i][j - 1] + 1);
+  const out: { a: string | null; b: string | null }[] = [];
+  let i = n, j = m;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && d[i][j] === d[i - 1][j - 1] + (typed[i - 1] === target[j - 1] ? 0 : 1)) out.push({ a: typed[--i], b: target[--j] });
+    else if (i > 0 && d[i][j] === d[i - 1][j] + 1) out.push({ a: typed[--i], b: null });
+    else out.push({ a: null, b: target[--j] });
+  }
+  return out.reverse();
+}
+/** Διάταξη: πάνω η λέξη, στη μέση τα πλήκτρα (ή το πλαίσιο για γραφή με το χέρι), κάτω τα κουμπιά: τρόπος γραφής, Λέξη, κενό/Ξανά, Έλεγχος. */
+function spellGeom(w: number, h: number): { ry: number; ky: number; kh: number; kx: number; kw: number; by: number; bh: number; bx: number[]; bw: number[] } {
+  return { ry: h * 0.25, ky: h * 0.46, kh: h * 0.118, kx: w * 0.02, kw: (w * 0.96) / 9, by: h * 0.845, bh: h * 0.125, bx: [w * 0.02, w * 0.27, w * 0.47, w * 0.66], bw: [w * 0.23, w * 0.18, w * 0.17, w * 0.32] };
+}
+/** Το τερατάκι που τρώει τα λάθη: `open` από 0 (κλειστό στόμα) έως 1 (ορθάνοιχτο). */
+function monster(c: C, x: number, y: number, r: number, open: number): void {
+  c.save();
+  c.lineJoin = 'round';
+  c.lineWidth = Math.max(1.5, r * 0.08);
+  c.strokeStyle = '#581c87';
+  c.fillStyle = PURPLE;
+  // κέρατα και πόδια πίσω από το σώμα
+  for (const s of [-1, 1]) {
+    c.beginPath();
+    c.moveTo(x + s * r * 0.3, y - r * 0.8);
+    c.lineTo(x + s * r * 0.62, y - r * 1.35);
+    c.lineTo(x + s * r * 0.72, y - r * 0.6);
+    c.closePath();
+    c.fill();
+    c.stroke();
+    c.beginPath();
+    c.ellipse(x + s * r * 0.42, y + r * 0.95, r * 0.26, r * 0.16, 0, 0, Math.PI * 2);
+    c.fill();
+    c.stroke();
+  }
+  c.beginPath();
+  c.ellipse(x, y, r, r * 0.96, 0, 0, Math.PI * 2);
+  c.fill();
+  c.stroke();
+  // μάτια
+  for (const s of [-1, 1]) {
+    c.beginPath();
+    c.arc(x + s * r * 0.36, y - r * 0.32, r * 0.25, 0, Math.PI * 2);
+    c.fillStyle = '#ffffff';
+    c.fill();
+    c.beginPath();
+    c.arc(x + s * r * 0.36, y - r * 0.24, r * 0.11, 0, Math.PI * 2);
+    c.fillStyle = '#1e293b';
+    c.fill();
+  }
+  // στόμα με δόντια
+  const mh = r * (0.1 + 0.42 * open), my = y + r * 0.38;
+  c.beginPath();
+  c.ellipse(x, my, r * 0.58, mh, 0, 0, Math.PI * 2);
+  c.fillStyle = '#3b0764';
+  c.fill();
+  c.fillStyle = '#ffffff';
+  for (const s of [-1, 0, 1]) {
+    const tx = x + s * r * 0.26, ty = my - mh * 0.86;
+    c.beginPath();
+    c.moveTo(tx - r * 0.1, ty);
+    c.lineTo(tx + r * 0.1, ty);
+    c.lineTo(tx, ty + Math.min(r * 0.22, mh * 0.9));
+    c.closePath();
+    c.fill();
+  }
+  c.restore();
+}
+
 // ---------- κρεμάλα ----------
 const ABC = 'ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ';
 const HANG_MAX = 6;
@@ -1534,6 +1630,209 @@ export const KIDS: Record<string, StampDef> = {
         else gone++;
       }
       return put ? 'tok' : gone ? 'wipe' : 'click';
+    },
+  }),
+
+  spell: kid({
+    label: 'Ορθογραφία', w: 860, h: 540, init: [0, 0], animMs: 12000,
+    drawKid(c, w, h, v, env) {
+      const st = spellState(v), g = spellGeom(w, h);
+      const cells = st.done ? spellDiff(st.typed, st.target) : [...st.typed].map((ch) => ({ a: ch, b: ch }));
+      const n = Math.max(cells.length, 1), cw = Math.min(w * 0.075, (w * 0.86) / n), x0 = (w - n * cw) / 2;
+      const bad = cells.map((cell, i) => (cell.a === cell.b ? -1 : i)).filter((i) => i >= 0);
+      // ο έλεγχος μόλις πατήθηκε: το τερατάκι περνά από τα λάθη ένα ένα· αλλιώς φαίνεται κατευθείαν το αποτέλεσμα
+      const t = st.done && env.anim && ((env.anim.prev[0] ?? 0) & 1) === 0 ? env.anim.t : Infinity;
+      const end = SPELL_T0 + bad.length * SPELL_STEP;
+      const cx = (i: number): number => x0 + (i + 0.5) * cw;
+      c.lineCap = 'round';
+      // η γραμμή όπου γράφεται η λέξη
+      c.save();
+      c.globalAlpha = 0.3;
+      c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(Math.min(x0, w * 0.2), g.ry + cw * 0.62);
+      c.lineTo(Math.max(x0 + n * cw, w * 0.8), g.ry + cw * 0.62);
+      c.stroke();
+      c.restore();
+      cells.forEach((cell, i) => {
+        const k = bad.indexOf(i);
+        if (k < 0) {
+          text(c, cell.a!, cx(i), g.ry, cw * 0.95, st.done ? env.ink : env.ink, 700);
+          return;
+        }
+        const ts = SPELL_T0 + k * SPELL_STEP, eaten = ts + 450;
+        if (t < eaten) {
+          // το λάθος γράμμα μικραίνει καθώς το δαγκώνει
+          if (cell.a) text(c, cell.a, cx(i), g.ry, cw * 0.95 * Math.max(0.05, Math.min(1, (eaten - t) / 150)), env.ink, 700);
+          return;
+        }
+        // στη θέση του το σωστό, πράσινο· από κάτω μένει σβησμένο αυτό που είχε γραφτεί
+        if (cell.b) text(c, cell.b, cx(i), g.ry, cw * 0.95 * Math.min(1, 0.4 + (t - eaten) / 200), GOOD, 800);
+        if (cell.a) {
+          const sy = g.ry + cw * 0.93, ss = cw * 0.4;
+          text(c, cell.a, cx(i), sy, ss, RED, 700);
+          c.save();
+          c.strokeStyle = RED;
+          c.lineWidth = Math.max(1.5, ss * 0.08);
+          c.beginPath();
+          c.moveTo(cx(i) - ss * 0.4, sy + ss * 0.3);
+          c.lineTo(cx(i) + ss * 0.4, sy - ss * 0.3);
+          c.stroke();
+          c.restore();
+        }
+      });
+      // δείκτης γραφής
+      if (!st.done && !st.hand && st.target && st.typed.length < SPELL_MAX) {
+        c.save();
+        c.globalAlpha = 0.5;
+        c.lineWidth = 3;
+        const px = st.typed ? x0 + n * cw + cw * 0.12 : w / 2;
+        c.beginPath();
+        c.moveTo(px, g.ry - cw * 0.45);
+        c.lineTo(px, g.ry + cw * 0.45);
+        c.stroke();
+        c.restore();
+      }
+      // το τερατάκι: περιμένει αριστερά, πηδά πάνω από κάθε λάθος, σκύβει και το τρώει, και στο τέλος κάθεται δεξιά
+      const r = Math.max(w * 0.032, Math.min(w * 0.045, cw * 0.62));
+      const home = Math.max(r + 6, Math.min(x0 - r * 1.3, w * 0.12)), rest = Math.min(w - r - 6, Math.max(x0 + n * cw + r * 1.3, w * 0.88));
+      const up = g.ry - cw * 0.5 - r * 1.25;
+      const ease = (p: number): number => (p <= 0 ? 0 : p >= 1 ? 1 : p * p * (3 - 2 * p));
+      let mx = st.done ? rest : home, my = up, open = 0;
+      if (t < end + 400 && bad.length) {
+        const k = Math.max(0, Math.min(bad.length - 1, Math.floor((t - SPELL_T0) / SPELL_STEP)));
+        const ts = SPELL_T0 + k * SPELL_STEP, from = k === 0 ? home : cx(bad[k - 1]), to = cx(bad[k]);
+        if (t >= end) {
+          mx = to + (rest - to) * ease((t - end) / 400);
+        } else {
+          const p = ease((t - ts) / 300);
+          mx = from + (to - from) * p;
+          // μικρό πήδημα στη διαδρομή, μετά βουτιά πάνω στο γράμμα
+          my = up - Math.sin(p * Math.PI) * r * 0.5;
+          const bite = Math.max(0, Math.min(1, (t - ts - 300) / 300));
+          my += Math.sin(bite * Math.PI) * (g.ry - up - r * 0.2);
+          open = t < ts + 450 ? Math.min(1, Math.max(0, (t - ts - 150) / 200)) : Math.max(0, 1 - (t - ts - 450) / 120);
+        }
+      }
+      monster(c, mx, my, r, open);
+      // τι λέει το τερατάκι
+      const said = !st.target ? 'Πάτα «✏️ Λέξη» και γράψε κρυφά τη σωστή λέξη ή φράση'
+        : !st.done ? (st.hand ? 'Γράψε με το μολύβι στο πλαίσιο αυτό που ακούς και πάτα «Έλεγχος»' : st.typed ? '' : 'Γράψε με τα γράμματα αυτό που ακούς')
+        : t < end ? 'Μιαμ…'
+        : bad.length ? `Το τερατάκι έφαγε ${bad.length} ${bad.length === 1 ? 'λάθος' : 'λάθη'}!`
+        : 'Κανένα λάθος! Το τερατάκι έμεινε νηστικό.';
+      if (said) fitText(c, said, w / 2, h * 0.422, h * 0.046, w * 0.9, st.done && t >= end ? (bad.length ? ORANGE : GOOD) : env.ink, 700);
+      if (st.hand) {
+        // πλαίσιο για γραφή με το χέρι: δύο γραμμές τετραδίου
+        rrect(c, g.kx + 3, g.ky + 3, g.kw * 9 - 6, g.kh * 3 - 6, g.kh * 0.2);
+        c.save();
+        c.fillStyle = env.ink;
+        c.globalAlpha = 0.05;
+        c.fill();
+        c.globalAlpha = 0.5;
+        c.lineWidth = 1.5;
+        c.stroke();
+        c.globalAlpha = 0.22;
+        c.beginPath();
+        for (const q of [0.38, 0.72]) { c.moveTo(g.kx + g.kw * 0.3, g.ky + g.kh * 3 * q); c.lineTo(g.kx + g.kw * 8.7, g.ky + g.kh * 3 * q); }
+        c.stroke();
+        c.restore();
+      }
+      // γράμματα
+      for (let row = 0; row < 3 && !st.hand; row++) for (let col = 0; col < 9; col++) {
+        const key = SPELL_KEYS[row][col], x = g.kx + col * g.kw, y = g.ky + row * g.kh;
+        rrect(c, x + 3, y + 3, g.kw - 6, g.kh - 6, g.kh * 0.2);
+        c.save();
+        c.fillStyle = key === '´' || key === '⌫' ? ORANGE : env.ink;
+        c.globalAlpha = st.done || !st.target ? 0.05 : key === '´' || key === '⌫' ? 0.3 : 0.14;
+        c.fill();
+        c.globalAlpha = st.done || !st.target ? 0.35 : 1;
+        c.lineWidth = 1.5;
+        c.stroke();
+        text(c, key === '´' ? 'ά' : key, x + g.kw / 2, y + g.kh / 2 + 1, g.kh * 0.56, env.ink, 700);
+        c.restore();
+      }
+      const btn = (k: number, label: string, color: string, on: boolean): void => {
+        rrect(c, g.bx[k], g.by, g.bw[k], g.bh, g.bh * 0.3);
+        c.save();
+        c.fillStyle = color;
+        c.globalAlpha = on ? 0.92 : 0.3;
+        c.fill();
+        c.restore();
+        fitText(c, label, g.bx[k] + g.bw[k] / 2, g.by + g.bh / 2 + 1, g.bh * 0.42, g.bw[k] * 0.88, '#ffffff', 700);
+      };
+      // το πρώτο κουμπί δείχνει τον άλλο τρόπο γραφής, αυτόν στον οποίο θα σε πάει
+      btn(0, st.hand ? '⌨️ Με πλήκτρα' : '✍️ Με το χέρι', '#64748b', !st.done);
+      btn(1, '✏️ Λέξη', BLUE, true);
+      if (st.done) btn(2, '↺ Ξανά', PURPLE, true);
+      else if (!st.hand) btn(2, 'κενό', '#64748b', !!st.target && st.typed.length > 0);
+      btn(3, '🔍 Έλεγχος', GOOD, !st.done && !!st.target && (st.hand || st.typed.trim().length > 0));
+    },
+    ask(v, x, y, w, h) {
+      const st = spellState(v), g = spellGeom(w, h);
+      if (y < g.by || y > g.by + g.bh) return null;
+      const k = [0, 1, 2, 3].find((i) => x >= g.bx[i] && x <= g.bx[i] + g.bw[i]);
+      const area = { x: g.kx, y: g.ky, w: g.kw * 9, h: g.kh * 3 };
+      if (k === 1) {
+        return {
+          title: 'Η σωστή λέξη ή φράση',
+          hint: 'Με τους τόνους της, έως 24 γράμματα. Φαίνεται ως κουκκίδες, για να μη τη δουν οι μαθητές.',
+          secret: true,
+          // νέα λέξη: στη γραφή με το χέρι σβήνεται και ό,τι είχε γραφτεί στο πλαίσιο
+          ...(st.hand ? { then: { area, mode: 'clear' as const } } : {}),
+          apply(typed) {
+            const t = spellNorm(typed);
+            return t ? spellPack(false, t, '', st.hand) : null;
+          },
+        };
+      }
+      if (!st.hand || !st.target) return null;
+      // με το χέρι: ο «Έλεγχος» διαβάζει ό,τι γράφτηκε στο πλαίσιο, το «Ξανά» το σβήνει
+      if (k === 3 && !st.done) {
+        return {
+          title: '', area, mode: 'read',
+          apply(read) {
+            const t = spellNorm(read).slice(0, SPELL_MAX);
+            return t ? spellPack(true, st.target, t, true) : null;
+          },
+        };
+      }
+      if (k === 2 && st.done) return { title: '', area, mode: 'clear', apply: () => spellPack(false, st.target, '', true) };
+      return null;
+    },
+    tap(v, x, y, w, h) {
+      const st = spellState(v), g = spellGeom(w, h);
+      if (y >= g.by && y <= g.by + g.bh) {
+        const k = [0, 1, 2, 3].find((i) => x >= g.bx[i] && x <= g.bx[i] + g.bw[i]);
+        if (k === 0) return st.done ? null : spellPack(false, st.target, '', !st.hand);
+        // με το χέρι τα υπόλοιπα κουμπιά τα χειρίζεται το ask (διάβασμα και καθάρισμα του πλαισίου)
+        if (!st.target || st.hand) return null;
+        if (k === 2 && st.done) return spellPack(false, st.target, '');
+        if (st.done) return null;
+        if (k === 2) return st.typed && !st.typed.endsWith(' ') && st.typed.length < SPELL_MAX ? spellPack(false, st.target, st.typed + ' ') : null;
+        if (k === 3) return st.typed.trim() ? spellPack(true, st.target, st.typed.trim()) : null;
+        return null;
+      }
+      // το πλαίσιο της γραφής με το χέρι δεν είναι κουμπί: εκεί γράφει το μολύβι
+      if (!st.target || st.done || st.hand) return null;
+      const col = Math.floor((x - g.kx) / g.kw), row = Math.floor((y - g.ky) / g.kh);
+      if (col < 0 || col > 8 || row < 0 || row > 2) return null;
+      const key = SPELL_KEYS[row][col];
+      if (key === '⌫') return st.typed ? spellPack(false, st.target, st.typed.slice(0, -1)) : null;
+      if (key === '´') {
+        const last = st.typed.slice(-1), set = SPELL_TONOS.find((s) => last && s.includes(last));
+        return set ? spellPack(false, st.target, st.typed.slice(0, -1) + set[(set.indexOf(last) + 1) % set.length]) : null;
+      }
+      return st.typed.length < SPELL_MAX ? spellPack(false, st.target, st.typed + key) : null;
+    },
+    fx(prev, next) {
+      const p = spellState(prev), n = spellState(next);
+      if (p.target !== n.target || p.hand !== n.hand) return 'new';
+      if (n.done && !p.done) {
+        const wrong = spellDiff(n.typed, n.target).filter((cell) => cell.a !== cell.b).length;
+        return wrong ? `munch${Math.min(wrong, 12)}` : 'win';
+      }
+      return 'click';
     },
   }),
 

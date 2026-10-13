@@ -3,7 +3,7 @@
 export type Provider = 'gemini' | 'claude';
 export type RecKind = 'text' | 'math';
 /** Τι ζητάμε από την υπηρεσία: μεταγραφή (κείμενο ή τύπος) ή λύση της άσκησης. */
-export type AiTask = RecKind | 'solve' | 'check' | 'graph' | 'spell' | 'figure';
+export type AiTask = RecKind | 'solve' | 'check' | 'graph' | 'spell' | 'figure' | 'letters';
 
 export interface AiSettings {
   provider: Provider;
@@ -96,6 +96,13 @@ const PROMPT: Record<AiTask, string> = {
     'π, e, ln( ), log( ) and the Greek names ημ( ), συν( ), εφ( ), σφ( ) for sin, cos, tan, cot. Never write sin, cos, tan, sqrt, abs or exp. ' +
     'Other single letters (a, b, λ) may stay as parameters. Example reply:\nF: 10-2x\nD: 0 ; 5\nX: t\nY: υ\n' +
     'If the image contains no function that can be plotted reply with an empty message.',
+  letters:
+    'The image shows a Greek word or short phrase handwritten by a primary-school pupil during a spelling (dictation) exercise. ' +
+    'A program will compare it letter by letter with the correct spelling, so transcribe EXACTLY the letters the pupil wrote, ' +
+    'keeping every spelling mistake: a wrong vowel (ι, η, υ, ει, οι; ο, ω; ε, αι), a missing, extra or doubled letter, σ instead of ς. ' +
+    'Never correct, complete or normalise anything, even when the intended word is obvious: a corrected transcription makes the exercise useless. ' +
+    'Write an accent (τόνος) only on a letter where the pupil actually drew one, and none where the pupil left it out. ' +
+    'Reply with the transcription only, in lowercase Greek letters, on one line, no quotes, no punctuation. If nothing is readable reply with an empty message.',
   figure:
     'The image shows the statement of a physics exercise (sometimes geometry) from a Greek secondary-school classroom whiteboard, printed or handwritten. ' +
     'A program will draw the figure a teacher would sketch on the board next to it, before solving: the bodies and surfaces the statement describes, ' +
@@ -176,7 +183,7 @@ export async function recognize(png: Blob, kind: AiTask, s: AiSettings): Promise
   const parts: { text?: string }[] = s.provider === 'gemini' ? json.candidates?.[0]?.content?.parts ?? [] : json.content ?? [];
   const raw = parts.map((p) => p.text ?? '').join('');
   // ο έλεγχος λύσης είναι σκέτο κείμενο: δεν έχει περιτύλιγμα LaTeX να καθαριστεί
-  return kind === 'check' || kind === 'graph' || kind === 'spell' ? raw.trim() : kind === 'figure' ? raw.replace(/```[a-z]*/gi, '').trim() : clean(raw);
+  return kind === 'check' || kind === 'graph' || kind === 'spell' || kind === 'letters' ? raw.trim() : kind === 'figure' ? raw.replace(/```[a-z]*/gi, '').trim() : clean(raw);
 }
 
 export interface GraphReply {

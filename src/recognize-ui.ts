@@ -64,6 +64,33 @@ function aiNote(box: { x0: number; y0: number; x1: number; y1: number }, text: s
 }
 
 let aiBusy = 0;
+// ορθογραφία με το χέρι (Δημοτικό): ό,τι έγραψε ο μαθητής στο πλαίσιο του εργαλείου διαβάζεται όπως ακριβώς γράφτηκε, με τα λάθη του
+board.onRead = async (ids) => {
+  if (!ids.length) {
+    toast('Γράψε πρώτα με το μολύβι μέσα στο πλαίσιο');
+    return null;
+  }
+  if (!ai.keys[ai.provider]) {
+    openAi();
+    toast('Το χειρόγραφο το διαβάζει η υπηρεσία αναγνώρισης και χρειάζεται κλειδί. Με τα πλήκτρα η ορθογραφία δουλεύει χωρίς κλειδί.', 8000);
+    return null;
+  }
+  const img = await board.inkImage(ids);
+  if (!img) return null;
+  aiBusy++;
+  toast('✨ Το διαβάζω…', 0);
+  try {
+    const out = (await recognize(img.blob, 'letters', ai)).split('\n')[0].trim();
+    if (out) $('toast').classList.add('hidden');
+    else toast('Δεν μπόρεσα να το διαβάσω. Γράψ\' το πιο καθαρά ή δοκίμασε με τα πλήκτρα.', 6000);
+    return out || null;
+  } catch (err) {
+    toast(`Η ανάγνωση απέτυχε: ${(err as Error).message}`, 6000);
+    return null;
+  } finally {
+    aiBusy--;
+  }
+};
 /** Στέλνει τα στοιχεία για αναγνώριση και τα αντικαθιστά με κείμενο ή τυπωμένο τύπο. */
 /** Βάζει άξονες με τις συναρτήσεις που διάβασε το AI· οι άξονες και η κλίμακα διαλέγονται από το πεδίο ορισμού και τις τιμές τους. */
 function plotReply(out: string): void {
