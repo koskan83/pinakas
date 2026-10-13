@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { asymptotes, integrate, lineEq, nf, oneSided, riemann, slope, crossings, enclosing, fitScaleX, fitScaleY, pickAxesMode } from '../src/analysis';
-import { parseGraphReply } from '../src/ai';
+import { parseFigureReply, parseGraphReply } from '../src/ai';
 import { domText, fnOf } from '../src/expr';
 
 describe('ολοκλήρωμα και Riemann', () => {
@@ -173,5 +173,29 @@ describe('σημεία τομής', () => {
     expect(enclosing([-3, 0, 3], 2)).toEqual([0, 3]);
     expect(enclosing([-3, 0, 3], -1)).toEqual([-3, 0]);
     expect(enclosing([1], 0)).toBeNull();
+  });
+});
+
+describe('σχήμα από εκφώνηση (απάντηση του AI)', () => {
+  it('«NONE» σημαίνει ότι δεν χρειάζεται σχήμα· κενή ή άσχετη απάντηση δεν δίνει κομμάτια', () => {
+    expect(parseFigureReply('NONE')).toBeNull();
+    expect(parseFigureReply(' none.')).toBeNull();
+    expect(parseFigureReply('')).toEqual([]);
+    expect(parseFigureReply('Το σχήμα είναι:')).toEqual([]);
+  });
+  it('διαβάζει γραμμές, βέλη με χρώμα, ορθογώνια, κύκλους, τεθλασμένες και ετικέτες', () => {
+    expect(parseFigureReply('L 5 50 95 50\nD 20 50 20 20\nR 35 34 59 50\nA 59 42 85 42 blue\nC 50 20 6\nP 10 50 40 20 40 50 10 50\nT 74 36 F = 10 N')).toEqual([
+      { k: 'line', pts: [5, 50, 95, 50] },
+      { k: 'line', pts: [20, 50, 20, 20], dash: true },
+      { k: 'rect', pts: [35, 34, 59, 50] },
+      { k: 'arrow', pts: [59, 42, 85, 42], color: 'blue' },
+      { k: 'circle', x: 50, y: 20, r: 6 },
+      { k: 'poly', pts: [[10, 50], [40, 20], [40, 50], [10, 50]] },
+      { k: 'text', x: 74, y: 36, text: 'F = 10 N' },
+    ]);
+  });
+  it('αντέχει περιτύλιγμα και αφήνει ό,τι δεν βγάζει νόημα', () => {
+    const r = parseFigureReply('```\nA: 10 10 30 10\nT 20 5 "υ₀"\nL 1 2 3\nA 5 5 5 5 red\nC 50 50 900\nL 0 0 5000 0\nX 1 2 3 4\n```')!;
+    expect(r).toEqual([{ k: 'arrow', pts: [10, 10, 30, 10], color: 'red' }, { k: 'text', x: 20, y: 5, text: 'υ₀' }]);
   });
 });

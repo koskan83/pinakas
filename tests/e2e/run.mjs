@@ -68,7 +68,10 @@ const aiCalls = [];
 await ctx.route('https://generativelanguage.googleapis.com/**', (r) => {
   const body = r.request().postDataJSON();
   aiCalls.push({ image: body.contents[0].parts[0].inline_data?.data?.length ?? 0, prompt: body.contents[0].parts[1].text });
-  const text = body.contents[0].parts[1].text.includes('will be plotted') ? 'F: 10-2x\nD: 0 ; 5\nX: t\nY: υ' : '✓ Σωστή επιλογή: το 2';
+  const ask = body.contents[0].parts[1].text;
+  const text = ask.includes('will be plotted') ? 'F: 10-2x\nD: 0 ; 5\nX: t\nY: υ'
+    : ask.includes('will draw the figure') ? 'L 5 50 95 50\nR 35 34 59 50\nT 47 42 m = 2 kg\nA 59 42 85 42 red\nT 74 36 F = 10 N\nP 10 50 40 20 40 50 10 50'
+    : '✓ Σωστή επιλογή: το 2';
   return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }) });
 });
 await ctx.route('https://www.googleapis.com/**', (r) => {
@@ -511,6 +514,23 @@ test('Λάσο σε συνάρτηση → «Γραφική»: μπαίνουν 
   assert(ax.mode === 'q1', `για υ = 10 − 2t με 0 ≤ t ≤ 5 περίμενα 1ο τεταρτημόριο, βγήκε ${ax.mode}`);
   assert(ax.fns.length === 1 && ax.fns[0].expr === '10-2x' && ax.fns[0].dom[0] === 0 && ax.fns[0].dom[1] === 5, 'η συνάρτηση ή το πεδίο ορισμού δεν πέρασαν σωστά');
   assert(ax.lx === 't' && ax.ly === 'υ', 'τα ονόματα των αξόνων δεν πέρασαν');
+  await page.mouse.click(1200, 300);
+});
+
+test('Λάσο σε εκφώνηση → «Σχήμα»: το σχήμα μπαίνει από κάτω ως σχήματα, βέλη και ετικέτες, και φεύγει με μία αναίρεση', async () => {
+  const pi = Number((await page.textContent('#pageLabel')).split('/')[0]) - 1;
+  await tool('select');
+  const n0 = (await items(pi)).length;
+  await lasso(420, 200, 640, 320);
+  await page.click('#selOpts [data-rec="figure"]');
+  await page.waitForFunction(() => document.getElementById('toast').textContent.startsWith('Το σχήμα μπήκε'), null, { timeout: 10000 });
+  const added = (await items(pi)).slice(n0);
+  const kinds = added.map((i) => (i.kind === 'shape' ? i.shape : i.kind)).join(' ');
+  assert(kinds === 'line rect text arrow text line line line', `το σχήμα βγήκε «${kinds}»`);
+  assert(added[2].text === 'm = 2 kg' && added[3].color !== added[0].color, 'η ετικέτα ή το χρώμα της δύναμης δεν πέρασαν');
+  assert(added[1].y1 === added[0].y0, 'το σώμα δεν πατάει στο έδαφος');
+  await page.click('#undo');
+  assert((await items(pi)).length === n0, 'η αναίρεση δεν πήρε όλο το σχήμα μαζί');
   await page.mouse.click(1200, 300);
 });
 

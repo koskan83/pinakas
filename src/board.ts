@@ -592,6 +592,20 @@ export class Board {
     this.addAndSelect(item);
   }
 
+  /** Προσθέτει πολλά στοιχεία μαζί (π.χ. ένα σχήμα από κομμάτια) και τα αφήνει όλα επιλεγμένα· αναιρούνται με ένα ↶. */
+  addItems(items: Item[]): void {
+    if (items.length === 0) return;
+    if (items.length === 1) return this.addAndSelect(items[0]);
+    const before = this.page.items.slice();
+    this.page.items.push(...items);
+    this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
+    this.tool = 'select';
+    this.selected = null;
+    this.multi = items.map((it) => it.id);
+    this.redraw();
+    this.onUi();
+  }
+
   private addAndSelect(item: Item): void {
     this.page.items.push(item);
     this.push({ t: 'add', p: this.cur, item });

@@ -3,7 +3,7 @@
 export type Provider = 'gemini' | 'claude';
 export type RecKind = 'text' | 'math';
 /** Τι ζητάμε από την υπηρεσία: μεταγραφή (κείμενο ή τύπος) ή λύση της άσκησης. */
-export type AiTask = RecKind | 'solve' | 'check' | 'graph' | 'spell';
+export type AiTask = RecKind | 'solve' | 'check' | 'graph' | 'spell' | 'figure';
 
 export interface AiSettings {
   provider: Provider;
@@ -96,6 +96,27 @@ const PROMPT: Record<AiTask, string> = {
     'π, e, ln( ), log( ) and the Greek names ημ( ), συν( ), εφ( ), σφ( ) for sin, cos, tan, cot. Never write sin, cos, tan, sqrt, abs or exp. ' +
     'Other single letters (a, b, λ) may stay as parameters. Example reply:\nF: 10-2x\nD: 0 ; 5\nX: t\nY: υ\n' +
     'If the image contains no function that can be plotted reply with an empty message.',
+  figure:
+    'The image shows the statement of a physics exercise (sometimes geometry) from a Greek secondary-school classroom whiteboard, printed or handwritten. ' +
+    'A program will draw the figure a teacher would sketch on the board next to it, before solving: the bodies and surfaces the statement describes, ' +
+    'the given vectors (forces, velocities) and the names of the given quantities. Do NOT solve the exercise, do not show results or anything the students must find themselves ' +
+    '(for example do not draw the resultant, and in a force diagram draw only forces the statement names). ' +
+    'If the statement needs no figure (a plain calculation, unit conversion, theory or multiple-choice question, or a formula to apply) reply with exactly: NONE\n' +
+    'Otherwise reply with plain lines only, no explanation, no code fences, at most 30 lines. ' +
+    'Coordinates are numbers on a canvas 100 wide and 70 high, x to the right, y DOWNWARDS (y = 0 is the top). Keep everything between 5 and 95 horizontally and 5 and 65 vertically. Commands:\n' +
+    'L x1 y1 x2 y2 : straight line (ground, incline, rope, rod, wall, ray).\n' +
+    'D x1 y1 x2 y2 : dashed line (height, reference level, normal, axis, trajectory guide).\n' +
+    'A x1 y1 x2 y2 colour : arrow from (x1,y1) to (x2,y2) for a vector. colour is one of red (forces), blue (velocity, acceleration, displacement), green (fields, other).\n' +
+    'R x1 y1 x2 y2 : rectangle with sides parallel to the canvas (a box on horizontal ground, a container, a resistor).\n' +
+    'C cx cy r : circle (a ball, a pulley, a wheel, a charge, a planet).\n' +
+    'P x1 y1 x2 y2 x3 y3 ... : polyline through 3 to 12 points; repeat the first point at the end to close it ' +
+    '(a triangle for an inclined plane, a tilted box on an incline, a curved path approximated by points, a zigzag spring).\n' +
+    'T x y text : a short label centred at (x,y): a symbol or a symbol with its given value, e.g. "m = 2 kg", "F = 10 N", "υ₀", "θ = 30°", "h = 5 m", "A", "B". ' +
+    'Greek letters and Unicode subscripts are allowed, no LaTeX. Put each label next to what it names, not on top of lines.\n' +
+    'Keep it simple and schematic, like a clean textbook sketch: usually 4 to 15 commands. Make it large: use most of the canvas. Tilted boxes must sit exactly on the incline line. ' +
+    'Example for "a box of mass 2 kg is pulled on horizontal ground by a horizontal force of 10 N":\n' +
+    'L 5 50 95 50\nR 35 34 59 50\nT 47 42 m = 2 kg\nA 59 42 85 42 red\nT 74 36 F = 10 N\n' +
+    'If nothing is readable reply with an empty message.',
 };
 
 async function toBase64(blob: Blob): Promise<string> {
@@ -155,7 +176,7 @@ export async function recognize(png: Blob, kind: AiTask, s: AiSettings): Promise
   const parts: { text?: string }[] = s.provider === 'gemini' ? json.candidates?.[0]?.content?.parts ?? [] : json.content ?? [];
   const raw = parts.map((p) => p.text ?? '').join('');
   // ο έλεγχος λύσης είναι σκέτο κείμενο: δεν έχει περιτύλιγμα LaTeX να καθαριστεί
-  return kind === 'check' || kind === 'graph' || kind === 'spell' ? raw.trim() : clean(raw);
+  return kind === 'check' || kind === 'graph' || kind === 'spell' ? raw.trim() : kind === 'figure' ? raw.replace(/```[a-z]*/gi, '').trim() : clean(raw);
 }
 
 export interface GraphReply {
@@ -187,6 +208,60 @@ export function parseGraphReply(text: string): GraphReply {
   }
   if (out.lx === 'x') delete out.lx;
   if (out.ly === 'y') delete out.ly;
+  return out;
+}
+
+/** Ένα κομμάτι του σχήματος που ζητήθηκε από το AI, σε καμβά 100 × 70 (y προς τα κάτω). */
+export type FigCmd =
+  | { k: 'line'; pts: [number, number, number, number]; dash?: boolean }
+  | { k: 'arrow'; pts: [number, number, number, number]; color: 'red' | 'blue' | 'green' }
+  | { k: 'rect'; pts: [number, number, number, number] }
+  | { k: 'circle'; x: number; y: number; r: number }
+  | { k: 'poly'; pts: [number, number][] }
+  | { k: 'text'; x: number; y: number; text: string };
+
+/**
+ * Διαβάζει την απάντηση για σχήμα (γραμμές «L», «D», «A», «R», «C», «P», «T»). null όταν η εκφώνηση δεν χρειάζεται σχήμα («NONE»)·
+ * ό,τι δεν καταλαβαίνει ή πέφτει πολύ έξω από τον καμβά το αφήνει.
+ */
+export function parseFigureReply(text: string): FigCmd[] | null {
+  if (/^\s*NONE\b/i.test(text)) return null;
+  const out: FigCmd[] = [];
+  const ok = (v: number): boolean => Number.isFinite(v) && v >= -20 && v <= 120;
+  for (const raw of text.split('\n')) {
+    const m = /^\s*([LDARCPT])\s*:?\s+(.+?)\s*$/.exec(raw.replace(/[`*]/g, ''));
+    if (!m || out.length >= 40) continue;
+    const k = m[1];
+    if (k === 'T') {
+      const t = /^(-?[\d.,]+)\s+(-?[\d.,]+)\s+(.+)$/.exec(m[2]);
+      if (!t) continue;
+      const x = Number(t[1].replace(',', '.')), y = Number(t[2].replace(',', '.'));
+      const label = t[3].replace(/^["«]|["»]$/g, '').trim().slice(0, 40);
+      if (ok(x) && ok(y) && label) out.push({ k: 'text', x, y, text: label });
+      continue;
+    }
+    const nums: number[] = [];
+    let color: 'red' | 'blue' | 'green' = 'red';
+    for (const w of m[2].split(/[\s;]+/)) {
+      const n = Number(w.replace(/,$/, '').replace('−', '-'));
+      if (w !== '' && Number.isFinite(n)) nums.push(n);
+      else if (/^(red|blue|green)$/i.test(w)) color = w.toLowerCase() as typeof color;
+    }
+    if (!nums.every(ok)) continue;
+    if (k === 'C') {
+      if (nums.length >= 3 && nums[2] > 0 && nums[2] <= 50) out.push({ k: 'circle', x: nums[0], y: nums[1], r: nums[2] });
+    } else if (k === 'P') {
+      const pts: [number, number][] = [];
+      for (let i = 0; i + 1 < nums.length && pts.length < 14; i += 2) pts.push([nums[i], nums[i + 1]]);
+      if (pts.length >= 3) out.push({ k: 'poly', pts });
+    } else if (nums.length >= 4) {
+      const pts: [number, number, number, number] = [nums[0], nums[1], nums[2], nums[3]];
+      if (pts[0] === pts[2] && pts[1] === pts[3]) continue;
+      if (k === 'A') out.push({ k: 'arrow', pts, color });
+      else if (k === 'R') out.push({ k: 'rect', pts });
+      else out.push({ k: 'line', pts, ...(k === 'D' ? { dash: true } : {}) });
+    }
+  }
   return out;
 }
 

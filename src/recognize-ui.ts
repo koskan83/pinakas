@@ -1,9 +1,9 @@
 /** Αναγνώριση γραφής, έλεγχος και λύσεις με AI. */
 
-import { FnDef, TextItem, isDark } from './model';
+import { FnDef, Item, TextItem, isDark } from './model';
 import { Params, compile, fnOf, paramsOf } from './expr';
 import { fitScaleX, fitScaleY, pickAxesMode } from './analysis';
-import { AiTask, MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage, parseGraphReply } from './ai';
+import { AiTask, FigCmd, MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage, parseFigureReply, parseGraphReply } from './ai';
 import { uid, wrapText } from './model';
 import { $, board, toast } from './app';
 // κυκλική αναφορά με το main: μόνο συναρτήσεις, που καλούνται αφού στηθεί όλη η εφαρμογή
@@ -95,6 +95,36 @@ function plotReply(out: string): void {
   toast('Η γραφική παράσταση μπήκε. Έλεγξε ότι ο τύπος διαβάστηκε σωστά.', 5000);
 }
 
+/**
+ * Τα κομμάτια ενός σχήματος (καμβάς 100 × 70) ως στοιχεία του πίνακα, με πάνω αριστερή γωνία το (x, y) και `f` μονάδες πίνακα ανά μονάδα καμβά.
+ * Είναι συνηθισμένα σχήματα, βέλη και κείμενα: ο καθηγητής τα μετακινεί, τα σβήνει ή τα διορθώνει όπως ό,τι άλλο έχει στον πίνακα.
+ */
+export function figureItems(cmds: FigCmd[], x: number, y: number, f: number, ink: string, pal: Record<'red' | 'blue' | 'green', string>): Item[] {
+  const X = (v: number): number => x + v * f, Y = (v: number): number => y + v * f;
+  const width = Math.max(2, 0.55 * f);
+  const size = Math.max(14, 3.6 * f);
+  const items: Item[] = [];
+  for (const c of cmds) {
+    if (c.k === 'line' || c.k === 'arrow') {
+      const [x0, y0, x1, y1] = [X(c.pts[0]), Y(c.pts[1]), X(c.pts[2]), Y(c.pts[3])];
+      items.push({ kind: 'shape', id: uid(), shape: c.k, x0, y0, x1, y1, color: c.k === 'arrow' ? pal[c.color] : ink, width: c.k === 'arrow' ? width * 1.25 : width, ...(c.k === 'line' && c.dash ? { dash: true } : {}) });
+    } else if (c.k === 'rect') {
+      const xs = [X(c.pts[0]), X(c.pts[2])], ys = [Y(c.pts[1]), Y(c.pts[3])];
+      items.push({ kind: 'shape', id: uid(), shape: 'rect', x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys), color: ink, width });
+    } else if (c.k === 'circle') {
+      items.push({ kind: 'shape', id: uid(), shape: 'ellipse', x0: X(c.x - c.r), y0: Y(c.y - c.r), x1: X(c.x + c.r), y1: Y(c.y + c.r), color: ink, width });
+    } else if (c.k === 'poly') {
+      // ευθείες μία μία και όχι γραμμή γραφής: οι γωνίες μένουν αιχμηρές και κάθε πλευρά διορθώνεται χωριστά
+      for (let i = 0; i + 1 < c.pts.length; i++) items.push({ kind: 'shape', id: uid(), shape: 'line', x0: X(c.pts[i][0]), y0: Y(c.pts[i][1]), x1: X(c.pts[i + 1][0]), y1: Y(c.pts[i + 1][1]), color: ink, width });
+    } else {
+      // η ετικέτα δίνεται με το κέντρο της· το κείμενο του πίνακα μετριέται από πάνω αριστερά
+      const w = [...c.text].length * size * 0.52;
+      items.push({ kind: 'text', id: uid(), x: X(c.x) - w / 2, y: Y(c.y) - size * 0.6, text: c.text, size, color: ink });
+    }
+  }
+  return items;
+}
+
 /** Διαβάζει φωναχτά το επιλεγμένο κείμενο με τη φωνή του browser· το χειρόγραφο το αναγνωρίζει πρώτα το AI. */
 async function speakSelection(): Promise<void> {
   const synth = window.speechSynthesis;
@@ -153,12 +183,27 @@ async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
   const img = kind !== 'text' && kind !== 'math' && board.hasRegion ? await board.regionImage() : await board.inkImage(ids);
   if (!img) return;
   aiBusy++;
-  toast(kind === 'spell' ? '✨ Ορθογραφία…' : kind === 'graph' ? '✨ Γραφική παράσταση…' : kind === 'solve' ? '✨ Λύνεται…' : kind === 'check' ? '✨ Ελέγχεται…' : '✨ Αναγνώριση…', 0);
+  toast(kind === 'spell' ? '✨ Ορθογραφία…' : kind === 'graph' ? '✨ Γραφική παράσταση…' : kind === 'figure' ? '✨ Σχήμα…' : kind === 'solve' ? '✨ Λύνεται…' : kind === 'check' ? '✨ Ελέγχεται…' : '✨ Αναγνώριση…', 0);
   try {
     const out = await recognize(img.blob, kind, ai);
     if (kind === 'graph') {
       if (board.cur !== page) toast('Άλλαξες σελίδα· η γραφική παράσταση δεν μπήκε');
       else plotReply(out);
+      return;
+    }
+    if (kind === 'figure') {
+      const cmds = out ? parseFigureReply(out) : [];
+      if (board.cur !== page) toast('Άλλαξες σελίδα· το σχήμα δεν μπήκε');
+      else if (cmds === null) toast('Αυτή η εκφώνηση δεν χρειάζεται σχήμα.', 5000);
+      else if (!cmds.length) toast('Δεν μπόρεσα να φτιάξω σχήμα για αυτή την εκφώνηση');
+      else {
+        // κάτω από την εκφώνηση, σε μέγεθος που διαβάζεται στο τρέχον zoom
+        const zk = board.page.view.k;
+        const f = Math.max(4, Math.min(5.6 / zk, (window.innerWidth - 80) / zk / 100));
+        const pal = inkPalette();
+        board.addItems(figureItems(cmds, img.box.x0, img.box.y1 + 24 / zk, f, img.color, { red: pal[1], blue: pal[2], green: pal[3] }));
+        toast('Το σχήμα μπήκε κάτω από την εκφώνηση. Είναι πρόχειρο: έλεγξέ το και διόρθωσέ το πριν το δείξεις.', 6000);
+      }
       return;
     }
     if (!out) {
@@ -207,7 +252,7 @@ async function runRecognition(ids: string[], kind: AiTask): Promise<void> {
     }
     $('toast').classList.add('hidden');
   } catch (err) {
-    toast(`${kind === 'solve' ? 'Η λύση' : kind === 'check' ? 'Ο έλεγχος' : 'Η αναγνώριση'} απέτυχε: ${(err as Error).message}`, 6000);
+    toast(`${kind === 'solve' ? 'Η λύση' : kind === 'check' ? 'Ο έλεγχος' : kind === 'figure' ? 'Το σχήμα' : 'Η αναγνώριση'} απέτυχε: ${(err as Error).message}`, 6000);
   } finally {
     aiBusy--;
   }

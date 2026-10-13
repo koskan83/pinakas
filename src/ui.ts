@@ -247,6 +247,7 @@ export function mountUi(app: HTMLElement): void {
     <button data-rec="spell" class="rec check" data-lv="pri" title="Έλεγχος ορθογραφίας: από κάτω γράφεται ποιες λέξεις θέλουν διόρθωση"><span class="txt">αβγ</span><small>Ορθογραφία</small></button>
     <button data-speak="1" class="rec" data-lv="pri" title="Ο πίνακας διαβάζει φωναχτά το επιλεγμένο κείμενο"><span class="txt">🔊</span><small>Διάβασέ το</small></button>
     <button data-rec="graph" class="rec graph" data-lv="sec" title="Γραφική παράσταση της επιλεγμένης συνάρτησης, σε άξονες που ταιριάζουν στο πεδίο ορισμού της"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v17h17"/><path d="M6 17c3 0 4-11 7-11s3 7 7 7"/></svg></span><small>Γραφική</small></button>
+    <button data-rec="figure" class="rec graph" data-lv="sec" title="Σχήμα για την επιλεγμένη εκφώνηση (π.χ. Φυσικής): μπαίνει από κάτω, αν η άσκηση χρειάζεται σχήμα"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19h18M5 19L17 8v11"/><rect x="9.500" y="8.800" width="5" height="4" transform="rotate(-42.500 12 10.800)"/></svg></span><small>Σχήμα</small></button>
     <button data-rec="check" class="rec check" title="Έλεγχος της λύσης ενός μαθητή: δείχνει σε ποια γραμμή είναι το πρώτο λάθος"><span class="txt">✓?</span><small>Έλεγχος</small></button>
   </div>
   <div id="gadgetMenu" class="popup hidden">
