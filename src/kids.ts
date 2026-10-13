@@ -158,7 +158,16 @@ function moneyPile(v: number[], w: number, h: number): { i: number; x: number; y
 }
 
 // ---------- ζυγαριά ----------
-const CHIPS = [1, 2, 5, 10];
+const CHIPS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+/** Τα βαρίδια προς επιλογή κάτω από τη ζυγαριά: για κάθε πλευρά δύο σειρές των πέντε (1–5 και 6–10), και στη μέση η σύγκριση. */
+function chipGeom(w: number, h: number): { cr: number; my: number; at(i: number, side: number): [number, number] } {
+  const step = w * 0.072;
+  return {
+    cr: w * 0.031,
+    my: h * 0.86,
+    at: (i, side) => [(side ? w * 0.642 : w * 0.07) + (i % 5) * step, h * (i < 5 ? 0.8 : 0.92)],
+  };
+}
 interface Scale { left: number[]; right: number[]; show: boolean }
 const readScale = (v: number[]): Scale => {
   const n = v[1] ?? 0;
@@ -985,10 +994,10 @@ export const KIDS: Record<string, StampDef> = {
       }
       c.fillStyle = env.ink;
       // κάτω: τα βαρίδια που μπορείς να προσθέσεις σε κάθε πλευρά, και στη μέση η σύγκριση
-      const cy = h * 0.88, cr = w * 0.036;
+      const cg = chipGeom(w, h), cr = cg.cr;
       CHIPS.forEach((n, i) => {
         for (const side of [0, 1]) {
-          const x = side ? w * 0.62 + i * cr * 2.5 + cr : w * 0.38 - i * cr * 2.5 - cr;
+          const [x, cy] = cg.at(i, side);
           c.beginPath();
           c.arc(x, cy, cr, 0, Math.PI * 2);
           c.save();
@@ -996,10 +1005,10 @@ export const KIDS: Record<string, StampDef> = {
           c.globalAlpha = 0.85;
           c.fill();
           c.restore();
-          text(c, `+${n}`, x, cy + 1, cr * 0.8, '#ffffff', 700);
+          text(c, String(n), x, cy + 1, cr * 1.05, '#ffffff', 700);
         }
       });
-      text(c, s.show ? `${L} ${L === R ? '=' : L > R ? '>' : '<'} ${R}` : '?', w / 2, cy + 1, cr * 1.05, env.ink, 800);
+      text(c, s.show ? `${L} ${L === R ? '=' : L > R ? '>' : '<'} ${R}` : '?', w / 2, cg.my + 1, w * 0.04, env.ink, 800);
     },
     tap(v, x, y, w, h) {
       const s = readScale(v), g = scaleGeom(s, w, h);
@@ -1008,18 +1017,18 @@ export const KIDS: Record<string, StampDef> = {
         (hit.side ? s.right : s.left).splice(hit.k, 1);
         return writeScale(s);
       }
-      const cy = h * 0.88, cr = w * 0.036;
+      const cg = chipGeom(w, h);
       for (let i = 0; i < CHIPS.length; i++) {
         for (const side of [0, 1]) {
-          const cx = side ? w * 0.62 + i * cr * 2.5 + cr : w * 0.38 - i * cr * 2.5 - cr;
-          if (!inR(x, y, cx, cy, cr)) continue;
+          const [cx, cy] = cg.at(i, side);
+          if (!inR(x, y, cx, cy, cg.cr * 1.12)) continue;
           const list = side ? s.right : s.left;
           if (list.length >= 12) return null;
           list.push(CHIPS[i]);
           return writeScale(s);
         }
       }
-      if (Math.abs(x - w / 2) < w * 0.1 && Math.abs(y - cy) < cr * 1.4) return writeScale({ ...s, show: !s.show });
+      if (Math.abs(x - w / 2) < w * 0.1 && Math.abs(y - cg.my) < h * 0.08) return writeScale({ ...s, show: !s.show });
       return null;
     },
   }),
