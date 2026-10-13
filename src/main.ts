@@ -13,7 +13,7 @@ import { confetti, loadFx, playFx, saveFx } from './fx';
 import { NEWS, VERSION, newsPending } from './news';
 import { BUILTIN, type Template } from './pages';
 import { $, HL_PALETTE, MORE_COLORS, PALETTE, SIZES, SIZE_NAME, app, board, curtain, curtainTop, download, fileName, layoutBar, spot, stamp, timer, toast } from './app';
-import { esc, fitY, renderFns, resetFnDraft, resetFnMoved, toggleAnalysis } from './axes-ui';
+import { esc, fitY, renderFns, resetFnDraft, resetFnMoved, scaleText, toggleAnalysis } from './axes-ui';
 import { clearMeasShape } from './measure-ui';
 import { ai, autoKind, openAi } from './recognize-ui';
 import { endLesson, lessonPdf, openSend, pdfLogo, pickPages, setPdfLogo } from './send-ui';
@@ -324,8 +324,9 @@ export function refreshUi(): void {
   document.querySelectorAll<HTMLElement>('[data-an]').forEach((b) => b.classList.toggle('on', anOn[b.dataset.an!]));
   $('axesOpts').querySelector('[data-an=sum] span')!.textContent = ax?.an?.int?.n ? `Σ${ax.an.int.n}` : 'Σ';
   $('axNums').classList.toggle('on', ax?.nums !== false);
-  $('axScale').querySelector('span')!.textContent = `×${String(ax?.sx ?? 1).replace('.', ',')}`;
+  $('axScale').querySelector('span')!.textContent = scaleText(ax?.sx ?? 1);
   $('axScale').classList.toggle('on', (ax?.sx ?? 1) !== 1);
+  if (!ax) $('scaleMenu').classList.add('hidden');
   $('axesOpts').querySelector('[data-axis=x] span')!.textContent = ax?.lx ?? 'x';
   $('axesOpts').querySelector('[data-axis=y] span')!.textContent = ax?.ly ?? 'y';
   if (!ax && !fnMenu.classList.contains('hidden')) {

@@ -315,13 +315,24 @@ test('Συνάρτηση που δεν χωράει (y = −200x): ο κατακ
   await type('-200x');
   const sy = (await axes()).sy;
   assert(sy === 200, `η κλίμακα για την y = −200x βγήκε ${sy} αντί για 200`);
-  await page.evaluate(() => document.getElementById('axScale').click());
+  const scale = async (sx) => {
+    await page.evaluate(() => document.getElementById('axScale').click());
+    assert(await visible('#scaleMenu'), 'το πάτημα στην Κλίμακα δεν άνοιξε τη μπάρα με τις επιλογές');
+    await page.click(`#scaleMenu [data-sx="${sx}"]`);
+    assert(!(await visible('#scaleMenu')), 'η μπάρα της κλίμακας έμεινε ανοιχτή μετά την επιλογή');
+  };
+  await scale(2);
   const a2 = await axes();
   assert(a2.sx === 2 && a2.sy === 500, `με 2 ανά γραμμή στον x περίμενα sx 2 και sy 500, βγήκαν ${a2.sx} και ${a2.sy}`);
+  await scale(0.1);
+  const a3 = await axes();
+  assert(a3.sx === 0.1 && a3.sy === 20, `με υποδιαίρεση ÷10 περίμενα sx 0,1 και sy 20, βγήκαν ${a3.sx} και ${a3.sy}`);
+  const lbl = await page.evaluate(() => document.querySelector('#axScale span').textContent);
+  assert(lbl === '÷10', `το κουμπί της κλίμακας γράφει «${lbl}» αντί για «÷10»`);
   await del();
   assert((await axes()).sy === undefined, 'χωρίς συναρτήσεις η κλίμακα έπρεπε να γυρίσει στο 1');
   await page.mouse.click(1200, 300);
-  for (let i = 0; i < 6 && (await axes()); i++) await page.click('#undo');
+  for (let i = 0; i < 8 && (await axes()); i++) await page.click('#undo');
   assert(!(await axes()), 'έμειναν άξονες στη σελίδα');
 });
 

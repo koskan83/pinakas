@@ -11,6 +11,7 @@ import { closePopups, inkPalette, placeNear, savePrefs, togglePopup } from './ma
 
 const labelMenu = $('labelMenu');
 const fnMenu = $('fnMenu');
+const scaleMenu = $('scaleMenu');
 
 const AXIS_LABELS = ['x', 'y', 't', 's', 'υ', 'u', 'v', 'a', 'F', 'm', 'V', 'P', 'T', 'I', 'R', 'W', 'E', 'f(x)'];
 let labelAxis: 'x' | 'y' = 'y';
@@ -23,21 +24,9 @@ $('axesOpts').addEventListener('click', (e) => {
     return;
   }
   if (t.closest('#axScale')) {
-    const ax = board.selectedAxes;
-    if (!ax) return;
-    const steps = [1, 2, 5, 10, 20, 50, 100];
-    const old = ax.sx ?? 1;
-    const sx = steps[(steps.indexOf(old) + 1) % steps.length];
-    // οι λαβές της ανάλυσης μένουν στις ίδιες γραμμές του άξονα
-    const f = sx / old;
-    const an: AxesAn | undefined = ax.an && {
-      ...ax.an,
-      ...(ax.an.int ? { int: { ...ax.an.int, a: ax.an.int.a * f, b: ax.an.int.b * f } } : {}),
-      ...(ax.an.lim ? { lim: { x0: ax.an.lim.x0 * f, x: ax.an.lim.x * f } } : {}),
-      ...(ax.an.tan ? { tan: { ...ax.an.tan, x: ax.an.tan.x * f, ...(ax.an.tan.h ? { h: ax.an.tan.h * f } : {}) } } : {}),
-    };
-    const next: AxesItem = { ...ax, sx: sx === 1 ? undefined : sx };
-    board.updateAxes({ sx: next.sx, sy: fitY(next, ax.fns ?? [], ax.params), ...(an ? { an } : {}) });
+    if (!board.selectedAxes) return;
+    togglePopup(scaleMenu, $('axScale'));
+    markScale();
     return;
   }
   if (t.closest('#axNums')) {
@@ -61,6 +50,38 @@ $('axesOpts').addEventListener('click', (e) => {
   labelAxis = b.dataset.axis as 'x' | 'y';
   labelMenu.classList.remove('hidden');
   placeNear(labelMenu, b);
+});
+/** Πώς γράφεται μια κλίμακα: ×5 όταν η γραμμή αξίζει 5, ÷5 όταν αξίζει ένα πέμπτο. */
+export function scaleText(sx: number): string {
+  const inv = Math.round(1 / sx);
+  if (sx < 1 && Math.abs(1 / sx - inv) < 1e-6) return `÷${inv}`;
+  return `×${String(+sx.toPrecision(6)).replace('.', ',')}`;
+}
+const SCALE_N = [2, 5, 10, 50, 100];
+// πάνω ο πολλαπλασιασμός, κάτω οι υποδιαιρέσεις· το ×1 μόνο του στην αρχή
+$('scaleGrid').innerHTML = [1, ...SCALE_N, 0, ...SCALE_N.map((n) => 1 / n)].map((s) => (s ? `<button data-sx="${s}">${scaleText(s)}</button>` : '<i></i>')).join('');
+function markScale(): void {
+  const cur = board.selectedAxes?.sx ?? 1;
+  scaleMenu.querySelectorAll<HTMLElement>('[data-sx]').forEach((b) => b.classList.toggle('on', Math.abs(Number(b.dataset.sx) - cur) < 1e-9));
+}
+scaleMenu.addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>('[data-sx]');
+  const ax = board.selectedAxes;
+  if (!b || !ax) return;
+  const sx = Number(b.dataset.sx);
+  const old = ax.sx ?? 1;
+  closePopups();
+  if (Math.abs(sx - old) < 1e-9) return;
+  // οι λαβές της ανάλυσης μένουν στις ίδιες γραμμές του άξονα
+  const f = sx / old;
+  const an: AxesAn | undefined = ax.an && {
+    ...ax.an,
+    ...(ax.an.int ? { int: { ...ax.an.int, a: ax.an.int.a * f, b: ax.an.int.b * f } } : {}),
+    ...(ax.an.lim ? { lim: { x0: ax.an.lim.x0 * f, x: ax.an.lim.x * f } } : {}),
+    ...(ax.an.tan ? { tan: { ...ax.an.tan, x: ax.an.tan.x * f, ...(ax.an.tan.h ? { h: ax.an.tan.h * f } : {}) } } : {}),
+  };
+  const next: AxesItem = { ...ax, sx: sx === 1 ? undefined : sx };
+  board.updateAxes({ sx: next.sx, sy: fitY(next, ax.fns ?? [], ax.params), ...(an ? { an } : {}) });
 });
 /** Ανάβει, αλλάζει μορφή ή σβήνει ένα εργαλείο ανάλυσης στους επιλεγμένους άξονες. */
 export function toggleAnalysis(key: string): void {

@@ -163,7 +163,7 @@ export function mountUi(app: HTMLElement): void {
       <div class="group" id="axesOpts">
         <button data-axis="x" data-l="Άξονας x"><span>x</span>Όνομα οριζόντιου άξονα</button>
         <button data-axis="y" data-l="Άξονας y"><span>y</span>Όνομα κατακόρυφου άξονα</button>
-        <button id="axScale" data-l="Κλίμακα"><span class="txt">×1</span>Κλίμακα οριζόντιου άξονα: κάθε πάτημα αλλάζει πόσο αξίζει μια γραμμή (1, 2, 5, 10, 20, 50, 100). Ο κατακόρυφος προσαρμόζεται μόνος του</button>
+        <button id="axScale" data-l="Κλίμακα"><span class="txt">×1</span>Κλίμακα οριζόντιου άξονα: διάλεξε πόσο αξίζει μια γραμμή (×2 έως ×100, ή υποδιαίρεση ÷2 έως ÷100). Ο κατακόρυφος προσαρμόζεται μόνος του</button>
         <button id="axNums" data-l="Αριθμοί"><span class="txt">123</span>Αριθμοί στους άξονες: σβήσε τους για να γράψεις δικές σου τιμές (π.χ. ανά 10 ή 20)</button>
         <i class="sep"></i>
         <button id="fnBtn" data-l="Συνάρτ."><span class="txt">f(x)</span>Γραφική παράσταση συνάρτησης</button>
@@ -359,6 +359,9 @@ export function mountUi(app: HTMLElement): void {
   <div id="labelMenu" class="popup hidden">
     <div id="labelGrid"></div>
     ${mi('id="labelOther"', I.keys, 'Άλλο…')}
+  </div>
+  <div id="scaleMenu" class="popup hidden">
+    <div id="scaleGrid"></div>
   </div>
   <div id="fnMenu" class="popup hidden">
     <div id="fnHead"><b>⠿ Συναρτήσεις</b><button id="fnPts" class="pill" title="Ρίζες, ακρότατα και σημεία τομής">• Σημεία</button><button id="fnClose" title="Κλείσιμο">✕</button></div>

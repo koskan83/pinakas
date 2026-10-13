@@ -204,6 +204,10 @@ body.inking #toolbar { pointer-events: none; }
 #labelMenu { min-width: 0; }
 #labelGrid { display: grid; grid-template-columns: repeat(6, 48px); gap: 4px; }
 #labelGrid button { padding: 12px 0; text-align: center; font-style: italic; font-size: 19px; }
+#scaleMenu { min-width: 0; }
+#scaleGrid { display: grid; grid-template-columns: repeat(6, 56px); gap: 4px; }
+#scaleGrid button { padding: 10px 0; text-align: center; font-size: 17px; font-variant-numeric: tabular-nums; }
+#scaleGrid button.on { background: var(--accent); color: #fff; }
 
 .popup button.sq { width: 44px; height: 40px; padding: 0; text-align: center; font-size: 22px; background: var(--bar-2); }
 
