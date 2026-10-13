@@ -631,6 +631,21 @@ test('Δημοτικό: απλή γραμμή εργαλείων, εργαλεί
 
 test('Οι εικόνες του PDF σώζονται χωριστά από το μάθημα και γυρίζουν ίδιες μετά από κλείσιμο', async () => {
   const pics = (d) => d.pages.flatMap((p) => p.items).filter((i) => i.kind === 'image' && i.src.length > 8192).map((i) => i.src);
+  // οι σχεδόν άδειες σελίδες του PDF μπορεί να βγουν πολύ μικρές εικόνες (μένουν μέσα στο μάθημα): βάζουμε και μια φωτογραφία με «θόρυβο», σίγουρα μεγάλη
+  const noise = await page.evaluate(() => {
+    const cv = document.createElement('canvas');
+    cv.width = 320;
+    cv.height = 240;
+    const c = cv.getContext('2d');
+    const im = c.createImageData(320, 240);
+    for (let i = 0; i < im.data.length; i++) im.data[i] = i % 4 === 3 ? 255 : (i * 2654435761) % 251;
+    c.putImageData(im, 0, 0);
+    return cv.toDataURL('image/png').split(',')[1];
+  });
+  const nImg = async () => (await doc()).pages.flatMap((p) => p.items).filter((i) => i.kind === 'image').length;
+  const n0 = await nImg();
+  await page.setInputFiles('#fileImport', { name: 'foto.png', mimeType: 'image/png', buffer: Buffer.from(noise, 'base64') });
+  for (let i = 0; i < 20 && (await nImg()) === n0; i++) await sleep(300);
   // μια γραμμή ακόμα: η αποθήκευση που ακολουθεί δεν πρέπει να πειράξει τις εικόνες
   await pen();
   await drag(200, 200, 260, 220);
@@ -646,7 +661,7 @@ test('Οι εικόνες του PDF σώζονται χωριστά από το
         cur.onsuccess = () => {
           const id = JSON.parse(cur.result);
           const d = st.get(`lesson:${id}`);
-          d.onsuccess = () => res({ imgs: keys.result.filter((k) => String(k).startsWith(`img:${id}:`)).length, inline: d.result.includes('data:image/jpeg') });
+          d.onsuccess = () => res({ imgs: keys.result.filter((k) => String(k).startsWith(`img:${id}:`)).length, inline: /data:image\/[^"]{8192}/.test(d.result) });
         };
       };
     };
@@ -654,7 +669,7 @@ test('Οι εικόνες του PDF σώζονται χωριστά από το
   await page.reload();
   await page.waitForSelector('#toolbar');
   const after = pics(await doc());
-  assert(before.length >= 1, 'το μάθημα δεν έχει τις εικόνες του PDF');
+  assert(before.length >= 1, 'το μάθημα δεν έχει τη μεγάλη εικόνα που μπήκε');
   assert(!stored.inline, 'οι εικόνες γράφτηκαν ξανά μέσα στο μάθημα');
   assert(stored.imgs === new Set(before).size, `στη συσκευή υπάρχουν ${stored.imgs} εικόνες αντί για ${new Set(before).size}`);
   assert(after.length === before.length && after.every((s, i) => s === before[i]), 'μετά το ξανάνοιγμα οι εικόνες δεν είναι ίδιες');
