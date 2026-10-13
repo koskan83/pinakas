@@ -850,7 +850,7 @@ export const KIDS: Record<string, StampDef> = {
       else text(c, v[1] ? `${hr}:${String(mins % 60).padStart(2, '0')}` : '? : ??', w / 2, sy + 1, (h - w) * 0.46, env.ink, 700);
       skinBtn(c, w * 0.92, w * 0.08, w * 0.07, '🎯', !!v[2], env);
     },
-    // οι δείκτες σέρνονται: έξω κοντά στους αριθμούς ο λεπτοδείκτης (ανά 5 λεπτά), πιο μέσα ο ωροδείκτης
+    // οι δείκτες σέρνονται: έξω κοντά στους αριθμούς ο λεπτοδείκτης (ανά λεπτό), πιο μέσα ο ωροδείκτης
     paint(v, x, y, w, _h, st, first) {
       const cx = w / 2, cy = w / 2, r = w * 0.47;
       const mins = ((v[0] ?? 0) % 720 + 720) % 720;
@@ -862,7 +862,7 @@ export const KIDS: Record<string, StampDef> = {
       let a = Math.atan2(x - cx, cy - y);
       if (a < 0) a += 2 * Math.PI;
       const goal = v[2] ? [v[2], 0] : [];
-      if (st.hand === 1) return [Math.floor(mins / 60) * 60 + (Math.round((a / (2 * Math.PI)) * 12) % 12) * 5, v[1] ?? 1, ...goal];
+      if (st.hand === 1) return [Math.floor(mins / 60) * 60 + (Math.round((a / (2 * Math.PI)) * 60) % 60), v[1] ?? 1, ...goal];
       return [(Math.round((a / (2 * Math.PI)) * 12 - (mins % 60) / 60 + 12) % 12) * 60 + (mins % 60), v[1] ?? 1, ...goal];
     },
     // όταν αφήσεις τους δείκτες πάνω στην ώρα της άσκησης: σωστό (όχι όσο απλώς περνάς από εκεί)
