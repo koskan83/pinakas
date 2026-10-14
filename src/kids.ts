@@ -803,11 +803,16 @@ function ncGeom(w: number, h: number): { bh: number; sh: number; S: number; ox: 
 /** Πόσα κουμπιά έχει η πάνω σειρά της μπάρας σε κάθε λειτουργία: αριθμοί 1–10, χρώματα ή αξεσουάρ. */
 const ncRowA = (mode: number): number => (mode === 3 ? NC_PAL.length : mode === 4 ? NC_ACC.length : 10);
 const NC_BTNS = ['✋', '✂️', '🔄', '🎨', '🎩'];
+/** Το τελευταίο κόψιμο (πότε, πού): ένα δεύτερο άγγιγμα στο ίδιο σημείο αμέσως μετά (διπλή επαφή του πίνακα, παλάμη) δεν ξανακόβει. */
+const ncCut = { t: -1e9, x: 0, y: 0 };
+/** Κέρσορας ψαλίδι για το ✂️ (μύτες πάνω, εκεί που κόβει). */
+const NC_SCISSORS = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><g stroke-linecap="round"><path d="M12 21 19 3M20 21 13 3" stroke="#fff" stroke-width="5"/><path d="M12 21 19 3M20 21 13 3" stroke="#111827" stroke-width="2.5"/></g><g fill="#ef4444" stroke="#7f1d1d" stroke-width="1.5"><circle cx="10" cy="25" r="4.5"/><circle cx="22" cy="25" r="4.5"/></g><g fill="#fff"><circle cx="10" cy="25" r="1.8"/><circle cx="22" cy="25" r="1.8"/></g></svg>')}") 16 3, crosshair`;
 
 function ncDraw(c: C, g: { S: number; ox: number; oy: number }, e: NCube, hidden: boolean): void {
   const S = g.S, C2 = ncCols(e), H = e.h, head = ncAcc(e.acc, 0), face = ncAcc(e.acc, 1), extra = ncAcc(e.acc, 2);
   // πάνω σε πατίνι ή σκέιτ το σώμα ανεβαίνει λίγο
-  const ground = g.oy + (e.y / 10) * S, by = ground - (extra === 1 || extra === 2 ? S * 0.55 : 0);
+  // το σώμα πατά σε δύο ποδαράκια· πάνω σε πατίνι ή σκέιτ ανεβαίνει λίγο ακόμα
+  const ground = g.oy + (e.y / 10) * S, by = ground - S * 0.26 - (extra === 1 || extra === 2 ? S * 0.5 : 0);
   const bx = g.ox + (e.x / 10 - C2 / 2) * S, top = by - H * S;
   const fc = Math.max(1, Math.floor(e.n / H)), fw = Math.min(fc, 3) * S, fcx = bx + fw / 2;
   c.save();
@@ -845,6 +850,20 @@ function ncDraw(c: C, g: { S: number; ox: number; oy: number }, e: NCube, hidden
   for (const [hx, hy] of [[bx - S * 0.32, ay + S * 0.3], [ax + S * 0.32, ay + (extra === 3 ? -S * 0.3 : S * 0.3)]]) {
     c.beginPath();
     c.arc(hx, hy, S * 0.1, 0, Math.PI * 2);
+    c.fill();
+  }
+  // ποδαράκια, στο χρώμα του κάτω κυβακίου
+  const foot = ncColour(e, 0)[1], fx0 = bx + Math.min(C2, 2) * S / 2, fd = Math.min(C2, 2) * S * 0.24;
+  c.fillStyle = foot;
+  c.strokeStyle = foot;
+  c.lineWidth = Math.max(2.5, S * 0.11);
+  for (const sx of [-1, 1]) {
+    c.beginPath();
+    c.moveTo(fx0 + sx * fd, by - S * 0.05);
+    c.lineTo(fx0 + sx * fd, by + S * 0.16);
+    c.stroke();
+    c.beginPath();
+    c.ellipse(fx0 + sx * (fd + S * 0.07), by + S * 0.18, S * 0.19, S * 0.09, 0, 0, Math.PI * 2);
     c.fill();
   }
   // τα κυβάκια
@@ -926,6 +945,74 @@ function ncDraw(c: C, g: { S: number; ox: number; oy: number }, e: NCube, hidden
   c.restore();
 }
 
+/** Το τοπίο πίσω από τους χαρακτήρες: ήλιος, σύννεφα, λόφοι, δεντράκια και λουλουδάκια, απαλά για να ξεχωρίζουν τα κυβάκια. */
+function ncScenery(c: C, w: number, g: { sh: number; S: number; ox: number; oy: number }): void {
+  const S = g.S, X = (u: number): number => g.ox + u * S, Y = (u: number): number => g.oy + u * S;
+  c.save();
+  // ήλιος
+  c.fillStyle = '#fde68a';
+  c.beginPath();
+  c.arc(X(25.3), Y(1.9), S * 1.6, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = '#fcd34d';
+  c.beginPath();
+  c.arc(X(25.3), Y(1.9), S * 1.1, 0, Math.PI * 2);
+  c.fill();
+  // σύννεφα
+  c.fillStyle = '#ffffff';
+  for (const [cx, cy, k] of [[3.5, 1.6, 1], [11.5, 2.6, 0.8], [19, 1.2, 1.15], [8, 5.2, 0.6]]) {
+    c.beginPath();
+    for (const [dx, dy, r] of [[-1.1, 0.25, 0.75], [-0.3, -0.2, 1], [0.7, 0, 0.85], [1.4, 0.3, 0.6]]) {
+      c.moveTo(X(cx + dx * k) + r * k * S, Y(cy + dy * k));
+      c.arc(X(cx + dx * k), Y(cy + dy * k), r * k * S, 0, Math.PI * 2);
+    }
+    c.rect(X(cx - 1.1 * k), Y(cy + 0.25 * k), 2.5 * k * S, 0.6 * k * S);
+    c.fill();
+  }
+  // λόφοι στο βάθος
+  for (const [cx, rx, ry, col] of [[4, 9, 2.6, '#bbf7d0'], [17, 11, 3.4, '#a7f3d0'], [28, 8, 2.2, '#bbf7d0']] as const) {
+    c.fillStyle = col;
+    c.beginPath();
+    c.ellipse(X(cx), g.sh, rx * S, ry * S, 0, Math.PI, 0);
+    c.fill();
+  }
+  // δεντράκια
+  for (const [tx, k] of [[1.6, 1], [13.2, 0.75], [23.2, 1.1], [26.6, 0.8]]) {
+    const base = g.sh - S * 0.1;
+    c.fillStyle = '#a16207';
+    c.fillRect(X(tx) - S * 0.18 * k, base - S * 1.6 * k, S * 0.36 * k, S * 1.6 * k);
+    c.fillStyle = '#4ade80';
+    c.beginPath();
+    for (const [dx, dy, r] of [[0, -2.5, 1], [-0.7, -1.8, 0.75], [0.7, -1.8, 0.75]]) {
+      c.moveTo(X(tx + dx * k) + r * k * S, base + dy * k * S);
+      c.arc(X(tx + dx * k), base + dy * k * S, r * k * S, 0, Math.PI * 2);
+    }
+    c.fill();
+  }
+  // λουλουδάκια στο γρασίδι
+  for (const [fx, col] of [[6.2, '#f472b6'], [10.4, '#facc15'], [16.6, '#f87171'], [20.4, '#c084fc'], [24.8, '#facc15']] as const) {
+    const fy = g.sh - S * 0.35;
+    c.strokeStyle = '#16a34a';
+    c.lineWidth = Math.max(1, S * 0.05);
+    c.beginPath();
+    c.moveTo(X(fx), fy);
+    c.lineTo(X(fx), g.sh - S * 0.05);
+    c.stroke();
+    c.fillStyle = col;
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      c.beginPath();
+      c.arc(X(fx) + Math.cos(a) * S * 0.1, fy + Math.sin(a) * S * 0.1, S * 0.08, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.fillStyle = '#fef08a';
+    c.beginPath();
+    c.arc(X(fx), fy, S * 0.06, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.restore();
+}
+
 /** Μικρό κυβάκι της παλέτας: το χρώμα του αριθμού (ή της παλέτας) με τον αριθμό μέσα. */
 function ncChip(c: C, cx: number, cy: number, s: number, fills: string[], line: string, label: string): void {
   c.save();
@@ -997,9 +1084,10 @@ export function ncDrop(v: number[]): { v: number[]; ev: string } | null {
   let best = -1, area = 0;
   s.cubes.forEach((o, i) => {
     if (i === j) return;
-    const q = ncBox(o), ix = Math.min(b.x1, q.x1) - Math.max(b.x0, q.x0), iy = Math.min(b.y1, q.y1) - Math.max(b.y0, q.y0);
-    // ένα κομμάτι που μόλις κόπηκε ακουμπά τη βάση του (από πάνω): μετράει κι αυτό
-    if (ix >= 0.5 && iy >= (fresh ? -0.1 : 0.5) && ix * Math.max(iy, 0.01) > area) { area = ix * Math.max(iy, 0.01); best = i; }
+    // ενώνονται και όταν αφήνεις τον έναν πάνω στο κεφάλι του άλλου (ως λίγο πάνω από το καπέλο)·
+    // ένα κομμάτι που μόλις κόπηκε ακουμπά τη βάση του από πάνω: μετράει κι αυτό, για να πάει δίπλα της
+    const q = ncBox(o), ix = Math.min(b.x1, q.x1) - Math.max(b.x0, q.x0), iy = Math.min(b.y1, q.y1) - Math.max(b.y0, q.y0 - (fresh ? 0 : 1.4));
+    if (ix >= (fresh ? 0.5 : 0.4) && iy >= (fresh ? -0.1 : 0.15) && ix * Math.max(iy, 0.01) > area) { area = ix * Math.max(iy, 0.01); best = i; }
   });
   if (best >= 0 && fresh) {
     // κόπηκε με απλό πάτημα (χωρίς σύρσιμο): το κομμάτι πάει δίπλα, για να μην ξανακολλήσει αμέσως
@@ -2133,6 +2221,7 @@ export const KIDS: Record<string, StampDef> = {
       c.save();
       c.fillStyle = '#e0f2fe';
       c.fillRect(0, 0, w, g.sh);
+      ncScenery(c, w, g);
       c.fillStyle = '#86efac';
       c.fillRect(0, g.sh - g.S * 0.22, w, g.S * 0.22);
       // η μπάρα: πάνω σειρά ανάλογα με τη λειτουργία, κάτω οι λειτουργίες
@@ -2174,6 +2263,13 @@ export const KIDS: Record<string, StampDef> = {
       }
       // οι χαρακτήρες τελευταίοι: όποιος σέρνεται πάνω από τη μπάρα (προς τον 🗑️) φαίνεται
       for (const e of s.cubes) ncDraw(c, g, e, !!(s.flags & 1));
+    },
+    cursor(v, x, y, w, h) {
+      const g = ncGeom(w, h), s = ncState(v);
+      if (y >= g.sh) return 'pointer';
+      const cx = (x - g.ox) / g.S, cy = (y - g.oy) / g.S;
+      if (!s.cubes.some((e) => { const b = ncBox(e); return cx >= b.x0 && cx <= b.x1 && cy >= b.y0 && cy <= b.y1; })) return null;
+      return s.mode === 1 ? NC_SCISSORS : s.mode === 0 ? 'grab' : 'pointer';
     },
     fullAt(x, y, w, h) {
       const g = ncGeom(w, h);
@@ -2226,6 +2322,9 @@ export const KIDS: Record<string, StampDef> = {
       if (j < 0) return null;
       const e = s.cubes[j];
       if (s.mode === 1) {
+        const now = performance.now();
+        if (now - ncCut.t < 300 && Math.hypot(cx - ncCut.x, cy - ncCut.y) < 1.5) return v;
+        Object.assign(ncCut, { t: now, x: cx, y: cy });
         // χώρισμα: το κυβάκι που πατήθηκε και όσα είναι από πάνω του (και στις επόμενες στήλες) φεύγουν μαζί
         const b = ncBox(e), i = Math.floor(cx - b.x0) * e.h + Math.max(0, Math.min(e.h - 1, Math.floor(b.y1 - cy)));
         if (i > 0 && i < e.n) {

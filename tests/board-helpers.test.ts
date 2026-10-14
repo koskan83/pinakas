@@ -616,6 +616,16 @@ describe('αριθμοκυβάκια', () => {
     expect(ncState(r.v).cubes.map((e) => [e.x, e.n, e.f])).toEqual([[150, 5, 0]]);
   });
 
+  it('ενώνονται και όταν αφήνεις τον έναν πάνω στο κεφάλι του άλλου, όχι όταν είναι απλώς δίπλα', () => {
+    const v = ncPack({ mode: 0, sel: 0, flags: 0, cubes: [cube(50, 1), cube(150, 4)] });
+    const s = ncState(v);
+    // το 1 αφήνεται με τα πόδια του λίγο πάνω από το κεφάλι του 4 (που φτάνει ως το 9 από το 13)
+    const r = drag(v, mid(s.cubes[0]), [ox + 15 * S, oy + 8.5 * S])!;
+    expect(r.ev).toBe('num|pop|5');
+    const side = drag(v, mid(s.cubes[0]), [ox + 16.2 * S, oy + 12.5 * S])!;
+    expect(ncState(side.v).cubes.map((e) => e.n)).toEqual([4, 1]);
+  });
+
   it('πάνω από 20 δεν ενώνονται, και ο κάδος σβήνει', () => {
     const v = ncPack({ mode: 0, sel: 0, flags: 0, cubes: [cube(50, 12), cube(150, 10)] });
     const s = ncState(v);
@@ -631,6 +641,8 @@ describe('αριθμοκυβάκια', () => {
     // το τρίτο κυβάκι από κάτω
     const cut = d.paint!(v, ox + 10 * S, oy + 10.5 * S, W, H, st, true)!;
     expect(d.fx!(v, cut)).toBe('num|split|3');
+    // δεύτερη επαφή στο ίδιο σημείο αμέσως μετά (διπλό άγγιγμα): δεν ξανακόβει
+    expect(d.paint!(cut, ox + 10 * S, oy + 10.5 * S, W, H, {}, true)).toBe(cut);
     const r = ncDrop(cut)!;
     const [a, b] = ncState(r.v).cubes;
     expect([a.n, b.n, b.y, b.f]).toEqual([2, 3, 130, 0]);

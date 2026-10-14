@@ -83,6 +83,8 @@ export interface StampDef {
   fx?(prev: number[], next: number[]): string | null;
   /** Επιβράβευση (αστέρι, μπράβο): μπαίνει στον πίνακα με αναπήδημα και κομφετί. */
   cheer?: boolean;
+  /** Ο κέρσορας του ποντικιού πάνω από το σημείο (CSS, π.χ. ψαλίδι στο ✂️ των αριθμοκυβάκιων)· null = ο συνηθισμένος. */
+  cursor?(v: number[], x: number, y: number, w: number, h: number): string | null;
   /** true αν το σημείο είναι το κουμπί «όλη η οθόνη» του εργαλείου (ή η πόρτα επιστροφής, όταν είναι ήδη σε όλη την οθόνη). */
   fullAt?(x: number, y: number, w: number, h: number): boolean;
 }

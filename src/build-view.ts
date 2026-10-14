@@ -91,7 +91,10 @@ export function openBuildView(board: Board, id: string, onFx: (ev: string) => vo
   });
   cv.addEventListener('pointermove', (e) => {
     const st = ptrs.get(e.pointerId);
-    if (!st) return;
+    if (!st) {
+      if (d.cursor) { const [hx, hy] = at(e); cv.style.cursor = d.cursor(v!, hx, hy, gw, H) ?? ''; }
+      return;
+    }
     const [x, y] = at(e);
     const next = d.paint!(v!, x, y, gw, H, st, false);
     if (next) {

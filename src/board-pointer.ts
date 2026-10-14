@@ -367,9 +367,25 @@ export function armSnap(bd: Board, ps: PState): void {
   }, 600);
 }
 
+/** Ποντίκι ή γραφίδα που αιωρείται πάνω από εργαλείο του Δημοτικού: ο κέρσορας που ζητά (π.χ. ψαλίδι). */
+function kidCursor(bd: Board, e: PointerEvent): void {
+  let cur = '';
+  if (['select', 'pen', 'highlighter', 'shape', 'text', 'laser'].includes(bd.tool)) {
+    const [wx, wy] = bd.toWorld(e.clientX, e.clientY);
+    const hit = bd.hitTest(wx, wy);
+    const d = hit && hit.kind === 'stamp' ? STAMPS[hit.name] : undefined;
+    if (hit && hit.kind === 'stamp' && d?.cursor) {
+      const [lx, ly] = unrot(hit, wx, wy);
+      cur = d.cursor(hit.v ?? d.init ?? [], lx - hit.x, ly - hit.y, hit.w, hit.h) ?? '';
+    }
+  }
+  if (bd.live.style.cursor !== cur) bd.live.style.cursor = cur;
+}
+
 export function move(bd: Board, e: PointerEvent): void {
   const ps = bd.ptrs.get(e.pointerId);
   if (!ps) {
+    if (e.pointerType !== 'touch') kidCursor(bd, e);
     if (e.pointerType === 'mouse' && bd.tool === 'eraser') {
       const [wx, wy] = bd.toWorld(e.clientX, e.clientY);
       bd.eraserAt = { x: wx, y: wy };
