@@ -37,6 +37,21 @@ export function openBuildView(board: Board, id: string, onFx: (ev: string) => vo
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     draw();
   };
+  /** Κίνηση μετά από αλλαγή (για εργαλεία με animMs), όπως στον πίνακα. */
+  let anim: { t0: number; prev: number[] } | null = null;
+  const animate = (prev: number[]): void => {
+    if (!d.animMs) return;
+    const idle = !anim;
+    anim = { t0: performance.now(), prev };
+    if (!idle) return;
+    const tick = (): void => {
+      if (!anim || !root.isConnected) return;
+      if (performance.now() - anim.t0 > d.animMs!) anim = null;
+      draw();
+      if (anim) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
   const draw = (): void => {
     const gh = (gw / COLS) * ROWS;
     c.fillStyle = '#e0f2fe';
@@ -47,7 +62,7 @@ export function openBuildView(board: Board, id: string, onFx: (ev: string) => vo
     c.translate(ox, 0);
     c.fillStyle = '#111111';
     c.strokeStyle = '#111111';
-    d.drawKid!(c, gw, H, v!, { ink: '#111111', bg: '#ffffff', full: true });
+    d.drawKid!(c, gw, H, v!, { ink: '#111111', bg: '#ffffff', full: true, anim: anim ? { t: performance.now() - anim.t0, prev: anim.prev } : undefined });
     c.restore();
   };
 
@@ -84,6 +99,7 @@ export function openBuildView(board: Board, id: string, onFx: (ev: string) => vo
     if (next) {
       const ev = d.fx ? d.fx(v!, next) : 'click';
       if (ev) onFx(ev);
+      animate(v!);
       v = next;
       dirty = true;
       draw();
@@ -110,6 +126,7 @@ export function openBuildView(board: Board, id: string, onFx: (ev: string) => vo
     // το εργαλείο «κλείνει» την κίνηση (αριθμοκυβάκια: ένωση ή κάδος)
     const end = d.drop?.(v!);
     if (end) {
+      animate(v!);
       v = end.v;
       dirty = true;
       if (end.ev) onFx(end.ev);

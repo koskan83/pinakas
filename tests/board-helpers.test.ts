@@ -649,26 +649,32 @@ describe('αριθμοκυβάκια', () => {
     expect(b.x).toBeGreaterThan(a.x);
   });
 
-  it('νέος αριθμός από την παλέτα, σχήμα, χρώμα και αξεσουάρ', () => {
-    let v = ncPack({ mode: 0, sel: 0, flags: 0, cubes: [] });
+  it('νέος αριθμός από την παλέτα, σχήμα, αξεσουάρ και 🧽 για έναν χαρακτήρα', () => {
+    let v = ncPack({ mode: 0, sel: 0, flags: 0, cubes: [cube(40, 2)] });
     // πάτημα στο 9 της παλέτας: μπαίνει στη σκηνή, πάνω στο έδαφος
     v = ncDrop(d.paint!(v, W * 0.85, H * 0.83, W, H, {}, true)!)!.v;
-    let e = ncState(v).cubes[0];
+    let e = ncState(v).cubes[1];
     expect([e.n, e.y]).toEqual([9, 130]);
     const tap = (bx: number, by: number): void => { v = d.paint!(v, bx, by, W, H, {}, true)!; };
     tap(W * (2.5 / 8), H * 0.95); // 🔄
-    tap(...mid(ncState(v).cubes[0]));
-    expect(ncState(v).cubes[0].h).toBe(3);
-    tap(W * (3.5 / 8), H * 0.95); // 🎨
-    tap(W * (13.5 / 14), H * 0.83); // 🌈
-    tap(...mid(ncState(v).cubes[0]));
-    tap(W * (4.5 / 8), H * 0.95); // 🎩
-    tap(W * (2.5 / 13), H * 0.83); // 👑
-    tap(...mid(ncState(v).cubes[0]));
-    e = ncState(v).cubes[0];
-    expect([e.col, e.acc]).toEqual([13, 2]);
+    tap(...mid(ncState(v).cubes[1]));
+    expect(ncState(v).cubes[1].h).toBe(3);
+    tap(W * (3.5 / 8), H * 0.95); // 🎩
+    expect(ncState(v).mode).toBe(4);
+    tap(W * (2.5 / 13), H * 0.83); // κορώνα
+    tap(...mid(ncState(v).cubes[1]));
+    e = ncState(v).cubes[1];
+    expect(e.acc).toBe(2);
+    expect(d.fx!(ncPack({ ...ncState(v), cubes: ncState(v).cubes.map((q) => ({ ...q, acc: 0 })) }), v)).toBe('new');
     // ξανά το ίδιο: βγαίνει
     tap(...mid(e));
-    expect(ncState(v).cubes[0].acc).toBe(0);
+    expect(ncState(v).cubes[1].acc).toBe(0);
+    tap(W * (4.5 / 8), H * 0.95); // 🧽
+    tap(...mid(ncState(v).cubes[0]));
+    expect(ncState(v).cubes.map((q) => q.n)).toEqual([9]);
+  });
+
+  it('το παλιό βάψιμο (λειτουργία 3) γίνεται μετακίνηση', () => {
+    expect(ncState([3, 1, 0]).mode).toBe(0);
   });
 });

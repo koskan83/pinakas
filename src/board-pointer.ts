@@ -723,12 +723,14 @@ export function up(bd: Board, e: PointerEvent): void {
       let after = bd.page.items.find((x) => x.id === before.id);
       if (after && after !== before && after.kind === 'stamp') {
         // το εργαλείο μπορεί να «κλείσει» την κίνηση (π.χ. το ρολόι: βρέθηκε η ώρα της άσκησης)
-        const end = STAMPS[after.name]?.drop?.(after.v ?? []);
+        const d = STAMPS[after.name], end = d?.drop?.(after.v ?? []);
         if (end) {
           const done = { ...after, v: end.v };
           bd.page.items[bd.page.items.indexOf(after)] = done;
+          // με δική του κίνηση (αριθμοκυβάκια: ένωση) κινείται και στο άφημα
+          if (d.animMs) bd.kidChanged(done, after.v ?? [], end.ev);
+          else bd.onKidFx(end.ev, done);
           after = done;
-          bd.onKidFx(end.ev, done);
         }
       }
       if (after && after !== before) bd.push({ t: 'mod', p: bd.cur, before, after });

@@ -483,7 +483,13 @@ export class Board {
     }
     const v = d.paint(it.v ?? d.init ?? [], lx - it.x, ly - it.y, it.w, it.h, ps.kid!, first);
     if (!v) return false;
-    this.page.items[this.page.items.indexOf(it)] = { ...it, v };
+    const next = { ...it, v };
+    this.page.items[this.page.items.indexOf(it)] = next;
+    // εργαλείο με δική του κίνηση (αριθμοκυβάκια: αξεσουάρ που πέφτει): κινείται από το πάτημα
+    if (first && d.animMs) {
+      this.kidChanged(next, it.v ?? d.init ?? []);
+      return true;
+    }
     const ev = d.fx ? d.fx(it.v ?? d.init ?? [], v) : null;
     if (ev) this.onKidFx(ev, it);
     return true;
