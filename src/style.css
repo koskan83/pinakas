@@ -552,6 +552,22 @@ body.primary #gadgetMenu .tiles[data-tab] { animation: tabIn .14s ease-out; }
 .askActs button { flex: 1; height: 58px; border-radius: 14px; background: var(--bar-2); color: var(--fg); font-size: 20px; }
 .askActs button.go { background: #2563eb; color: #fff; font-weight: 600; }
 .askActs button.go.danger { background: #dc2626; }
+.askActs button:disabled { opacity: .45; }
+/* οι λέξεις της ορθογραφίας: φυλαγμένες λίστες, όνομα, μεγάλο κουτί με 👁 και 🎤 στο πλάι */
+.wordsBox { width: min(720px, 100%); overflow-y: auto; }
+.wordsBox > * { flex-shrink: 0; }
+.wordsBox > .wordsIn { flex-shrink: 1; min-height: 110px; }
+.wordLists { max-height: 132px; overflow-y: auto; }
+.wordLists > small { font-size: 16px; opacity: .7; }
+.wordLists .wordChip { display: inline-flex; align-items: center; gap: 10px; }
+.wordLists .wordChip.on { background: #2563eb; color: #fff; }
+.wordDel { padding: 0 4px; border-radius: 8px; opacity: .7; font-size: 16px; }
+.wordDel:hover { opacity: 1; background: rgba(220,38,38,.25); }
+.wordName { height: 52px; padding: 0 16px; border-radius: 14px; border: 2px solid var(--bar-3); background: var(--bar-2); color: var(--fg); font: inherit; font-size: 20px; }
+.wordName:focus { outline: none; border-color: #3b82f6; }
+.wordsIn .askText { flex: 1; min-width: 0; height: auto; min-height: 110px; max-height: min(30vh, 260px); }
+.wordsIn .askText.secret { -webkit-text-security: disc; }
+.wordsSide { display: flex; flex-direction: column; gap: 8px; }
 @media print { #ask { display: none !important; } }
 
 /* ετικέτες και στη μπάρα των αξόνων / ελατηρίου: οι επεξηγήσεις τους δεν φαίνονται ποτέ στην αφή */

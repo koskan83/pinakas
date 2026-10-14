@@ -647,17 +647,18 @@ export class Board {
     this.onUi();
   }
 
-  /** Εισαγωγή έτοιμου σχήματος φυσικής στο κέντρο της οθόνης. */
-  addStamp(name: string): void {
+  /** Εισαγωγή έτοιμου σχήματος φυσικής στο κέντρο της οθόνης· `v`: αρχική κατάσταση εργαλείου του Δημοτικού, αντί για την αρχική του. */
+  addStamp(name: string, v?: number[]): void {
     const d = STAMPS[name];
     if (!d) return;
     const [cx, cy] = this.center();
     // τα μεγάλα εργαλεία του Δημοτικού μικραίνουν ώστε να χωράνε στην οθόνη· τα παιχνίδια όλης της τάξης μεγαλώνουν κιόλας ώστε να τη γεμίσουν
     const fit = Math.min((this.W * (d.big ? 0.96 : 0.9)) / this.page.view.k / d.w, (Math.max(this.H - this.bottomInset, 100) * (d.big ? 0.95 : 0.85)) / this.page.view.k / d.h);
     const f = d.big ? fit : d.kid ? Math.min(1, fit) : 1;
-    const it: StampItem = { kind: 'stamp', id: uid(), name, x: cx - (d.w * f) / 2, y: cy - (d.h * f) / 2, w: d.w * f, h: d.h * f, color: this.color, width: 3, ...(d.init ? { v: [...d.init] } : {}) };
+    const it: StampItem = { kind: 'stamp', id: uid(), name, x: cx - (d.w * f) / 2, y: cy - (d.h * f) / 2, w: d.w * f, h: d.h * f, color: this.color, width: 3, ...(v ? { v } : d.init ? { v: [...d.init] } : {}) };
     this.addAndSelect(it);
-    if (d.cheer) this.kidChanged(it, [], 'cheer');
+    if (v) this.kidChanged(it, d.init ?? []);
+    else if (d.cheer) this.kidChanged(it, [], 'cheer');
   }
 
   /** Κενός πίνακας (πλέγμα, ορίζουσα ή μήτρα) στο κέντρο της οθόνης· γράφεις μέσα στα κελιά με το στυλό. */

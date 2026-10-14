@@ -205,3 +205,34 @@ export async function trashBackup(fileId: string): Promise<void> {
   const tk = await getToken();
   await api(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ trashed: true }) }, tk);
 }
+
+// ---------- λίστες λέξεων της ορθογραφίας ----------
+// Ένα ιδιωτικό αρχείο στον φάκελο «PrismaBoard», το ίδιο για όλες τις συσκευές του λογαριασμού.
+
+const SPELL_LISTS = 'Λίστες ορθογραφίας.json';
+
+async function spellListsFile(tk: string): Promise<string | null> {
+  const q = "appProperties has { key='pbKind' and value='spell-lists' } and trashed=false";
+  const r = await api<{ files: DriveFile[] }>(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&orderBy=modifiedTime desc`, {}, tk);
+  return r.files[0]?.id ?? null;
+}
+
+/** Το περιεχόμενο του αρχείου λιστών στο Drive, ή null αν δεν έχει ανέβει ποτέ. */
+export async function readSpellLists(): Promise<string | null> {
+  const tk = await getToken();
+  const id = await spellListsFile(tk);
+  return id ? readBackup(id) : null;
+}
+
+/** Ανεβάζει (ή ανανεώνει) το αρχείο λιστών στο Drive. */
+export async function saveSpellLists(blob: Blob): Promise<void> {
+  const tk = await getToken();
+  const id = await spellListsFile(tk), meta = { name: SPELL_LISTS, appProperties: { pbKind: 'spell-lists' } };
+  if (id) {
+    const mp = multipart(meta, blob);
+    await api(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=multipart&fields=id`, { method: 'PATCH', headers: { 'content-type': mp.type }, body: mp.body }, tk);
+    return;
+  }
+  const mp = multipart({ ...meta, parents: [await folderId(tk)] }, blob);
+  await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'content-type': mp.type }, body: mp.body }, tk);
+}

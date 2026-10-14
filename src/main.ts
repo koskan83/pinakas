@@ -19,6 +19,7 @@ import { ai, autoKind, openAi } from './recognize-ui';
 import { endLesson, lessonPdf, openSend, pdfLogo, pickPages, setPdfLogo } from './send-ui';
 import { initToolbar } from './toolbar-pos';
 import { trackUsage, usageReport } from './usage';
+import { askSpellWords } from './spell-lists';
 
 // ---------- εισαγωγή ----------
 
@@ -311,7 +312,7 @@ export function refreshUi(): void {
   // η αναγνώριση έχει νόημα μόνο όταν στην επιλογή υπάρχει χειρόγραφο
   const ink = board.selectionHasInk;
   const writing = board.selectionHasWriting;
-  document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', b.dataset.speak ? !(writing || region) : b.dataset.rec === 'text' || b.dataset.rec === 'math' ? !ink : !(writing || region)));
+  document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', b.dataset.speak || b.dataset.spellwords ? !(writing || region) : b.dataset.rec === 'text' || b.dataset.rec === 'math' ? !ink : !(writing || region)));
   $('selOpts').querySelector('.recSep')!.classList.toggle('hidden', !(writing || region) || !board.hasSelection);
   show('sumBtn', !!board.resultantSource);
   show('axesOpts', !!ax);
@@ -373,7 +374,7 @@ function placeSelBar(): void {
 }
 board.onUi = refreshUi;
 board.onKidFull = (it) => openBuildView(board, it.id, (ev) => kidFx(ev));
-board.onAsk = (q) => ask(q.title, { hint: q.hint, secret: q.secret, max: q.max ?? 24, voice: q.voice });
+board.onAsk = (q) => (q.lists ? askSpellWords({ title: q.title, voice: q.voice ?? 'el-GR', download }) : ask(q.title, { hint: q.hint, secret: q.secret, max: q.max ?? 24, voice: q.voice }));
 board.onMergeAxes = (target, dropped) => {
   const pal = [...inkPalette().slice(1), '#ea580c', '#7c3aed'];
   const fns = [...(target.fns ?? [])];

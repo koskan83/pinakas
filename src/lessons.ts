@@ -3,7 +3,8 @@
 import { Doc, newDoc, uid } from './model';
 import { backupLesson, driveClientId, driveConnect, driveReady, listLessonBackups, readBackup, trashBackup } from './drive';
 import { deleteLesson, kvGet, kvSet, loadDoc, loadLesson, saveLesson } from './storage';
-import { ask, askLines, confirmBox } from './dialog';
+import { ask, askLines, confirmBox, type WordList } from './dialog';
+import { loadLists, mergeLists } from './spell-lists';
 
 export interface LessonMeta {
   id: string;
@@ -23,6 +24,8 @@ interface Backup {
   lessons: { meta: LessonMeta; doc: Doc }[];
   /** Τα ονόματα των μαθητών κάθε τμήματος (μόνο στο αντίγραφο σε αρχείο, ποτέ στο Drive). */
   rosters?: Record<string, string[]>;
+  /** Οι λίστες λέξεων της ορθογραφίας (κι αυτές μόνο στο αντίγραφο σε αρχείο). */
+  spellLists?: WordList[];
 }
 
 const INDEX = 'lessons';
@@ -600,7 +603,7 @@ export class Lessons {
   }
 
   private async backup(): Promise<void> {
-    const out: Backup = { grafida: 'backup', v: 1, lessons: [], rosters: this.rosters };
+    const out: Backup = { grafida: 'backup', v: 1, lessons: [], rosters: this.rosters, spellLists: await loadLists() };
     for (const meta of this.index) {
       const doc = await loadLesson(meta.id);
       if (doc) out.lessons.push({ meta, doc });
@@ -637,6 +640,8 @@ export class Lessons {
         lists++;
       }
       if (lists) await kvSet(ROSTERS, this.rosters);
+      // λίστες λέξεων: μπαίνουν όσες δεν υπάρχουν ήδη εδώ με το ίδιο όνομα
+      if (Array.isArray(data.spellLists)) await mergeLists(data.spellLists, false);
       this.render();
       this.host.redraw();
       this.host.toast(`Επαναφορά: ${added} νέα, ${updated} ενημερώθηκαν, ${skipped} έμειναν όπως ήταν`, 6000);

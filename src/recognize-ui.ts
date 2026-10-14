@@ -5,7 +5,9 @@ import { Params, compile, fnOf, paramsOf } from './expr';
 import { fitScaleX, fitScaleY, pickAxesMode } from './analysis';
 import { AiTask, FigCmd, MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage, parseFigureReply, parseGraphReply } from './ai';
 import { uid, wrapText } from './model';
-import { $, board, toast } from './app';
+import { $, board, download, toast } from './app';
+import { spellGame, spellList } from './kids';
+import { askSpellWords } from './spell-lists';
 // κυκλική αναφορά με το main: μόνο συναρτήσεις, που καλούνται αφού στηθεί όλη η εφαρμογή
 import { closePopups, inkPalette, refreshUi } from './main';
 
@@ -149,6 +151,51 @@ export function figureItems(cmds: FigCmd[], x: number, y: number, f: number, ink
   return items;
 }
 
+/**
+ * Το κείμενο της επιλογής: ό,τι γράφτηκε με το «Κείμενο» διαβάζεται κατευθείαν (ενωμένο με `join`), το χειρόγραφο
+ * ή κομμάτι εικόνας το αναγνωρίζει πρώτα το AI. null αν δεν μπόρεσε (το μήνυμα έχει ήδη φανεί).
+ */
+async function selectionText(join: string): Promise<string | null> {
+  const ids = new Set(board.selectionIds);
+  const picked = board.page.items.filter((it) => ids.has(it.id));
+  const typed = picked.filter((it): it is TextItem => it.kind === 'text').map((t) => t.text).join(join);
+  if (typed) return typed;
+  if (!ai.keys[ai.provider]) {
+    toast('Για χειρόγραφο χρειάζεται το κλειδί της αναγνώρισης. Κείμενο γραμμένο με το «Κείμενο» διαβάζεται χωρίς κλειδί.', 6000);
+    return null;
+  }
+  const img = board.hasRegion ? await board.regionImage() : await board.inkImage(board.selectionIds);
+  if (!img) return null;
+  aiBusy++;
+  toast('✨ Το διαβάζω…', 0);
+  try {
+    const out = await recognize(img.blob, 'text', ai);
+    $('toast').classList.add('hidden');
+    return out;
+  } catch (err) {
+    toast(`Η ανάγνωση απέτυχε: ${(err as Error).message}`, 6000);
+    return null;
+  } finally {
+    aiBusy--;
+  }
+}
+
+/** Ορθογραφία με τις λέξεις της επιλογής: φαίνονται στο παράθυρο των λέξεων (για διόρθωση ή φύλαξη) και ξεκινά νέο παιχνίδι. */
+async function spellFromSelection(): Promise<void> {
+  let found = await selectionText('\n');
+  if (found == null) return;
+  // λέξεις γραμμένες στον πίνακα με κενά ή σε γραμμές: μία σε κάθε γραμμή (με κόμμα, το κόμμα χωρίζει, για να μένουν οι φράσεις)
+  if (!/[,;·]/.test(found)) found = found.trim().split(/\s+/).join('\n');
+  if (!spellList(found).words.length) {
+    toast('Δεν βρήκα λέξεις στην επιλογή');
+    return;
+  }
+  const en = spellList(found).words.every((w) => /[a-z]/.test(w));
+  const text = await askSpellWords({ title: 'Ορθογραφία με αυτές τις λέξεις', voice: en ? 'en-GB' : 'el-GR', value: found, download });
+  const v = text == null ? null : spellGame(text);
+  if (v) board.addStamp('spell', v);
+}
+
 /** Διαβάζει φωναχτά το επιλεγμένο κείμενο με τη φωνή του browser· το χειρόγραφο το αναγνωρίζει πρώτα το AI. */
 async function speakSelection(): Promise<void> {
   const synth = window.speechSynthesis;
@@ -160,29 +207,8 @@ async function speakSelection(): Promise<void> {
     synth.cancel();
     return;
   }
-  const ids = new Set(board.selectionIds);
-  const picked = board.page.items.filter((it) => ids.has(it.id));
-  let words = picked.filter((it): it is TextItem => it.kind === 'text').map((t) => t.text).join('. ');
-  if (!words) {
-    // χειρόγραφο ή κομμάτι εικόνας: χρειάζεται πρώτα αναγνώριση
-    if (!ai.keys[ai.provider]) {
-      toast('Για χειρόγραφο χρειάζεται το κλειδί της αναγνώρισης. Κείμενο γραμμένο με το «Κείμενο» διαβάζεται χωρίς κλειδί.', 6000);
-      return;
-    }
-    const img = board.hasRegion ? await board.regionImage() : await board.inkImage(board.selectionIds);
-    if (!img) return;
-    aiBusy++;
-    toast('✨ Το διαβάζω…', 0);
-    try {
-      words = await recognize(img.blob, 'text', ai);
-    } catch (err) {
-      toast(`Η ανάγνωση απέτυχε: ${(err as Error).message}`, 6000);
-      return;
-    } finally {
-      aiBusy--;
-    }
-    $('toast').classList.add('hidden');
-  }
+  const words = await selectionText('. ');
+  if (words == null) return;
   if (!words.trim()) {
     toast('Δεν βρήκα κάτι να διαβάσω');
     return;
@@ -285,6 +311,7 @@ $('selOpts').addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-rec]');
   if (b) void runRecognition(board.selectionIds, b.dataset.rec as AiTask);
   else if ((e.target as HTMLElement).closest('[data-speak]')) void speakSelection();
+  else if ((e.target as HTMLElement).closest('[data-spellwords]')) void spellFromSelection();
 });
 
 // αυτόματη αναγνώριση: ό,τι γράφεται στέλνεται μόλις η γραφίδα μείνει σηκωμένη για λίγο

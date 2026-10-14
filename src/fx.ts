@@ -114,7 +114,7 @@ export function playFx(ev: string, prefs: FxPrefs): void {
     if (now - lastTok < 45) return;
     lastTok = now;
   }
-  const munch = /^(munch|sniff)(\d+)$/.exec(ev);
+  const munch = /^(munch|sniff)(\d+)(x?)$/.exec(ev);
   if (munch) {
     // συγχρονισμένα με την κίνηση στο εργαλείο της ορθογραφίας: πρώτο δάγκωμα στα 0,8 s, μετά ένα κάθε 0,8 s·
     // στον πρώτο έλεγχο το τερατάκι πρώτα μυρίζει (δύο ρουθουνίσματα) και όλα πάνε 0,3 s πιο πίσω
@@ -130,6 +130,19 @@ export function playFx(ev: string, prefs: FxPrefs): void {
         tone(140, 0.06, { type: 'square', to: 100, gain: 0.1, at: at + d });
       }
       tone(240, 0.1, { to: 520, gain: 0.22, at: at + 0.4 });
+    }
+    // «x»: δέκατο λάθος, μετά τα γράμματα τρώει κι εσένα (βλ. spellFeast): γρύλισμα όσο φουσκώνει, ΧΑΜ, μάσημα, ρέψιμο
+    if (munch[3]) {
+      const f = t0 - 0.45 + Number(munch[2]) * 0.8 + 0.4;
+      tone(70, 1.3, { type: 'sawtooth', to: 180, gain: 0.22, at: f });
+      tone(140, 1.3, { type: 'triangle', to: 360, gain: 0.15, at: f });
+      // ένα «ΧΑΜ» σε κάθε κλείσιμο του στόματος (SPELL_CHOMP = 0,6 s)
+      for (const d of [1.3, 1.9, 2.5]) {
+        noise(0.35, { gain: 0.85, freq: 900, to: 150, at: f + d });
+        tone(160, 0.4, { type: 'square', to: 40, gain: 0.38, at: f + d });
+      }
+      for (let i = 0; i < 6; i++) tone(105 - i * 6, 0.1, { type: 'sawtooth', gain: 0.35, at: f + 2.75 + i * 0.085 });
+      tone(600, 0.08, { to: 950, gain: 0.25, at: f + 3.5 });
     }
     return;
   }
