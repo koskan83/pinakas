@@ -100,6 +100,8 @@ const SOUNDS: Record<string, () => void> = {
     tone(1319, 0.5, { gain: 0.3, at: 0.78 });
     noise(0.3, { gain: 0.12, freq: 6000, at: 0.78 });
   },
+  pop: () => { tone(380, 0.07, { to: 820, gain: 0.4 }); tone(1180, 0.12, { type: 'triangle', gain: 0.25, at: 0.06 }); },
+  split: () => { noise(0.08, { gain: 0.3, freq: 2600, to: 900 }); tone(700, 0.1, { to: 330, gain: 0.3, at: 0.03 }); },
   win: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i === 4 ? 0.6 : 0.16, { type: 'triangle', gain: 0.4, at: i * 0.11 })),
   cheer: () => { tone(784, 0.1, { gain: 0.35 }); tone(1047, 0.12, { gain: 0.35, at: 0.09 }); tone(1568, 0.35, { gain: 0.3, at: 0.18 }); },
 };

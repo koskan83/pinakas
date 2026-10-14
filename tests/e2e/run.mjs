@@ -918,6 +918,28 @@ test('Όλο το χέρι (5 δάχτυλα) πάνω στον πίνακα: τ
   assert(flat(s2), 'η αναίρεση δεν γύρισε τη γραμμή όπως ήταν');
 });
 
+test('Αριθμοκυβάκια μέσα στον πίνακα: σέρνεις το 2 πάνω στο 3 και γίνονται 5, με μία αναίρεση', async () => {
+  const level = async () => { await page.click('#menuBtn'); await page.click('#menu [data-act="level"]'); };
+  const kid = async () => (await items()).find((i) => i.kind === 'stamp' && i.name === 'numcubes');
+  await level();
+  await page.click('#gadgetBtn');
+  await page.click('#gTabs [data-gtab="play"]');
+  await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-kid="numcubes"]');
+  const box = await kid();
+  // ίδια γεωμετρία με το ncGeom: σκηνή 28 × 13 κυβάκια πάνω από τη μπάρα (22% του ύψους)
+  const S = Math.min(box.w / 28, (box.h * 0.78) / 13), ox = box.x + (box.w - 28 * S) / 2, oy = box.y + box.h * 0.78 - 13 * S;
+  const at = (n) => [ox + (box.v[3 + (n - 1) * 7] / 10) * S, oy + 12.5 * S];
+  await drag(...at(2), ...at(3));
+  const joined = (await kid()).v;
+  await page.click('#undo');
+  const back = (await kid()).v;
+  await page.click('#undo');
+  await level();
+  const ns = (v) => v.slice(3).filter((_, i) => i % 7 === 2);
+  assert(ns(joined).join() === '1,5,4,5', `μετά την ένωση: ${ns(joined)}`);
+  assert(ns(back).join() === '1,2,3,4,5', 'η αναίρεση δεν ξεχώρισε το 2 από το 3');
+});
+
 await page.goto(URL_);
 await page.waitForSelector('#toolbar');
 await sleep(600);

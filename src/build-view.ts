@@ -8,8 +8,8 @@ import { STAMPS } from './stamps';
 
 const COLS = 24, ROWS = 14;
 
-export function openBuildView(board: Board, id: string, onFx: (ev: string) => void = () => {}): void {
-  const d = STAMPS.build;
+export function openBuildView(board: Board, id: string, onFx: (ev: string) => void = () => {}, name = 'build'): void {
+  const d = STAMPS[name];
   let v = board.kidState(id);
   if (!v || !d.drawKid || !d.paint || document.getElementById('buildView')) return;
 
@@ -30,7 +30,8 @@ export function openBuildView(board: Board, id: string, onFx: (ev: string) => vo
     cv.width = Math.round(W * dpr);
     cv.height = Math.round(H * dpr);
     const bar = Math.max(64, Math.min(120, H * 0.12));
-    const s = Math.min(W / COLS, (H - bar) / ROWS);
+    // τα άλλα εργαλεία (αριθμοκυβάκια) στήνουν μόνα τους τη σκηνή τους σε όλο το πλάτος
+    const s = name === 'build' ? Math.min(W / COLS, (H - bar) / ROWS) : W / COLS;
     gw = s * COLS;
     ox = (W - gw) / 2;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -81,7 +82,8 @@ export function openBuildView(board: Board, id: string, onFx: (ev: string) => vo
     ptrs.set(e.pointerId, st);
     const next = d.paint!(v!, x, y, gw, H, st, true);
     if (next) {
-      onFx(d.fx?.(v!, next) ?? 'click');
+      const ev = d.fx ? d.fx(v!, next) : 'click';
+      if (ev) onFx(ev);
       v = next;
       dirty = true;
       draw();
@@ -93,7 +95,8 @@ export function openBuildView(board: Board, id: string, onFx: (ev: string) => vo
     const [x, y] = at(e);
     const next = d.paint!(v!, x, y, gw, H, st, false);
     if (next) {
-      onFx(d.fx?.(v!, next) ?? 'click');
+      const ev = d.fx ? d.fx(v!, next) : 'click';
+      if (ev) onFx(ev);
       v = next;
       dirty = true;
       draw();
@@ -101,6 +104,14 @@ export function openBuildView(board: Board, id: string, onFx: (ev: string) => vo
   });
   const up = (e: PointerEvent): void => {
     if (!ptrs.delete(e.pointerId)) return;
+    // το εργαλείο «κλείνει» την κίνηση (αριθμοκυβάκια: ένωση ή κάδος)
+    const end = d.drop?.(v!);
+    if (end) {
+      v = end.v;
+      dirty = true;
+      if (end.ev) onFx(end.ev);
+      draw();
+    }
     // κάθε «πινελιά» αποθηκεύεται στη σελίδα μόλις σηκωθούν όλα τα δάχτυλα: έτσι αναιρείται και δεν χάνεται
     if (ptrs.size === 0) commit();
   };

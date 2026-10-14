@@ -20,6 +20,7 @@ import { endLesson, lessonPdf, openSend, pdfLogo, pickPages, setPdfLogo } from '
 import { initToolbar } from './toolbar-pos';
 import { trackUsage, usageReport } from './usage';
 import { askSpellWords } from './spell-lists';
+import { NC_NAMES } from './kids';
 
 // ---------- εισαγωγή ----------
 
@@ -373,7 +374,7 @@ function placeSelBar(): void {
   el.style.top = `${y}px`;
 }
 board.onUi = refreshUi;
-board.onKidFull = (it) => openBuildView(board, it.id, (ev) => kidFx(ev));
+board.onKidFull = (it) => openBuildView(board, it.id, (ev) => kidFx(ev), it.name);
 board.onAsk = (q) => (q.lists ? askSpellWords({ title: q.title, voice: q.voice ?? 'el-GR', download }) : ask(q.title, { hint: q.hint, secret: q.secret, max: q.max ?? 24, voice: q.voice }));
 board.onMergeAxes = (target, dropped) => {
   const pal = [...inkPalette().slice(1), '#ea580c', '#7c3aed'];
@@ -945,6 +946,13 @@ function kidFx(ev: string, x?: number, y?: number): void {
       noVoice.add(lang);
       toast(`Δεν μπόρεσα να πω τη λέξη: η συσκευή δεν έχει ${lang.startsWith('el') ? 'ελληνική' : 'αγγλική'} φωνή και δεν βρήκα φωνή στο ίντερνετ. Πες τη εσύ, ή δείξε τη με το 👁.`, 8000);
     });
+    return;
+  }
+  const num = /^num\|(\w*)\|(\d+)$/.exec(ev);
+  if (num) {
+    // αριθμοκυβάκια: ήχος και ο αριθμός δυνατά
+    if (num[1]) playFx(num[1], fxPrefs);
+    if (fxPrefs.sound) setTimeout(() => void say(NC_NAMES[Number(num[2])] ?? num[2], 'el-GR'), 180);
     return;
   }
   playFx(ev, fxPrefs);

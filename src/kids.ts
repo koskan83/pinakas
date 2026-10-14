@@ -731,6 +731,302 @@ function star(c: C, cx: number, cy: number, r: number): void {
 
 const kid = (d: Omit<StampDef, 'draw' | 'kid'>): StampDef => ({ ...d, kid: true, draw: () => {} });
 
+// ---------- αριθμοκυβάκια ----------
+/**
+ * Χαρακτήρες από κυβάκια, 1 έως 20, που ενώνονται (σύρεις το ένα πάνω στο άλλο), χωρίζονται (✂️), αλλάζουν σχήμα, χρώμα
+ * και φοράνε αξεσουάρ. Η σκηνή μετριέται σε κυβάκια (NC_W × NC_H), για να μη χρειάζεται το μέγεθος του κουτιού στο «άφημα».
+ * Κατάσταση: [λειτουργία, επιλογή στην παλέτα, σημαίες (1 = κρυφοί αριθμοί), και ανά χαρακτήρα NC_REC αριθμοί].
+ */
+const NC_W = 28, NC_H = 13, NC_MAX = 20, NC_ITEMS = 30, NC_HEAD = 3, NC_REC = 7;
+/** Χαρακτήρας: κάτω-κέντρο (x, y) σε δέκατα του κυβακίου, πόσα κυβάκια, ύψος σχήματος (γεμίζει ανά στήλη), αξεσουάρ, χρώμα, σημαίες (1 κρατιέται, 2 πάνω από τον κάδο, 4 μόλις κόπηκε). */
+export interface NCube { x: number; y: number; n: number; h: number; acc: number; col: number; f: number }
+export interface NCState { mode: number; sel: number; flags: number; cubes: NCube[] }
+export function ncState(v: number[]): NCState {
+  const cubes: NCube[] = [];
+  for (let i = NC_HEAD; i + NC_REC <= v.length; i += NC_REC) {
+    const n = Math.max(1, Math.min(NC_MAX, v[i + 2] || 1));
+    cubes.push({ x: v[i], y: v[i + 1], n, h: Math.max(1, Math.min(n, v[i + 3] || Math.min(n, 10))), acc: v[i + 4] ?? 0, col: v[i + 5] ?? 0, f: v[i + 6] ?? 0 });
+  }
+  return { mode: v[0] ?? 0, sel: v[1] ?? 0, flags: v[2] ?? 0, cubes };
+}
+export function ncPack(s: NCState): number[] {
+  return [s.mode, s.sel, s.flags, ...s.cubes.flatMap((e) => [e.x, e.y, e.n, e.h, e.acc, e.col, e.f])];
+}
+const ncCols = (e: NCube): number => Math.ceil(e.n / e.h);
+/** Τα σχήματα ενός αριθμού (ύψος στήλης): πύργος (ή δεκάδα + μονάδες) και όσα ορθογώνια βγαίνουν ακριβώς, π.χ. 6 → 6, 3, 2, 1. */
+export function ncShapes(n: number): number[] {
+  const out = [Math.min(n, 10)];
+  for (let d = 10; d >= 1; d--) if (n % d === 0 && n / d <= 10 && !out.includes(d)) out.push(d);
+  return out.sort((a, b) => b - a);
+}
+function ncBox(e: NCube): { x0: number; x1: number; y0: number; y1: number } {
+  const c = ncCols(e);
+  return { x0: e.x / 10 - c / 2, x1: e.x / 10 + c / 2, y0: e.y / 10 - e.h, y1: e.y / 10 };
+}
+function ncClamp(e: NCube): void {
+  const c = ncCols(e) / 2;
+  e.x = Math.round(Math.max(c * 10, Math.min((NC_W - c) * 10, e.x)));
+  e.y = Math.round(Math.max((e.h + 0.9) * 10, Math.min(NC_H * 10, e.y)));
+}
+/** Τα ονόματα των αριθμών, για να λέγονται δυνατά. */
+export const NC_NAMES = ['μηδέν', 'ένα', 'δύο', 'τρία', 'τέσσερα', 'πέντε', 'έξι', 'επτά', 'οκτώ', 'εννέα', 'δέκα', 'έντεκα', 'δώδεκα', 'δεκατρία', 'δεκατέσσερα', 'δεκαπέντε', 'δεκαέξι', 'δεκαεπτά', 'δεκαοκτώ', 'δεκαεννέα', 'είκοσι'];
+/** Το χρώμα κάθε αριθμού ως το 10 (το 7 είναι ουράνιο τόξο, το 10 άσπρο με κόκκινο περίγραμμα). */
+const NC_NUM = ['', '#ef4444', '#f97316', '#facc15', '#22c55e', '#22d3ee', '#8b5cf6', '', '#ec4899', '#9ca3af', '#ffffff'];
+const RAINBOW = ['#ef4444', '#f97316', '#facc15', '#22c55e', '#3b82f6', '#6366f1', '#a855f7'];
+/** Η παλέτα του 🎨: 0 = το χρώμα του αριθμού, 13 = ουράνιο τόξο. */
+const NC_PAL = ['', '#ef4444', '#f97316', '#facc15', '#22c55e', '#22d3ee', '#3b82f6', '#8b5cf6', '#ec4899', '#9ca3af', '#ffffff', '#92400e', '#1f2937', ''];
+/** Τα αξεσουάρ: [ομάδα (0 κεφάλι, 1 πρόσωπο, 2 άλλο· −1 = βγάζει όλα), τιμή, εικονίδιο]. Ένα από κάθε ομάδα. */
+const NC_ACC: [number, number, string][] = [[-1, 0, '🚫'], [0, 1, '🎩'], [0, 2, '👑'], [0, 3, '🎀'], [0, 4, '🧢'], [0, 5, '🎓'], [1, 1, '👓'], [1, 2, '🕶️'], [1, 3, '🥸'], [2, 1, '🛴'], [2, 2, '🛹'], [2, 3, '🎈'], [2, 4, '🦸']];
+const NC_SH = [0, 3, 5], NC_MASK = [7, 3, 7];
+const ncAcc = (acc: number, g: number): number => (acc >> NC_SH[g]) & NC_MASK[g];
+const ncSetAcc = (acc: number, g: number, val: number): number => (acc & ~(NC_MASK[g] << NC_SH[g])) | (val << NC_SH[g]);
+const NC_HATS = ['', '🎩', '👑', '🎀', '🧢', '🎓'];
+const darker = (hex: string, k = 0.32): string => {
+  const n = parseInt(hex.slice(1), 16), f = (s: number): number => Math.round(((n >> s) & 255) * (1 - k));
+  return `rgb(${f(16)},${f(8)},${f(0)})`;
+};
+/** Γέμισμα και περίγραμμα του κυβακίου i (από κάτω, ανά στήλη). Από το 11: μια άσπρη δεκάδα και οι μονάδες με το χρώμα τους. */
+function ncColour(e: NCube, i: number): [string, string] {
+  let f: string;
+  const one = (k: number, j: number): string => (k === 7 ? RAINBOW[6 - j] : NC_NUM[k]);
+  if (e.col === 13) f = RAINBOW[i % 7];
+  else if (e.col) f = NC_PAL[e.col];
+  else if (e.n === 10 || (e.n > 10 && i < 10)) return ['#ffffff', '#dc2626'];
+  else if (e.n === 20) return ['#ffffff', '#ea580c'];
+  else f = e.n > 10 ? one(e.n - 10, i - 10) : one(e.n, i);
+  return [f, f === '#ffffff' ? '#94a3b8' : darker(f)];
+}
+function ncGeom(w: number, h: number): { bh: number; sh: number; S: number; ox: number; oy: number } {
+  const bh = h * 0.22, sh = h - bh, S = Math.min(w / NC_W, sh / NC_H);
+  return { bh, sh, S, ox: (w - NC_W * S) / 2, oy: sh - NC_H * S };
+}
+/** Πόσα κουμπιά έχει η πάνω σειρά της μπάρας σε κάθε λειτουργία: αριθμοί 1–10, χρώματα ή αξεσουάρ. */
+const ncRowA = (mode: number): number => (mode === 3 ? NC_PAL.length : mode === 4 ? NC_ACC.length : 10);
+const NC_BTNS = ['✋', '✂️', '🔄', '🎨', '🎩'];
+
+function ncDraw(c: C, g: { S: number; ox: number; oy: number }, e: NCube, hidden: boolean): void {
+  const S = g.S, C2 = ncCols(e), H = e.h, head = ncAcc(e.acc, 0), face = ncAcc(e.acc, 1), extra = ncAcc(e.acc, 2);
+  // πάνω σε πατίνι ή σκέιτ το σώμα ανεβαίνει λίγο
+  const ground = g.oy + (e.y / 10) * S, by = ground - (extra === 1 || extra === 2 ? S * 0.55 : 0);
+  const bx = g.ox + (e.x / 10 - C2 / 2) * S, top = by - H * S;
+  const fc = Math.max(1, Math.floor(e.n / H)), fw = Math.min(fc, 3) * S, fcx = bx + fw / 2;
+  c.save();
+  if (e.f & 2) c.globalAlpha = 0.4;
+  c.fillStyle = 'rgba(15,23,42,0.13)';
+  c.beginPath();
+  c.ellipse(bx + (C2 * S) / 2, ground, C2 * S * 0.62, S * 0.14, 0, 0, Math.PI * 2);
+  c.fill();
+  if (extra === 4) {
+    // κάπα πίσω από το σώμα
+    c.fillStyle = '#dc2626';
+    c.beginPath();
+    c.moveTo(bx + S * 0.15, top + S * 0.75);
+    c.lineTo(bx + fw - S * 0.15, top + S * 0.75);
+    c.lineTo(bx + fw + S * 0.45, by - S * 0.1);
+    c.lineTo(bx - S * 0.45, by - S * 0.1);
+    c.closePath();
+    c.fill();
+  }
+  // χέρια: στο δεύτερο κυβάκι από πάνω (στο μοναδικό, όταν το σχήμα έχει ύψος ένα)
+  const ay = top + S * (H > 1 ? 1.4 : 0.62), arow = H - 1 - Math.floor((ay - top) / S);
+  let rc = 0;
+  for (let k = 0; k < C2; k++) if (Math.min(H, e.n - k * H) > arow) rc = k;
+  const armCol = ncColour(e, Math.min(e.n - 1, H - 1))[1], ax = bx + (rc + 1) * S;
+  c.strokeStyle = armCol;
+  c.fillStyle = armCol;
+  c.lineWidth = Math.max(2, S * 0.11);
+  c.lineCap = 'round';
+  c.beginPath();
+  c.moveTo(bx, ay);
+  c.lineTo(bx - S * 0.32, ay + S * 0.3);
+  c.moveTo(ax, ay);
+  c.lineTo(ax + S * 0.32, ay + (extra === 3 ? -S * 0.3 : S * 0.3));
+  c.stroke();
+  for (const [hx, hy] of [[bx - S * 0.32, ay + S * 0.3], [ax + S * 0.32, ay + (extra === 3 ? -S * 0.3 : S * 0.3)]]) {
+    c.beginPath();
+    c.arc(hx, hy, S * 0.1, 0, Math.PI * 2);
+    c.fill();
+  }
+  // τα κυβάκια
+  c.lineWidth = Math.max(1.5, S * 0.06);
+  for (let i = 0; i < e.n; i++) {
+    const [fill, line] = ncColour(e, i);
+    const x = bx + Math.floor(i / H) * S, y = by - ((i % H) + 1) * S;
+    rrect(c, x + 0.5, y + 0.5, S - 1, S - 1, S * 0.12);
+    c.fillStyle = fill;
+    c.fill();
+    c.strokeStyle = line;
+    c.stroke();
+  }
+  // πρόσωπο στην πάνω σειρά, πάνω σε όσες γεμάτες στήλες χωρούν (ως τρεις)
+  const k = Math.min(fw / S, 2), er = S * 0.15 * Math.sqrt(k), ey = top + S * 0.42, ex = Math.min(fw, 2 * S) * 0.2;
+  for (const sx of [-1, 1]) {
+    c.fillStyle = '#ffffff';
+    c.beginPath();
+    c.ellipse(fcx + sx * ex, ey, er * 0.85, er, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = '#111827';
+    c.beginPath();
+    c.arc(fcx + sx * ex + er * 0.12, ey + er * 0.18, er * 0.48, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.strokeStyle = '#111827';
+  c.lineWidth = Math.max(1.5, S * 0.06);
+  c.beginPath();
+  c.moveTo(fcx - ex * 0.55, top + S * 0.7);
+  c.quadraticCurveTo(fcx, top + S * 0.86, fcx + ex * 0.55, top + S * 0.7);
+  c.stroke();
+  if (face === 1 || face === 2) {
+    c.lineWidth = Math.max(1.5, S * 0.05);
+    c.beginPath();
+    for (const sx of [-1, 1]) {
+      c.moveTo(fcx + sx * ex + er * 1.25, ey);
+      c.arc(fcx + sx * ex, ey, er * 1.25, 0, Math.PI * 2);
+    }
+    if (face === 2) c.fill();
+    c.stroke();
+    c.beginPath();
+    c.moveTo(fcx - ex + er * 1.25, ey - er * 0.2);
+    c.lineTo(fcx + ex - er * 1.25, ey - er * 0.2);
+    c.stroke();
+  } else if (face === 3) {
+    // μουστάκι
+    c.fillStyle = '#3f2a14';
+    const my = top + S * 0.64, mw = ex * 0.9;
+    c.beginPath();
+    c.moveTo(fcx, my);
+    c.quadraticCurveTo(fcx - mw * 0.6, my - S * 0.1, fcx - mw, my + S * 0.02);
+    c.quadraticCurveTo(fcx - mw * 0.5, my + S * 0.06, fcx, my + S * 0.04);
+    c.quadraticCurveTo(fcx + mw * 0.5, my + S * 0.06, fcx + mw, my + S * 0.02);
+    c.quadraticCurveTo(fcx + mw * 0.6, my - S * 0.1, fcx, my);
+    c.fill();
+  }
+  if (extra === 1 || extra === 2) text(c, extra === 1 ? '🛴' : '🛹', bx + (C2 * S) / 2, ground - S * 0.4, Math.max(C2 * S * 1.15, S * 1.4));
+  if (extra === 3) {
+    const bxl = ax + S * 0.55, byl = top - S * 0.55;
+    c.strokeStyle = '#475569';
+    c.lineWidth = Math.max(1, S * 0.03);
+    c.beginPath();
+    c.moveTo(ax + S * 0.32, ay - S * 0.3);
+    c.lineTo(bxl, byl + S * 0.5);
+    c.stroke();
+    text(c, '🎈', bxl, byl, S * 1.1);
+  }
+  if (head) text(c, NC_HATS[head], fcx, top - S * 0.3, S * (0.9 + 0.25 * (k - 1)));
+  // ο αριθμός, πάνω από το κεφάλι (και πάνω από το καπέλο)
+  const ny = top - S * (head ? 1.2 : 0.5), nr = S * 0.36;
+  c.beginPath();
+  c.arc(fcx, ny, nr, 0, Math.PI * 2);
+  c.fillStyle = '#ffffff';
+  c.fill();
+  c.strokeStyle = '#334155';
+  c.lineWidth = Math.max(1.5, S * 0.05);
+  c.stroke();
+  text(c, hidden ? '?' : String(e.n), fcx, ny + 1, nr * (e.n > 9 && !hidden ? 1.05 : 1.25), '#1f2937', 800);
+  c.restore();
+}
+
+/** Μικρό κυβάκι της παλέτας: το χρώμα του αριθμού (ή της παλέτας) με τον αριθμό μέσα. */
+function ncChip(c: C, cx: number, cy: number, s: number, fills: string[], line: string, label: string): void {
+  c.save();
+  rrect(c, cx - s / 2, cy - s / 2, s, s, s * 0.16);
+  c.clip();
+  fills.forEach((f, i) => {
+    c.fillStyle = f;
+    c.fillRect(cx - s / 2, cy - s / 2 + (i * s) / fills.length, s, s / fills.length + 1);
+  });
+  c.restore();
+  c.save();
+  rrect(c, cx - s / 2, cy - s / 2, s, s, s * 0.16);
+  c.strokeStyle = line;
+  c.lineWidth = Math.max(1.5, s * 0.06);
+  c.stroke();
+  c.restore();
+  if (label) {
+    c.save();
+    c.font = `800 ${s * 0.5}px ${FONT}`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.lineWidth = Math.max(2, s * 0.08);
+    c.strokeStyle = '#ffffff';
+    c.strokeText(label, cx, cy + 1);
+    c.fillStyle = '#1f2937';
+    c.fillText(label, cx, cy + 1);
+    c.restore();
+  }
+}
+
+/** «Όλη η οθόνη»: τέσσερις γωνίες που ανοίγουν· σε όλη την οθόνη, μπλε πόρτα επιστροφής. */
+function fullIcon(c: C, cx: number, cy: number, ps: number, env: KidEnv): void {
+  if (env.full) {
+    rrect(c, cx - ps * 0.64, cy - ps * 0.64, ps * 1.28, ps * 1.28, ps * 0.22);
+    c.save();
+    c.fillStyle = BLUE;
+    c.fill();
+    c.restore();
+    text(c, '🚪', cx, cy + 1, ps * 0.8);
+    return;
+  }
+  const r = ps * 0.38, q = ps * 0.2;
+  c.save();
+  c.strokeStyle = env.ink;
+  c.lineWidth = Math.max(2.5, ps * 0.09);
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  c.beginPath();
+  for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    c.moveTo(cx + sx * r, cy + sy * (r - q));
+    c.lineTo(cx + sx * r, cy + sy * r);
+    c.lineTo(cx + sx * (r - q), cy + sy * r);
+  }
+  c.stroke();
+  c.restore();
+}
+
+/** Ο χαρακτήρας που μόλις αφέθηκε: στον κάδο σβήνεται, πάνω σε άλλον ενώνονται (ως το 20), αλλιώς μένει εκεί. */
+export function ncDrop(v: number[]): { v: number[]; ev: string } | null {
+  const s = ncState(v), j = s.cubes.findIndex((e) => e.f & 1);
+  if (j < 0) return null;
+  const e = s.cubes[j], fresh = e.f & 4;
+  if (e.f & 2) {
+    s.cubes.splice(j, 1);
+    return { v: ncPack(s), ev: 'wipe' };
+  }
+  e.f = 0;
+  const b = ncBox(e);
+  let best = -1, area = 0;
+  s.cubes.forEach((o, i) => {
+    if (i === j) return;
+    const q = ncBox(o), ix = Math.min(b.x1, q.x1) - Math.max(b.x0, q.x0), iy = Math.min(b.y1, q.y1) - Math.max(b.y0, q.y0);
+    // ένα κομμάτι που μόλις κόπηκε ακουμπά τη βάση του (από πάνω): μετράει κι αυτό
+    if (ix >= 0.5 && iy >= (fresh ? -0.1 : 0.5) && ix * Math.max(iy, 0.01) > area) { area = ix * Math.max(iy, 0.01); best = i; }
+  });
+  if (best >= 0 && fresh) {
+    // κόπηκε με απλό πάτημα (χωρίς σύρσιμο): το κομμάτι πάει δίπλα, για να μην ξανακολλήσει αμέσως
+    const o = s.cubes[best], gap = (ncCols(o) / 2 + 0.6 + ncCols(e) / 2) * 10;
+    e.x = o.x + gap > (NC_W - ncCols(e) / 2) * 10 ? o.x - gap : o.x + gap;
+    e.y = o.y;
+    ncClamp(e);
+    return { v: ncPack(s), ev: '' };
+  }
+  if (best >= 0) {
+    const o = s.cubes[best], n = o.n + e.n;
+    if (n > NC_MAX) {
+      ncClamp(e);
+      return { v: ncPack(s), ev: 'bad' };
+    }
+    o.n = n;
+    o.h = Math.min(n, 10);
+    o.col = 0;
+    for (let g = 0; g < 3; g++) if (!ncAcc(o.acc, g)) o.acc = ncSetAcc(o.acc, g, ncAcc(e.acc, g));
+    s.cubes.splice(j, 1);
+    ncClamp(o);
+    return { v: ncPack(s), ev: `num|pop|${n}` };
+  }
+  ncClamp(e);
+  return { v: ncPack(s), ev: '' };
+}
+
 // ---------- χτίσιμο με κυβάκια ----------
 const BCOLS = 24, BROWS = 14;
 /** Τα κουτιά του πλέγματος (0 = κενό). Χτισίματα από την πρώτη, μικρότερη έκδοση (16 × 10) μεταφέρονται κάτω αριστερά. */
@@ -1773,32 +2069,8 @@ export const KIDS: Record<string, StampDef> = {
         const cx = g.sw * (k + 0.5), x = cx - g.ps / 2, y = g.py - g.ps / 2;
         if (k < BLOCKS.length) drawBlock(c, k, x, y, g.ps);
         else if (k < BLOCKS.length + 2) text(c, k === BLOCKS.length ? '🧽' : '🗑️', cx, g.py + 1, g.ps * 0.8);
-        else if (env.full) {
-          // πόρτα επιστροφής: μπλε κουμπί, για να ξεχωρίζει από τα υλικά
-          rrect(c, x - g.ps * 0.14, y - g.ps * 0.14, g.ps * 1.28, g.ps * 1.28, g.ps * 0.22);
-          c.save();
-          c.fillStyle = BLUE;
-          c.fill();
-          c.restore();
-          text(c, '🚪', cx, g.py + 1, g.ps * 0.8);
-        }
-        else {
-          // «όλη η οθόνη»: τέσσερις γωνίες που ανοίγουν
-          const r = g.ps * 0.38, q = g.ps * 0.2;
-          c.save();
-          c.strokeStyle = env.ink;
-          c.lineWidth = Math.max(2.5, g.ps * 0.09);
-          c.lineCap = 'round';
-          c.lineJoin = 'round';
-          c.beginPath();
-          for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-            c.moveTo(cx + sx * r, g.py + sy * (r - q));
-            c.lineTo(cx + sx * r, g.py + sy * r);
-            c.lineTo(cx + sx * (r - q), g.py + sy * r);
-          }
-          c.stroke();
-          c.restore();
-        }
+        // πόρτα επιστροφής (σε όλη την οθόνη) ή «όλη η οθόνη»
+        else fullIcon(c, cx, g.py, g.ps, env);
         if (k === sel) {
           c.save();
           c.strokeStyle = env.ink;
@@ -1850,6 +2122,150 @@ export const KIDS: Record<string, StampDef> = {
         else gone++;
       }
       return put ? 'tok' : gone ? 'wipe' : 'click';
+    },
+  }),
+
+  numcubes: kid({
+    label: 'Αριθμοκυβάκια', w: 960, h: 640,
+    init: [0, 0, 0, ...[1, 2, 3, 4, 5].flatMap((n) => [10 + n * 45, 130, n, n, 0, 0, 0])],
+    drawKid(c, w, h, v, env) {
+      const g = ncGeom(w, h), s = ncState(v);
+      c.save();
+      c.fillStyle = '#e0f2fe';
+      c.fillRect(0, 0, w, g.sh);
+      c.fillStyle = '#86efac';
+      c.fillRect(0, g.sh - g.S * 0.22, w, g.S * 0.22);
+      // η μπάρα: πάνω σειρά ανάλογα με τη λειτουργία, κάτω οι λειτουργίες
+      c.fillStyle = '#f1f5f9';
+      c.fillRect(0, g.sh, w, g.bh);
+      c.restore();
+      c.lineWidth = 2;
+      c.strokeRect(0, 0, w, h);
+      const rh = g.bh / 2, ya = g.sh + rh / 2, yb = g.sh + rh * 1.5, na = ncRowA(s.mode), sa = w / na;
+      const frame = (cx: number, cy: number, ps: number): void => {
+        c.save();
+        c.strokeStyle = '#1f2937';
+        c.lineWidth = Math.max(3, ps * 0.08);
+        rrect(c, cx - ps * 0.62, cy - ps * 0.62, ps * 1.24, ps * 1.24, ps * 0.18);
+        c.stroke();
+        c.restore();
+      };
+      const ps = Math.min(sa, rh) * 0.7;
+      for (let k = 0; k < na; k++) {
+        const cx = sa * (k + 0.5);
+        if (s.mode === 3) {
+          if (k === 0) ncChip(c, cx, ya, ps, ['#ffffff'], '#94a3b8', '123');
+          else ncChip(c, cx, ya, ps, k === 13 ? RAINBOW : [NC_PAL[k]], k === 13 ? '#475569' : NC_PAL[k] === '#ffffff' ? '#94a3b8' : darker(NC_PAL[k]), '');
+        } else if (s.mode === 4) text(c, NC_ACC[k][2], cx, ya + 1, ps * 0.85);
+        else {
+          const n = k + 1;
+          ncChip(c, cx, ya, ps, n === 7 ? RAINBOW : [n === 10 ? '#ffffff' : NC_NUM[n]], n === 10 ? '#dc2626' : n === 7 ? '#475569' : darker(NC_NUM[n]), String(n));
+        }
+        if (s.mode >= 3 && k === s.sel) frame(cx, ya, ps);
+      }
+      const sb = w / 8, pb = Math.min(sb, rh) * 0.62;
+      for (let k = 0; k < 8; k++) {
+        const cx = sb * (k + 0.5);
+        if (k < 5) text(c, NC_BTNS[k], cx, yb + 1, pb * 0.8);
+        else if (k === 5) text(c, s.flags & 1 ? '❓' : '🔢', cx, yb + 1, pb * 0.8);
+        else if (k === 6) text(c, '🗑️', cx, yb + 1, pb * 0.8);
+        else fullIcon(c, cx, yb, pb, { ...env, ink: '#1f2937' });
+        if (k === s.mode) frame(cx, yb, pb);
+      }
+      // οι χαρακτήρες τελευταίοι: όποιος σέρνεται πάνω από τη μπάρα (προς τον 🗑️) φαίνεται
+      for (const e of s.cubes) ncDraw(c, g, e, !!(s.flags & 1));
+    },
+    fullAt(x, y, w, h) {
+      const g = ncGeom(w, h);
+      return y >= g.sh + g.bh / 2 && y <= h && Math.floor(x / (w / 8)) === 7;
+    },
+    paint(v, x, y, w, h, st, first) {
+      const g = ncGeom(w, h), s = ncState(v);
+      const [cx, cy] = [(x - g.ox) / g.S, (y - g.oy) / g.S];
+      if (!first) {
+        // σύρσιμο του χαρακτήρα που κρατιέται· πάνω από τον 🗑️ θα σβηστεί όταν αφεθεί
+        const e = st.j ? s.cubes[st.j - 1] : null;
+        if (!e || !(e.f & 1)) return null;
+        e.x = Math.round((cx + st.ax) * 10);
+        e.y = Math.round((cy + st.ay) * 10);
+        if (Math.hypot(cx - st.sx, cy - st.sy) > 0.3) e.f &= ~4;
+        e.f = y > g.sh + g.bh / 2 && Math.floor(x / (w / 8)) === 6 ? e.f | 2 : e.f & ~2;
+        return ncPack(s);
+      }
+      st.j = 0;
+      const pick = (e: NCube): number[] => {
+        e.f |= 1;
+        s.cubes.push(e);
+        Object.assign(st, { j: s.cubes.length, ax: e.x / 10 - cx, ay: e.y / 10 - cy, sx: cx, sy: cy });
+        return ncPack(s);
+      };
+      if (y >= g.sh) {
+        if (y > h || x < 0 || x > w) return null;
+        if (y < g.sh + g.bh / 2) {
+          const na = ncRowA(s.mode), k = Math.max(0, Math.min(na - 1, Math.floor(x / (w / na))));
+          if (s.mode >= 3) {
+            s.sel = k;
+            return ncPack(s);
+          }
+          // ένας νέος αριθμός βγαίνει από την παλέτα με σύρσιμο (ή με πάτημα μπαίνει στη σκηνή)
+          if (s.cubes.length >= NC_ITEMS) return v;
+          return pick({ x: Math.round(cx * 10), y: Math.round((cy + (k + 1) / 2) * 10), n: k + 1, h: k + 1, acc: 0, col: 0, f: 0 });
+        }
+        const k = Math.floor(x / (w / 8));
+        if (k <= 4) { s.mode = k; s.sel = k >= 3 ? 1 : 0; }
+        else if (k === 5) s.flags ^= 1;
+        else if (k === 6) s.cubes = [];
+        else return null;
+        return ncPack(s);
+      }
+      let j = -1;
+      for (let i = s.cubes.length - 1; i >= 0 && j < 0; i--) {
+        const b = ncBox(s.cubes[i]);
+        if (cx >= b.x0 && cx <= b.x1 && cy >= b.y0 && cy <= b.y1) j = i;
+      }
+      if (j < 0) return null;
+      const e = s.cubes[j];
+      if (s.mode === 1) {
+        // χώρισμα: το κυβάκι που πατήθηκε και όσα είναι από πάνω του (και στις επόμενες στήλες) φεύγουν μαζί
+        const b = ncBox(e), i = Math.floor(cx - b.x0) * e.h + Math.max(0, Math.min(e.h - 1, Math.floor(b.y1 - cy)));
+        if (i > 0 && i < e.n) {
+          const n2 = e.n - i;
+          e.n = i;
+          e.h = Math.min(e.h, i);
+          return pick({ x: e.x, y: e.y - e.h * 10, n: n2, h: Math.min(n2, 10), acc: 0, col: e.col, f: 4 });
+        }
+      }
+      if (s.mode <= 1) {
+        s.cubes.splice(j, 1);
+        return pick(e);
+      }
+      if (s.mode === 2) {
+        const sh = ncShapes(e.n);
+        e.h = sh[(sh.indexOf(e.h) + 1) % sh.length];
+      } else if (s.mode === 3) e.col = s.sel;
+      else {
+        const [gp, val] = NC_ACC[s.sel] ?? [-1, 0];
+        e.acc = gp < 0 ? 0 : ncSetAcc(e.acc, gp, ncAcc(e.acc, gp) === val ? 0 : val);
+      }
+      ncClamp(e);
+      return ncPack(s);
+    },
+    drop: ncDrop,
+    fx(prev, next) {
+      const a = ncState(prev), b = ncState(next);
+      if (a.mode !== b.mode || a.sel !== b.sel || a.flags !== b.flags) return 'click';
+      const last = b.cubes[b.cubes.length - 1];
+      if (b.cubes.length > a.cubes.length) return `num|${last.f & 4 ? 'split' : 'pop'}|${last.n}`;
+      if (b.cubes.length < a.cubes.length) return 'wipe';
+      if (a.cubes.some((e) => e.f & 1)) return null;
+      // μόλις πιάστηκε: λέει τον αριθμό του
+      if (last && last.f & 1) return `num|tok|${last.n}`;
+      for (let i = 0; i < b.cubes.length; i++) {
+        const p = a.cubes[i], q = b.cubes[i];
+        if (p.acc !== q.acc) return 'new';
+        if (p.h !== q.h || p.col !== q.col) return 'tok';
+      }
+      return null;
     },
   }),
 
