@@ -630,7 +630,7 @@ describe('αριθμοκυβάκια', () => {
     const v = ncPack({ mode: 0, sel: 0, flags: 0, cubes: [cube(50, 12), cube(150, 10)] });
     const s = ncState(v);
     expect(drag(v, mid(s.cubes[0]), mid(s.cubes[1]))!.ev).toBe('bad');
-    const r = drag(v, mid(s.cubes[0]), [W * (6.5 / 8), H * 0.95])!;
+    const r = drag(v, mid(s.cubes[0]), [W * (7.5 / 9), H * 0.95])!;
     expect(r.ev).toBe('wipe');
     expect(ncState(r.v).cubes.map((e) => e.n)).toEqual([10]);
   });
@@ -656,10 +656,10 @@ describe('αριθμοκυβάκια', () => {
     let e = ncState(v).cubes[1];
     expect([e.n, e.y]).toEqual([9, 130]);
     const tap = (bx: number, by: number): void => { v = d.paint!(v, bx, by, W, H, {}, true)!; };
-    tap(W * (2.5 / 8), H * 0.95); // 🔄
+    tap(W * (2.5 / 9), H * 0.95); // 🔄
     tap(...mid(ncState(v).cubes[1]));
     expect(ncState(v).cubes[1].h).toBe(3);
-    tap(W * (3.5 / 8), H * 0.95); // 🎩
+    tap(W * (3.5 / 9), H * 0.95); // 🎩
     expect(ncState(v).mode).toBe(4);
     tap(W * (2.5 / 13), H * 0.83); // κορώνα
     tap(...mid(ncState(v).cubes[1]));
@@ -669,9 +669,29 @@ describe('αριθμοκυβάκια', () => {
     // ξανά το ίδιο: βγαίνει
     tap(...mid(e));
     expect(ncState(v).cubes[1].acc).toBe(0);
-    tap(W * (4.5 / 8), H * 0.95); // 🧽
+    tap(W * (4.5 / 9), H * 0.95); // 🧽
     tap(...mid(ncState(v).cubes[0]));
     expect(ncState(v).cubes.map((q) => q.n)).toEqual([9]);
+  });
+
+  it('⚖️ τραμπάλα: ό,τι πατά στη σανίδα κάθεται πάνω της και γέρνει προς το μεγαλύτερο άθροισμα', () => {
+    let v = ncPack({ mode: 0, sel: 0, flags: 0, cubes: [cube(60, 3), cube(220, 2), cube(275, 1)] });
+    v = d.paint!(v, W * (6.5 / 9), H * 0.95, W, H, {}, true)!;
+    let s = ncState(v);
+    expect(s.flags & 2).toBe(2);
+    // το 3 και το 2 πάνω στη σανίδα· το 1, έξω από τη σανίδα, μένει στο γρασίδι
+    expect(s.cubes.map((e) => [e.f, e.y])).toEqual([[8, 114], [8, 114], [0, 130]]);
+    // το 1 ανεβαίνει στα δεξιά: 3 = 3, ισορροπεί
+    const r = drag(v, mid(s.cubes[2]), [ox + 18 * S, oy + 9 * S])!;
+    expect(r.ev).toBe('tok');
+    s = ncState(r.v);
+    expect(s.cubes.filter((e) => e.f & 8).length).toBe(3);
+    // σήκωμα από την τραμπάλα και άφημα αριστερά στο γρασίδι, έξω από τη σανίδα: τότε κατεβαίνει
+    const off = drag(r.v, [ox + 6 * S, oy + 10.9 * S], [ox + 1 * S, oy + 12.5 * S])!;
+    expect(ncState(off.v).cubes.find((e) => e.n === 3)!.f).toBe(0);
+    // βγαίνει η τραμπάλα: όλοι στο γρασίδι
+    v = d.paint!(r.v, W * (6.5 / 9), H * 0.95, W, H, {}, true)!;
+    expect(ncState(v).cubes.map((e) => [e.f, e.y])).toEqual([[0, 130], [0, 130], [0, 130]]);
   });
 
   it('το παλιό βάψιμο (λειτουργία 3) γίνεται μετακίνηση', () => {

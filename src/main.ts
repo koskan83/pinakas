@@ -20,7 +20,6 @@ import { endLesson, lessonPdf, openSend, pdfLogo, pickPages, setPdfLogo } from '
 import { initToolbar } from './toolbar-pos';
 import { trackUsage, usageReport } from './usage';
 import { askSpellWords } from './spell-lists';
-import { NC_NAMES } from './kids';
 
 // ---------- εισαγωγή ----------
 
@@ -978,9 +977,8 @@ function kidFx(ev: string, x?: number, y?: number): void {
   }
   const num = /^num\|(\w*)\|(\d+)$/.exec(ev);
   if (num) {
-    // αριθμοκυβάκια: ήχος και ο αριθμός δυνατά
+    // αριθμοκυβάκια: μόνο ήχος, χωρίς φωνή
     if (num[1]) playFx(num[1], fxPrefs);
-    if (fxPrefs.sound) setTimeout(() => void say(NC_NAMES[Number(num[2])] ?? num[2], 'el-GR'), 180);
     return;
   }
   playFx(ev, fxPrefs);

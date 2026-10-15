@@ -154,12 +154,12 @@ export function stampTexts(d: StampDef, w: number, h: number): StampText[] {
  * Ακίνητο, σχεδιάζεται γερμένο κατά θ, όπως πάντα.
  */
 function pendulum(w: number, h: number): SpringGeom {
-  const L = Math.hypot(w * 0.32, h * 0.82);
+  const L = Math.hypot(w * 0.32, h * 0.76);
   const at = (a: number): [number, number] => [w / 2 + L * Math.sin(a), L * Math.cos(a)];
-  const rest = L * Math.atan2(w * 0.32, h * 0.82);
+  const rest = L * Math.atan2(w * 0.32, h * 0.76);
   const [cx, cy] = at(0);
   return {
-    cx, cy, ux: 1, uy: 0, max: L * 0.7, r: Math.max(w * 0.18, 28),
+    cx, cy, ux: 1, uy: 0, max: L * 0.5, r: Math.max(w * 0.18, 28),
     bob: (d, idle) => at((idle ? rest : d) / L),
     rest,
   };
@@ -330,37 +330,45 @@ export const STAMPS: Record<string, StampDef> = {
       const idle = !st || (!st.amp && !st.d);
       const r = w * 0.09;
       const [bx, by] = g.bob!(st?.d ?? 0, idle);
+      const [ix, iy] = g.bob!(0, false);
+      // η κατακόρυφη (θέση ισορροπίας) σταματά στη σφαίρα
       c.save();
       c.setLineDash([8, 6]);
       c.lineWidth *= 0.6;
-      path(c, [[w / 2, 0], [w / 2, h * 0.95]]);
+      path(c, [[w / 2, 0], [ix, iy]]);
       c.restore();
-      // ακραίες θέσεις (±A) και θέση ισορροπίας: αχνά, διακεκομμένα
+      // ακραίες θέσεις (±A) και θέση ισορροπίας: αχνά, διακεκομμένα, με τα ονόματα ακριβώς κάτω από τη σφαίρα
       const amp = st?.amp || (idle ? g.rest! : 0);
       if (st?.marks) {
-        const fs = Math.max(11, h * 0.055);
+        const fs = Math.max(11, h * 0.05);
+        const ghost = (x: number, y: number, t: string): void => {
+          c.globalAlpha = 0.55;
+          c.beginPath();
+          c.arc(x, y, r, 0, Math.PI * 2);
+          c.stroke();
+          c.globalAlpha = 0.85;
+          c.fillText(t, x, y + r + fs * 0.75);
+        };
         c.save();
-        c.globalAlpha = 0.55;
         c.lineWidth *= 0.6;
         c.setLineDash([6, 5]);
-        if (amp) for (const [s, t] of [[-1, '−A'], [1, '+A']] as const) {
-          const [ex, ey] = g.bob!(s * amp, false);
-          path(c, [[w / 2, 0], [ex, ey]]);
-          c.beginPath();
-          c.arc(ex, ey, r, 0, Math.PI * 2);
-          c.stroke();
-          c.font = `600 ${fs}px system-ui, "Segoe UI", Roboto, sans-serif`;
-          c.textAlign = 'center';
-          c.textBaseline = 'middle';
-          c.globalAlpha = 0.85;
-          c.fillText(t, ex, ey + r + fs * 0.9);
-          c.globalAlpha = 0.55;
-        }
-        c.globalAlpha = 0.85;
         c.font = `600 ${fs}px system-ui, "Segoe UI", Roboto, sans-serif`;
         c.textAlign = 'center';
         c.textBaseline = 'middle';
-        c.fillText('Θ.Ι.', w / 2, h * 0.95 + fs * 0.9);
+        if (amp) {
+          // το τόξο της τροχιάς ανάμεσα στις ακραίες θέσεις
+          c.globalAlpha = 0.4;
+          c.beginPath();
+          c.arc(w / 2, 0, iy, Math.PI / 2 + amp / iy, Math.PI / 2 - amp / iy, true);
+          c.stroke();
+          for (const [s, t] of [[-1, '−A'], [1, '+A']] as const) {
+            const [ex, ey] = g.bob!(s * amp, false);
+            c.globalAlpha = 0.55;
+            path(c, [[w / 2, 0], [ex, ey]]);
+            ghost(ex, ey, t);
+          }
+        }
+        ghost(ix, iy, 'Θ.Ι.');
         c.restore();
       }
       path(c, [[w / 2, 0], [bx, by]]);
