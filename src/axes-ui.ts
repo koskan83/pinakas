@@ -265,6 +265,7 @@ $('fnAdd').onclick = addFn;
 $('spMarks').onclick = () => board.updateSpring({ marks: !board.selectedSpring?.marks });
 $('spDamp').onclick = () => board.updateSpring({ damp: !board.selectedSpring?.damp });
 $('spStop').onclick = () => board.stopSpring();
+$('spPlay').onclick = () => board.togglePlay();
 fnInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') addFn();
 });

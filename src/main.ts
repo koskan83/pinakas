@@ -5,7 +5,7 @@ import { kvGet, kvSet } from './storage';
 import { Lessons } from './lessons';
 import { GadgetKind } from './gadgets';
 import { isNative, isOverlay, nativeScreenshot, openOverlay } from './native';
-import { STAMPS } from './stamps';
+import { STAMPS, STAMP_CATS, type StampDef } from './stamps';
 import { PEN_ICON, PenKind } from './ui';
 import { ask, notice } from './dialog';
 import { openBuildView } from './build-view';
@@ -265,6 +265,18 @@ $('undo').onclick = () => board.undo();
 $('redo').onclick = () => board.redo();
 $('del').onclick = () => board.deleteSelected();
 $('dup').onclick = () => board.duplicateSelected();
+/** Η μπάρα μένει εκεί που είναι, για να πατηθεί το ίδιο κουμπί ξανά και ξανά. */
+const keepBar = (fn: () => void) => (): void => {
+  const el = $('selOpts');
+  const { left, top } = el.style;
+  fn();
+  el.style.left = left;
+  el.style.top = top;
+};
+$('bigger').onclick = keepBar(() => board.scaleSelected(1.25));
+$('smaller').onclick = keepBar(() => board.scaleSelected(0.8));
+$('flipH').onclick = keepBar(() => board.flipSelected(false));
+$('flipV').onclick = keepBar(() => board.flipSelected(true));
 $('sumBtn').onclick = () => board.addResultant();
 $('prev').onclick = () => board.goto(board.cur - 1);
 $('next').onclick = () => board.goto(board.cur + 1);
@@ -310,6 +322,9 @@ export function refreshUi(): void {
   show('selOpts', tool === 'select' && (board.hasSelection || region));
   show('del', board.hasSelection);
   show('dup', board.hasSelection);
+  for (const id of ['bigger', 'smaller']) show(id, board.hasSelection);
+  // σκέτο κείμενο, άξονες ή τριγωνομετρικός κύκλος δεν καθρεφτίζονται (μένουν αναγνώσιμα)
+  for (const id of ['flipH', 'flipV']) show(id, board.selectionFlippable);
   // η αναγνώριση έχει νόημα μόνο όταν στην επιλογή υπάρχει χειρόγραφο
   const ink = board.selectionHasInk;
   const writing = board.selectionHasWriting;
@@ -320,8 +335,15 @@ export function refreshUi(): void {
   const sp = tool === 'select' ? board.selectedSpring : null;
   show('springOpts', !!sp);
   $('spMarks').classList.toggle('on', !!sp?.marks);
+  // στο εκκρεμές δεν υπάρχει φυσικό μήκος: οι θέσεις είναι η ισορροπία και οι ακραίες
+  $('spMarks').querySelector('span')!.textContent = sp?.name === 'pendulum' ? '±A' : 'ΘΦΜ';
   $('spDamp').classList.toggle('on', !!sp?.damp);
   ($('spStop') as HTMLButtonElement).disabled = !board.springMoving;
+  // σχήματα με κίνηση (κύματα, κρούση): μόνο ▶/⏸· τα ελατήρια και το εκκρεμές: θέσεις, απόσβεση, στοπ
+  const playable = !!sp && !!STAMPS[sp.name]?.play;
+  show('spPlay', playable);
+  for (const id of ['spMarks', 'spDamp', 'spStop']) show(id, !!sp && !playable);
+  $('spPlay').querySelector('span')!.textContent = board.springMoving ? '⏸' : '▶';
   show('widths', tool === 'pen' || tool === 'highlighter' || tool === 'shape' || tool === 'text' || tool === 'eraser');
   show('subbar', [...$('subbar').children].some((g) => !g.classList.contains('hidden')));
   const anOn: Record<string, boolean> = { int: !!ax?.an?.int, sum: !!ax?.an?.int?.n, lim: !!ax?.an?.lim, tan: !!ax?.an?.tan, asym: !!ax?.an?.asym };
@@ -375,7 +397,7 @@ function placeSelBar(): void {
 }
 board.onUi = refreshUi;
 board.onKidFull = (it) => openBuildView(board, it.id, (ev) => kidFx(ev), it.name);
-board.onAsk = (q) => (q.lists ? askSpellWords({ title: q.title, voice: q.voice ?? 'el-GR', download }) : ask(q.title, { hint: q.hint, secret: q.secret, max: q.max ?? 24, voice: q.voice }));
+board.onAsk = (q) => (q.lists ? askSpellWords({ title: q.title, voice: q.voice ?? 'el-GR', download }) : ask(q.title, { hint: q.hint, secret: q.secret, max: q.max ?? 24, voice: q.voice, value: q.value, picks: q.picks }));
 board.onMergeAxes = (target, dropped) => {
   const pal = [...inkPalette().slice(1), '#ea580c', '#7c3aed'];
   const fns = [...(target.fns ?? [])];
@@ -609,8 +631,14 @@ impMenu.addEventListener('click', (e) => {
 
 // ---------- σχήματα φυσικής ----------
 
-for (const [name, d] of Object.entries(STAMPS)) {
-  if (d.kid) continue;
+for (const [cat, title] of Object.entries(STAMP_CATS)) {
+  const head = document.createElement('div');
+  head.className = 'stHead';
+  head.textContent = title;
+  $('stampGrid').append(head);
+  for (const [name, d] of Object.entries(STAMPS)) if (!d.kid && !d.hidden && d.cat === cat) addStampTile(name, d);
+}
+function addStampTile(name: string, d: StampDef): void {
   const b = document.createElement('button');
   b.dataset.stamp = name;
   b.title = d.label;

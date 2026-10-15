@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AngleItem, Item, Pt, Shape, Stroke, angleDegrees, cloneItem, erasePartial, hitItem, itemBounds, newDoc, pointInPolygon,
+  AngleItem, Item, Pic, Pt, Shape, Stroke, angleDegrees, cloneItem, erasePartial, flipItem, hitItem, itemBounds, itemFlip, newDoc, pointInPolygon,
   recognizeShape, rotateItem, scaleItem, translateItem, trianglePts, unrot, wrapText } from '../src/model';
 
 const rect = (o: Partial<Shape> = {}): Shape => ({ kind: 'shape', id: 'r', shape: 'rect', x0: 0, y0: 0, x1: 200, y1: 100, color: '#111111', width: 4, ...o });
@@ -197,5 +197,56 @@ describe('wrapText', () => {
   });
   it('μια λέξη μεγαλύτερη από το πλάτος μένει ολόκληρη σε δική της γραμμή', () => {
     expect(wrapText('μικρή τεράστιαλέξηχωρίςκενά τέλος', 20, 80, m)).toBe('μικρή\nτεράστιαλέξηχωρίςκενά\nτέλος');
+  });
+});
+
+describe('καθρέφτης', () => {
+  const pic = (o: Partial<Pic> = {}): Pic => ({ kind: 'image', id: 'p', x: 0, y: 0, w: 100, h: 50, src: '', ...o });
+  it('η γραμμή αλλάζει πλευρά ως προς τον άξονα', () => {
+    const s = flipItem(stroke([[10, 0], [40, 20]]), false, 50) as Stroke;
+    expect(s.pts).toEqual([[90, 0], [60, 20]]);
+    const v = flipItem(stroke([[10, 0], [40, 20]]), true, 10) as Stroke;
+    expect(v.pts).toEqual([[10, 20], [40, 0]]);
+  });
+  it('η εικόνα γίνεται κατοπτρική στη θέση της και ξαναγυρνά με δεύτερο πάτημα', () => {
+    const once = flipItem(pic(), false, 50) as Pic;
+    expect(once.fx).toBe(true);
+    expect(once.x).toBe(0);
+    expect(itemFlip(once)).toBe(true);
+    // το σημείο δεξιά φαίνεται αριστερά
+    expect(unrot(once, 90, 10)).toEqual([10, 10]);
+    const twice = flipItem(once, false, 50) as Pic;
+    expect(twice.fx).toBeUndefined();
+  });
+  it('πάνω–κάτω σε εικόνα: καθρέφτης και μισή στροφή', () => {
+    const v = flipItem(pic(), true, 25) as Pic;
+    expect(v.fx).toBe(true);
+    expect(Math.abs(v.rot!)).toBeCloseTo(Math.PI);
+    // το πάνω αριστερά σημείο της εικόνας φαίνεται κάτω αριστερά
+    const [x, y] = unrot(v, 0, 50);
+    expect(x).toBeCloseTo(0);
+    expect(y).toBeCloseTo(0);
+  });
+  it('το τρίγωνο καθρεφτίζει τις κορυφές του', () => {
+    const t: Shape = { kind: 'shape', id: 't', shape: 'triangle', x0: 0, y0: 0, x1: 100, y1: 100, pts: [[0, 0], [0, 100], [100, 100]], color: '#111111', width: 4 };
+    const f = flipItem(t, false, 50) as Shape;
+    expect(f.pts).toEqual([[100, 0], [100, 100], [0, 100]]);
+  });
+  it('ο τριγωνομετρικός κύκλος μένει αναγνώσιμος: αλλάζει μόνο θέση', () => {
+    const t: Item = { kind: 'trig', id: 'x', x: 0, y: 0, r: 100, a: 0.5, color: '#111111' };
+    const f = flipItem(t, false, 1000);
+    expect(f).toEqual({ ...t, x: 2000 });
+    expect('fx' in f).toBe(false);
+  });
+});
+
+describe('γράμματα των σχημάτων Φυσικής', () => {
+  it('βρίσκει το φ του κεκλιμένου και τα m₁, m₂ της τροχαλίας', async () => {
+    const { STAMPS, stampTexts } = await import('../src/stamps');
+    const inc = stampTexts(STAMPS.incline, 320, 180);
+    expect(inc.map((l) => l.t)).toEqual(['φ']);
+    expect(inc[0].x).toBeCloseTo(320 * 0.21);
+    expect(inc[0].size).toBeCloseTo(180 * 0.14);
+    expect(stampTexts(STAMPS.pulley, 200, 300).map((l) => l.t)).toEqual(['m₁', 'm₂']);
   });
 });

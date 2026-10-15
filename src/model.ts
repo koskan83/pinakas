@@ -19,6 +19,8 @@ export interface Pic {
   src: string;
   /** Περιστροφή γύρω από το κέντρο (rad, κατά τη φορά του ρολογιού). */
   rot?: number;
+  /** Κατοπτρική (καθρέφτης αριστερά–δεξιά, πριν από την περιστροφή). */
+  fx?: boolean;
 }
 
 export type ShapeKind = 'line' | 'arrow' | 'rect' | 'ellipse' | 'triangle' | 'rhombus' | 'para' | 'table';
@@ -187,6 +189,9 @@ export interface StampItem {
   /** Ελατήρια: η ταλάντωση σβήνει σιγά σιγά. */
   damp?: boolean;
   rot?: number;
+  fx?: boolean;
+  /** Γράμματα του σχήματος που άλλαξε ο χρήστης (π.χ. «φ» → «30°»· κενό = σβησμένο). */
+  txt?: Record<string, string>;
   /** Εργαλεία του Δημοτικού: η κατάστασή τους (π.χ. ώρα του ρολογιού, χρωματισμένα κομμάτια του κλάσματος). */
   v?: number[];
 }
@@ -322,12 +327,79 @@ function rotPt(x: number, y: number, cx: number, cy: number, ang: number): Pt {
   return [cx + (x - cx) * c - (y - cy) * s, cy + (x - cx) * s + (y - cy) * c];
 }
 
-/** Φέρνει ένα σημείο του πίνακα στο σύστημα του (στραμμένου) στοιχείου, όπου αυτό είναι όρθιο. */
+/** Αν το στοιχείο σχεδιάζεται κατοπτρικά (εικόνες και έτοιμα σχήματα). */
+export function itemFlip(it: Item): boolean {
+  return (it.kind === 'image' || it.kind === 'stamp') && !!it.fx;
+}
+
+/** Φέρνει ένα σημείο του πίνακα στο σύστημα του (στραμμένου ή κατοπτρικού) στοιχείου, όπου αυτό είναι όρθιο. */
 export function unrot(it: Item, x: number, y: number): Pt {
   const r = itemRot(it);
-  if (!r) return [x, y];
+  const fl = itemFlip(it);
+  if (!r && !fl) return [x, y];
   const b = rawBounds(it);
-  return rotPt(x, y, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, -r);
+  const cx = (b.x0 + b.x1) / 2;
+  const p = r ? rotPt(x, y, cx, (b.y0 + b.y1) / 2, -r) : ([x, y] as Pt);
+  return fl ? [2 * cx - p[0], p[1]] : p;
+}
+
+/** Το κέντρο γύρω από το οποίο στρέφεται (και καθρεφτίζεται) το στοιχείο. */
+export function itemCenter(it: Item): Pt {
+  const b = rawBounds(it);
+  return [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
+}
+
+/**
+ * Καθρεφτίζει ένα στοιχείο ως προς την κατακόρυφη ευθεία x = c (vertical = false: αριστερά–δεξιά)
+ * ή την οριζόντια y = c (vertical = true: πάνω–κάτω). Τα κείμενα, οι άξονες και ο τριγωνομετρικός
+ * κύκλος μένουν αναγνώσιμα: αλλάζει μόνο η θέση τους.
+ */
+export function flipItem(it: Item, vertical: boolean, c: number): Item {
+  const M = ([x, y]: Pt): Pt => (vertical ? [x, 2 * c - y] : [2 * c - x, y]);
+  const A = (a: number): number => (vertical ? -a : Math.PI - a);
+  /** Μετακινεί το στοιχείο ώστε το κέντρο του να πάει στο κατοπτρικό του. */
+  const moved = (): Item => {
+    const m = itemCenter(it);
+    const n = M(m);
+    return translateItem(it, n[0] - m[0], n[1] - m[1]);
+  };
+  const norm = (a: number): number | undefined => {
+    const r = Math.atan2(Math.sin(a), Math.cos(a));
+    return Math.abs(r) < 1e-9 ? undefined : r;
+  };
+  switch (it.kind) {
+    case 'stroke':
+      return { ...it, pts: it.pts.map(M) };
+    case 'angle': {
+      const [x, y] = M([it.x, it.y]);
+      return { ...it, x, y, a1: A(it.a1), a2: A(it.a2) };
+    }
+    case 'shape': {
+      if (it.shape === 'line' || it.shape === 'arrow') {
+        const [x0, y0] = M([it.x0, it.y0]), [x1, y1] = M([it.x1, it.y1]);
+        return { ...it, x0, y0, x1, y1 };
+      }
+      if (isPoly(it.shape)) {
+        const pts = trianglePts(it).map(M);
+        const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+        return { ...it, pts, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+      }
+      // ορθογώνιο, έλλειψη, πίνακας: συμμετρικά, αρκεί να αντιστραφεί η κλίση
+      const out = moved() as Shape;
+      return { ...out, rot: it.rot ? norm(-it.rot) : undefined };
+    }
+    case 'image':
+    case 'stamp': {
+      // πάνω–κάτω = αριστερά–δεξιά και μισή στροφή
+      const out = moved() as Pic | StampItem;
+      const r = vertical ? Math.PI - (it.rot ?? 0) : -(it.rot ?? 0);
+      return { ...out, fx: !it.fx || undefined, rot: norm(r) };
+    }
+    case 'text':
+      return { ...(moved() as TextItem), rot: it.rot ? norm(-it.rot) : undefined };
+    default:
+      return moved();
+  }
 }
 
 /** Το ορθογώνιο που περικλείει το στοιχείο όπως φαίνεται (μαζί με την περιστροφή του). */

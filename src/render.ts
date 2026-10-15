@@ -1,7 +1,7 @@
 /** Σχεδίαση των στοιχείων του πίνακα στον καμβά: γραμμές, σχήματα, άξονες, ανάλυση, τριγωνομετρικός κύκλος, μετρήσεις. */
 
 import {
-  AngleItem, AxesAn, AxesItem, Doc, FnDef, Item, Page, Pic, Pt, Shape, StampItem, Stroke, TextItem, TrigItem, angleDegrees, angleEnds, axesRange, isDark, isPoly, itemRot, tableLines, textFont, textLines, trianglePts, unrot,
+  AngleItem, AxesAn, AxesItem, Doc, FnDef, Item, Page, Pic, Pt, Shape, StampItem, Stroke, TextItem, TrigItem, angleDegrees, angleEnds, axesRange, isDark, isPoly, itemCenter, itemFlip, itemRot, tableLines, textFont, textLines, trianglePts,
 } from './model';
 import { Fn, Params, compileCached, domText, fnOf, keyPoints } from './expr';
 import { Asymptotes, asymptotes, integrate, lineEq, nf, oneSided, riemann, slope, crossings } from './analysis';
@@ -648,7 +648,36 @@ export class Renderer {
       }
       d.drawKid(c, s.w, s.h, s.v ?? d.init ?? [], { ink: this.b.ink(s.color), bg: isDark(this.b.doc.bg) ? '#14201b' : '#ffffff', names: this.b.kidNames(), ...(an ? { anim: { t, prev: an.prev } } : {}) });
     }
-    else d.draw(c, s.w, s.h, d.spring ? this.b.springState(s) : undefined);
+    else if (s.fx || s.txt || Math.cos(s.rot ?? 0) < 0) {
+      // τα γράμματα (φ, m, θ…) δεν καθρεφτίζονται ούτε γυρίζουν ανάποδα, και ό,τι άλλαξε ο χρήστης γράφεται στη θέση τους
+      const fill = c.fillText;
+      // αναιρείται ο καθρέφτης, και η μισή στροφή όταν το σχήμα έχει γυρίσει πάνω από 90°
+      let sx = s.fx ? -1 : 1, sy = 1;
+      if (Math.cos(s.rot ?? 0) < 0) {
+        sx = -sx;
+        sy = -1;
+      }
+      c.fillText = (t: string, x: number, y: number, mw?: number): void => {
+        const text = s.txt?.[t] ?? t;
+        if (!text) return;
+        if (sx === 1 && sy === 1) return fill.call(c, text, x, y, mw);
+        c.save();
+        c.translate(x, y);
+        c.scale(sx, sy);
+        if (sx < 0) {
+          const a = c.textAlign;
+          c.textAlign = a === 'left' ? 'right' : a === 'right' ? 'left' : a === 'start' ? 'end' : a === 'end' ? 'start' : a;
+        }
+        fill.call(c, text, 0, 0, mw);
+        c.restore();
+      };
+      try {
+        d.draw(c, s.w, s.h, d.spring || d.play ? this.b.springState(s) : undefined);
+      } finally {
+        // ξανά η κανονική μέθοδος του καμβά
+        delete (c as Partial<CanvasRenderingContext2D>).fillText;
+      }
+    } else d.draw(c, s.w, s.h, d.spring || d.play ? this.b.springState(s) : undefined);
     c.restore();
   }
 
@@ -803,11 +832,14 @@ export class Renderer {
 
   drawItem(c: CanvasRenderingContext2D, it: Item): void {
     const rot = itemRot(it);
-    if (rot) {
-      const [mx, my] = unrot(it, 0, 0), [ox, oy] = unrot(it, 1, 0);
-      // ο αντίστροφος του unrot: στροφή κατά rot γύρω από το κέντρο του στοιχείου
+    const fl = itemFlip(it);
+    if (rot || fl) {
+      // ο αντίστροφος του unrot: στροφή κατά rot (και καθρέφτης) γύρω από το κέντρο του στοιχείου
+      const [mx, my] = itemCenter(it);
       c.save();
-      c.transform(ox - mx, -(oy - my), oy - my, ox - mx, 0, 0);
+      c.translate(mx, my);
+      if (rot) c.rotate(rot);
+      if (fl) c.scale(-1, 1);
       c.translate(-mx, -my);
       this.drawItemRaw(c, it);
       c.restore();

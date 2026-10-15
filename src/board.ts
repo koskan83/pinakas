@@ -1,8 +1,8 @@
 import {
-  AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TableStyle, TextItem, Tool, View, angleEnds, cloneItem, distToSeg, erasePartial, hitItem, inLasso, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, pointInPolygon, reboxShape, recognizeShape, rotateItem, roundAngle, scaleItem, translateItem, trianglePts, uid, unrot,
+  AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TableStyle, TextItem, Tool, View, angleEnds, cloneItem, distToSeg, erasePartial, flipItem, hitItem, inLasso, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, pointInPolygon, reboxShape, recognizeShape, rotateItem, roundAngle, scaleItem, translateItem, trianglePts, uid, unrot,
 } from './model';
 import { Params } from './expr';
-import { STAMPS, SpringState, type KidArea, type KidAsk } from './stamps';
+import { STAMPS, SpringState, stampTexts, type KidArea, type KidAsk } from './stamps';
 import { CM, GadgetDrag, GadgetKind, Gadgets } from './gadgets';
 import { ANGLE_KEY, angleSides, eraseMeasures, fmt, measureAngles, measureSides, trigPoint, sideLen, sideText, unitsFor } from './measure';
 import { Renderer } from './render';
@@ -45,6 +45,8 @@ export interface PState {
   lasso?: Pt[];
   /** Στοιχείο κάτω από την αρχή του λάσου: επιλέγεται αν τελικά ήταν απλό άγγιγμα. */
   tapHit?: string;
+  /** Το στοιχείο που πατήθηκε ήταν ήδη επιλεγμένο (δεύτερο πάτημα). */
+  wasSel?: boolean;
   ids?: Set<string>;
   gb?: Box;
   laser?: Laser;
@@ -570,6 +572,47 @@ export class Board {
   }
 
   /**
+   * Δεύτερο πάτημα (χωρίς σύρσιμο) πάνω σε γράμμα ενός σχήματος Φυσικής (φ, m, θ…): ρωτά τι να γράφει στη θέση του,
+   * π.χ. μοίρες αντί για φ· κενό το σβήνει. true αν το πάτημα έπεσε σε γράμμα.
+   */
+  tapStampText(before: StampItem, after: Item, at: Pt): boolean {
+    const d = STAMPS[before.name];
+    if (!d || d.kid || after.kind !== 'stamp') return false;
+    const k = this.page.view.k;
+    if (Math.hypot(after.x - before.x, after.y - before.y) > 8 / k) return false;
+    const [lx, ly] = unrot(before, at[0], at[1]);
+    const x = lx - before.x, y = ly - before.y;
+    const lab = stampTexts(d, before.w, before.h).find((l) => Math.hypot(l.x - x, l.y - y) < Math.max(l.size * 0.8, 26 / k));
+    if (!lab) return false;
+    const angle = /^[φθωα-δ]$/.test(lab.t);
+    const page = this.cur, id = before.id;
+    const now = before.txt?.[lab.t] ?? lab.t;
+    void this.onAsk({
+      title: `Τι να γράφει στη θέση του «${lab.t}»;`,
+      hint: angle ? 'Γράψε τις μοίρες (το ° μπαίνει μόνο του)· άδειο, για να σβηστεί.' : 'Άδειο, για να σβηστεί.',
+      value: now,
+      picks: angle ? [lab.t, '30°', '37°', '45°', '53°', '60°'] : [lab.t],
+      max: 12,
+      apply: () => null,
+    }).then((text) => {
+      if (text == null || page !== this.cur) return;
+      const cur = this.page.items.find((x) => x.id === id);
+      if (!cur || cur.kind !== 'stamp') return;
+      let t = text.trim();
+      if (angle && /^\d+([.,]\d+)?$/.test(t)) t += '°';
+      const txt = { ...cur.txt };
+      if (t === lab.t) delete txt[lab.t];
+      else txt[lab.t] = t;
+      const next: StampItem = { ...cur, txt: Object.keys(txt).length ? txt : undefined };
+      this.page.items[this.page.items.indexOf(cur)] = next;
+      this.push({ t: 'mod', p: this.cur, before: cur, after: next });
+      this.redraw();
+      this.onUi();
+    });
+    return true;
+  }
+
+  /**
    * Άξονες με συναρτήσεις που αφήνονται πάνω σε άλλους άξονες ενώνονται μαζί τους: οι συναρτήσεις περνούν στους πρώτους
    * και οι δεύτεροι φεύγουν. Μία αναίρεση τα χωρίζει ξανά.
    */
@@ -750,6 +793,13 @@ export class Board {
     return !!this.selected || this.multi.length > 0;
   }
 
+  /** Αν ο καθρέφτης αλλάζει κάτι: ένα μόνο κείμενο, άξονες ή κύκλος μένουν όπως είναι. */
+  get selectionFlippable(): boolean {
+    if (this.multi.length > 1) return true;
+    const it = this.selected ? this.page.items.find((x) => x.id === this.selected) : undefined;
+    return !!it && it.kind !== 'text' && it.kind !== 'axes' && it.kind !== 'trig';
+  }
+
   /** Τα id της τρέχουσας επιλογής (μονής ή ομαδικής). */
   get selectionIds(): string[] {
     return [...this.selectedIds()];
@@ -839,6 +889,45 @@ export class Board {
     this.multi = copies.length > 1 ? copies.map((c) => c.id) : [];
     this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
     this.redraw();
+  }
+
+  /** Το πλαίσιο όλων των επιλεγμένων στοιχείων (ένα ή πολλά). */
+  private selBounds(ids: Set<string>): Box | null {
+    let b: Box | null = null;
+    for (const it of this.page.items) {
+      if (!ids.has(it.id)) continue;
+      const ib = itemBounds(it);
+      b = b ? { x0: Math.min(b.x0, ib.x0), y0: Math.min(b.y0, ib.y0), x1: Math.max(b.x1, ib.x1), y1: Math.max(b.y1, ib.y1) } : ib;
+    }
+    return b;
+  }
+
+  /** Εφαρμόζει μια αλλαγή σε όλα τα επιλεγμένα στοιχεία (αναιρείται με ένα ↶). */
+  private mapSelected(f: (it: Item, b: Box) => Item): void {
+    const ids = this.selectedIds();
+    const b = this.selBounds(ids);
+    if (!b) return;
+    const before = this.page.items.slice();
+    this.page.items = before.map((it) => (ids.has(it.id) ? f(it, b) : it));
+    this.pivot = null;
+    this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
+    this.redraw();
+    this.onUi();
+  }
+
+  /** Μεγαλώνει (f > 1) ή μικραίνει την επιλογή γύρω από το κέντρο της· και τα γράμματα των κειμένων. */
+  scaleSelected(f: number): void {
+    const b = this.selBounds(this.selectedIds());
+    if (!b) return;
+    const size = Math.max(b.x1 - b.x0, b.y1 - b.y0);
+    // ούτε να χαθεί ούτε να γίνει τεράστια
+    if ((f < 1 && size * f < 16) || (f > 1 && size * f > 20000)) return;
+    this.mapSelected((it) => scaleItem(it, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, f));
+  }
+
+  /** Κατοπτρική εικόνα της επιλογής, αριστερά–δεξιά ή (vertical) πάνω–κάτω, στη θέση της. */
+  flipSelected(vertical: boolean): void {
+    this.mapSelected((it, b) => flipItem(it, vertical, vertical ? (b.y0 + b.y1) / 2 : (b.x0 + b.x1) / 2));
   }
 
   /** Κοινή αρχή O και άκρα A, B των δύο πλευρών από τις οποίες βγαίνει μια συνισταμένη. */
@@ -1056,7 +1145,7 @@ export class Board {
   /** Ελατήρια που ταλαντώνονται τώρα (δεν αποθηκεύεται). */
   osc = new Map<string, { amp: number; t0: number }>();
   /** Σώμα που τραβιέται αυτή τη στιγμή. */
-  oscDrag: { id: string; d: number } | null = null;
+  oscDrag: { id: string; d: number; d0?: number } | null = null;
   private oscRaf = 0;
 
   springState(s: StampItem): SpringState {
@@ -1065,6 +1154,8 @@ export class Board {
     const o = this.osc.get(s.id);
     if (!o) return { d: 0, amp: 0, marks };
     const t = performance.now() - o.t0;
+    // σχήματα με κίνηση (κύματα, κρούση): μόνο ο χρόνος
+    if (STAMPS[s.name]?.play) return { d: 0, amp: 0, marks, t };
     const fade = s.damp ? Math.exp(-t / OSC_FADE_MS) : 1;
     return { d: o.amp * fade * Math.cos((2 * Math.PI * t) / OSC_PERIOD_MS), amp: Math.abs(o.amp), marks };
   }
@@ -1077,9 +1168,10 @@ export class Board {
       if (it.kind !== 'stamp') continue;
       const g = STAMPS[it.name]?.spring?.(it.w, it.h);
       if (!g) continue;
-      const d = this.springState(it).d;
+      const st = this.springState(it);
+      const [bx, by] = g.bob ? g.bob(st.d, !st.amp && !st.d) : [g.cx + g.ux * st.d, g.cy + g.uy * st.d];
       const [ux, uy] = unrot(it, wx, wy);
-      if (Math.hypot(ux - (it.x + g.cx + g.ux * d), uy - (it.y + g.cy + g.uy * d)) < g.r) return it;
+      if (Math.hypot(ux - (it.x + bx), uy - (it.y + by)) < g.r) return it;
     }
     return null;
   }
@@ -1107,7 +1199,20 @@ export class Board {
   /** Το επιλεγμένο ελατήριο, αν η επιλογή είναι ελατήριο. */
   get selectedSpring(): StampItem | null {
     const it = this.selected ? this.page.items.find((x) => x.id === this.selected) : undefined;
-    return it && it.kind === 'stamp' && STAMPS[it.name]?.spring ? it : null;
+    return it && it.kind === 'stamp' && (STAMPS[it.name]?.spring || STAMPS[it.name]?.play) ? it : null;
+  }
+
+  /** ▶/⏸ για το επιλεγμένο σχήμα με κίνηση (κύματα, κρούση, κυκλική κίνηση). */
+  togglePlay(): void {
+    const it = this.selectedSpring;
+    if (!it || !STAMPS[it.name]?.play) return;
+    if (this.osc.has(it.id)) this.osc.delete(it.id);
+    else {
+      this.osc.set(it.id, { amp: 1, t0: performance.now() });
+      this.runOsc();
+    }
+    this.redraw();
+    this.onUi();
   }
 
   get springMoving(): boolean {
@@ -1298,7 +1403,7 @@ export class Board {
   }
 
   cornerResizable(it: Item): boolean {
-    return it.kind === 'image' || it.kind === 'shape' || it.kind === 'axes' || it.kind === 'stamp' || it.kind === 'trig';
+    return it.kind === 'image' || it.kind === 'shape' || it.kind === 'axes' || it.kind === 'stamp' || it.kind === 'trig' || it.kind === 'text';
   }
 
   rotatable(it: Item): boolean {

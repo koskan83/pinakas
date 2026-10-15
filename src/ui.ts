@@ -178,7 +178,8 @@ export function mountUi(app: HTMLElement): void {
         <button data-an="asym" data-l="Ασύμπτ."><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v18M3 17h18" stroke-dasharray="2.5 3"/><path d="M11 4c.5 7 3 10.500 10 11"/></svg></span>Ασύμπτωτες</button>
       </div>
       <div class="group" id="springOpts">
-        <button id="spMarks" data-l="Θέσεις"><span class="txt">ΘΦΜ</span>Εμφάνιση θέσης φυσικού μήκους, θέσης ισορροπίας και ±A</button>
+        <button id="spPlay" data-l="Κίνηση"><span class="txt">▶</span>Κίνηση: ξεκινά ή σταματά (κύματα, κρούση, βολή, κυκλική κίνηση)</button>
+        <button id="spMarks" data-l="Θέσεις"><span class="txt">ΘΦΜ</span>Εμφάνιση θέσης φυσικού μήκους, θέσης ισορροπίας και ±A (στο εκκρεμές: ισορροπία και ακραίες θέσεις)</button>
         <button id="spDamp" data-l="Απόσβ."><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.500-9 3.500-9 5 0s3 6 4.500 0 2.500-4 3.500 0 2 2.500 3 0 1.500-1 2 0h1.500"/></svg></span>Απόσβεση: η ταλάντωση σβήνει σιγά σιγά</button>
         <button id="spStop" data-l="Στοπ"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg></span>Σταμάτημα ταλάντωσης</button>
       </div>
@@ -240,6 +241,10 @@ export function mountUi(app: HTMLElement): void {
   <div id="selOpts" class="hidden">
     <button id="del" title="Διαγραφή επιλογής"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></span><small>Διαγραφή</small></button>
     <button id="dup" title="Αντίγραφο επιλογής"><span class="txt">×2</span><small>Αντίγραφο</small></button>
+    <button id="bigger" title="Μεγαλύτερο (και τα γράμματα των κειμένων)"><span class="txt">＋</span><small>Μεγαλύτερο</small></button>
+    <button id="smaller" title="Μικρότερο (και τα γράμματα των κειμένων)"><span class="txt">−</span><small>Μικρότερο</small></button>
+    <button id="flipH" title="Καθρέφτης: αριστερά–δεξιά"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18" stroke-dasharray="2 2.5"/><path d="M9 6L3 18h6z"/><path d="M15 6l6 12h-6z" fill="currentColor" fill-opacity=".25"/></svg></span><small>Καθρέφτης</small></button>
+    <button id="flipV" title="Καθρέφτης: πάνω–κάτω"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18" stroke-dasharray="2 2.5"/><path d="M6 9L18 3v6z"/><path d="M6 15l12 6v-6z" fill="currentColor" fill-opacity=".25"/></svg></span><small>Πάνω–κάτω</small></button>
     <button id="sumBtn" title="Συνισταμένη: δύο βέλη ή ευθείες με κοινή κορυφή, ή μία γωνία"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l5-12M4 20l11-3"/><path d="M4 20L20 5" stroke="#60a5fa"/><path d="M14 5h6v6" stroke="#60a5fa"/></svg></span><small>Συνισταμένη</small></button>
     <i class="recSep"></i>
     <button data-rec="text" class="rec" title="Αναγνώριση της επιλογής ως κείμενο"><span class="txt">Aα</span><small>Σε κείμενο</small></button>

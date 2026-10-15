@@ -1,6 +1,8 @@
 /** Έτοιμα σχήματα φυσικής. Κάθε σχήμα ζωγραφίζεται μέσα σε κουτί w × h με το τρέχον χρώμα του c. */
 
 import { KIDS, type KidEnv } from './kids';
+import { hatch, label, path, zigzag } from './draw-util';
+import { PHYSICS } from './physics';
 
 type C = CanvasRenderingContext2D;
 
@@ -12,6 +14,8 @@ export interface SpringState {
   amp: number;
   /** Εμφάνιση Θ.Φ.Μ., Θ.Ι. και ±A. */
   marks: boolean;
+  /** Σχήματα με κίνηση (play): ms από τότε που πατήθηκε το ▶· undefined όταν είναι ακίνητο. */
+  t?: number;
 }
 
 /** Πού βρίσκεται το σώμα ενός ελατηρίου και προς τα πού κινείται. */
@@ -26,6 +30,10 @@ export interface SpringGeom {
   max: number;
   /** Ακτίνα μέσα στην οποία «πιάνεται» το σώμα. */
   r: number;
+  /** Πού είναι το σώμα με απομάκρυνση d, όταν δεν κινείται σε ευθεία (εκκρεμές: πάνω σε τόξο)· idle = ακίνητο, στο αρχικό σχέδιο. */
+  bob?(d: number, idle: boolean): [number, number];
+  /** Η απομάκρυνση του ακίνητου σχεδίου (εκκρεμές: γερμένο κατά θ)· αν λείπει, 0. */
+  rest?: number;
 }
 
 /** Περιοχή μέσα στο κουτί του εργαλείου (στις μονάδες του). */
@@ -40,6 +48,9 @@ export interface KidAsk {
   voice?: string;
   /** Οι λέξεις της ορθογραφίας: αντί για απλό πεδίο, το παράθυρο με τις φυλαγμένες λίστες (βλ. spell-lists.ts). */
   lists?: boolean;
+  /** Αρχική τιμή του πεδίου και έτοιμες τιμές που μπαίνουν με ένα πάτημα. */
+  value?: string;
+  picks?: string[];
   /**
    * Αντί για ερώτηση προς τον χρήστη, η «απάντηση» βγαίνει από ό,τι έχει γραφτεί με το μολύβι στην περιοχή:
    * 'read' = το διαβάζει η υπηρεσία αναγνώρισης και δίνεται στο apply (κενό αν δεν μπόρεσε να διαβαστεί)· 'clear' = σβήνεται και το apply παίρνει κενό.
@@ -51,8 +62,24 @@ export interface KidAsk {
   apply(text: string): number[] | null;
 }
 
+/** Κατηγορίες του μενού «Σχήματα Φυσικής», με τη σειρά που εμφανίζονται. */
+export const STAMP_CATS = {
+  mech: 'Δυνάμεις και κινήσεις',
+  mom: 'Ορμή και κρούσεις',
+  osc: 'Ταλαντώσεις',
+  wave: 'Κύματα',
+  circ: 'Ηλεκτρικά κυκλώματα',
+  em: 'Ηλεκτρικό και μαγνητικό πεδίο',
+} as const;
+
 export interface StampDef {
   label: string;
+  /** Κατηγορία στο μενού (βλ. STAMP_CATS). */
+  cat?: keyof typeof STAMP_CATS;
+  /** Δεν φαίνεται πια στο μενού· μένει μόνο για να ανοίγουν τα παλιά μαθήματα που το έχουν. */
+  hidden?: boolean;
+  /** Κινείται με το ▶ (κρούση, κύματα, κυκλική κίνηση): το draw παίρνει τον χρόνο στο st.t. */
+  play?: boolean;
   /** Αρχικό μέγεθος σε μονάδες πίνακα. */
   w: number;
   h: number;
@@ -89,40 +116,6 @@ export interface StampDef {
   fullAt?(x: number, y: number, w: number, h: number): boolean;
 }
 
-function path(c: C, pts: number[][], close = false): void {
-  c.beginPath();
-  pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-  if (close) c.closePath();
-  c.stroke();
-}
-
-function hatch(c: C, x0: number, y0: number, x1: number, y1: number, n: number, dx: number, dy: number): void {
-  c.save();
-  c.lineWidth *= 0.6;
-  c.beginPath();
-  for (let i = 0; i <= n; i++) {
-    const x = x0 + ((x1 - x0) * i) / n, y = y0 + ((y1 - y0) * i) / n;
-    c.moveTo(x, y);
-    c.lineTo(x + dx, y + dy);
-  }
-  c.stroke();
-  c.restore();
-}
-
-function zigzag(x0: number, x1: number, y: number, amp: number, n: number): number[][] {
-  const pts = [[x0, y]];
-  for (let i = 0; i < n; i++) pts.push([x0 + ((x1 - x0) * (i + 0.5)) / n, y + (i % 2 ? amp : -amp)]);
-  pts.push([x1, y]);
-  return pts;
-}
-
-function label(c: C, text: string, x: number, y: number, size: number): void {
-  c.font = `italic 600 ${size}px system-ui, "Segoe UI", Roboto, sans-serif`;
-  c.textAlign = 'center';
-  c.textBaseline = 'middle';
-  c.fillText(text, x, y);
-}
-
 /** Διακεκομμένη γραμμή αναφοράς με ετικέτα στο σημείο (tx, ty). */
 function mark(c: C, x0: number, y0: number, x1: number, y1: number, text: string, tx: number, ty: number, size: number): void {
   c.save();
@@ -135,6 +128,41 @@ function mark(c: C, x0: number, y0: number, x1: number, y1: number, text: string
   c.textBaseline = 'middle';
   c.fillText(text, tx, ty);
   c.restore();
+}
+
+/** Ένα γράμμα ενός σχήματος (φ, m, θ…): κέντρο και μέγεθος, στις μονάδες του κουτιού του. */
+export interface StampText { t: string; x: number; y: number; size: number }
+
+/** Τα γράμματα που ζωγραφίζει ένα σχήμα σε κουτί w × h, για να πατηθούν και να αλλάξουν. */
+export function stampTexts(d: StampDef, w: number, h: number): StampText[] {
+  const out: StampText[] = [];
+  let font = '';
+  // «καμβάς» που μόνο σημειώνει πού γράφτηκε κείμενο· όλα τα άλλα είναι κενές κινήσεις
+  const rec = new Proxy({}, {
+    get: (_, k) => (k === 'font' ? font : k === 'fillText' ? (t: string, x: number, y: number) => out.push({ t, x, y, size: parseFloat(/([\d.]+)px/.exec(font)?.[1] ?? '16') }) : () => {}),
+    set: (_, k, v) => {
+      if (k === 'font') font = v;
+      return true;
+    },
+  }) as C;
+  d.draw(rec, w, h);
+  return out;
+}
+
+/**
+ * Εκκρεμές: νήμα από το (w/2, 0)· η «απομάκρυνση» d είναι το μήκος του τόξου που διαγράφει η σφαίρα (θετικό προς τα δεξιά).
+ * Ακίνητο, σχεδιάζεται γερμένο κατά θ, όπως πάντα.
+ */
+function pendulum(w: number, h: number): SpringGeom {
+  const L = Math.hypot(w * 0.32, h * 0.82);
+  const at = (a: number): [number, number] => [w / 2 + L * Math.sin(a), L * Math.cos(a)];
+  const rest = L * Math.atan2(w * 0.32, h * 0.82);
+  const [cx, cy] = at(0);
+  return {
+    cx, cy, ux: 1, uy: 0, max: L * 0.7, r: Math.max(w * 0.18, 28),
+    bob: (d, idle) => at((idle ? rest : d) / L),
+    rest,
+  };
 }
 
 function meter(letter: string): StampDef['draw'] {
@@ -151,7 +179,7 @@ function meter(letter: string): StampDef['draw'] {
 
 export const STAMPS: Record<string, StampDef> = {
   incline: {
-    label: 'Κεκλιμένο επίπεδο', w: 320, h: 180,
+    label: 'Κεκλιμένο επίπεδο', cat: 'mech', w: 320, h: 180,
     draw(c, w, h) {
       path(c, [[0, h], [w, h], [w, h * 0.25], [0, h]], true);
       // σώμα πάνω στο επίπεδο
@@ -168,14 +196,14 @@ export const STAMPS: Record<string, StampDef> = {
     },
   },
   block: {
-    label: 'Σώμα', w: 120, h: 90,
+    label: 'Σώμα', cat: 'mech', w: 120, h: 90,
     draw(c, w, h) {
       c.strokeRect(1, 1, w - 2, h - 2);
       label(c, 'm', w / 2, h / 2, h * 0.4);
     },
   },
   spring: {
-    label: 'Οριζόντιο ελατήριο', w: 380, h: 100,
+    label: 'Οριζόντιο ελατήριο', cat: 'osc', w: 380, h: 100,
     draw(c, w, h, st) {
       const d = st?.d ?? 0;
       const x = w * 0.5 + d;
@@ -198,7 +226,7 @@ export const STAMPS: Record<string, StampDef> = {
     spring: (w, h) => ({ cx: w * 0.61, cy: h * 0.6, ux: 1, uy: 0, max: w * 0.24, r: Math.max(w * 0.13, h * 0.45) }),
   },
   springV: {
-    label: 'Κατακόρυφο ελατήριο', w: 150, h: 360,
+    label: 'Κατακόρυφο ελατήριο', cat: 'osc', w: 150, h: 360,
     draw(c, w, h, st) {
       const d = st?.d ?? 0;
       const cx = w / 2, top = 2, y0 = h * 0.06, yi = h * 0.56, y = yi + d, amp = w * 0.16, n = 14;
@@ -225,7 +253,7 @@ export const STAMPS: Record<string, StampDef> = {
     spring: (w, h) => ({ cx: w / 2, cy: h * 0.66, ux: 0, uy: 1, max: h * 0.2, r: Math.max(w * 0.34, h * 0.12) }),
   },
   springIncline: {
-    label: 'Ελατήριο σε κεκλιμένο', w: 400, h: 250,
+    label: 'Ελατήριο σε κεκλιμένο', cat: 'osc', w: 400, h: 250,
     draw(c, w, h, st) {
       const d = st?.d ?? 0;
       const rise = h * 0.72;
@@ -273,7 +301,7 @@ export const STAMPS: Record<string, StampDef> = {
     },
   },
   pulley: {
-    label: 'Τροχαλία', w: 200, h: 300,
+    label: 'Τροχαλία', cat: 'mech', w: 200, h: 300,
     draw(c, w, h) {
       const r = w * 0.28, cy = h * 0.22;
       path(c, [[w * 0.15, 0], [w * 0.85, 0]]);
@@ -294,31 +322,63 @@ export const STAMPS: Record<string, StampDef> = {
     },
   },
   pendulum: {
-    label: 'Εκκρεμές', w: 200, h: 280,
-    draw(c, w, h) {
+    label: 'Εκκρεμές', cat: 'osc', w: 200, h: 280,
+    draw(c, w, h, st) {
       path(c, [[w * 0.2, 0], [w * 0.8, 0]]);
       hatch(c, w * 0.25, 0, w * 0.75, 0, 5, 8, -8);
-      const bx = w * 0.82, by = h * 0.82, r = w * 0.09;
-      path(c, [[w / 2, 0], [bx, by]]);
+      const g = pendulum(w, h);
+      const idle = !st || (!st.amp && !st.d);
+      const r = w * 0.09;
+      const [bx, by] = g.bob!(st?.d ?? 0, idle);
       c.save();
       c.setLineDash([8, 6]);
       c.lineWidth *= 0.6;
       path(c, [[w / 2, 0], [w / 2, h * 0.95]]);
       c.restore();
+      // ακραίες θέσεις (±A) και θέση ισορροπίας: αχνά, διακεκομμένα
+      const amp = st?.amp || (idle ? g.rest! : 0);
+      if (st?.marks) {
+        const fs = Math.max(11, h * 0.055);
+        c.save();
+        c.globalAlpha = 0.55;
+        c.lineWidth *= 0.6;
+        c.setLineDash([6, 5]);
+        if (amp) for (const [s, t] of [[-1, '−A'], [1, '+A']] as const) {
+          const [ex, ey] = g.bob!(s * amp, false);
+          path(c, [[w / 2, 0], [ex, ey]]);
+          c.beginPath();
+          c.arc(ex, ey, r, 0, Math.PI * 2);
+          c.stroke();
+          c.font = `600 ${fs}px system-ui, "Segoe UI", Roboto, sans-serif`;
+          c.textAlign = 'center';
+          c.textBaseline = 'middle';
+          c.globalAlpha = 0.85;
+          c.fillText(t, ex, ey + r + fs * 0.9);
+          c.globalAlpha = 0.55;
+        }
+        c.globalAlpha = 0.85;
+        c.font = `600 ${fs}px system-ui, "Segoe UI", Roboto, sans-serif`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.fillText('Θ.Ι.', w / 2, h * 0.95 + fs * 0.9);
+        c.restore();
+      }
+      path(c, [[w / 2, 0], [bx, by]]);
       c.beginPath();
       c.arc(bx, by, r, 0, Math.PI * 2);
       c.fill();
-      label(c, 'θ', w * 0.57, h * 0.3, h * 0.08);
+      if (idle) label(c, 'θ', w * 0.57, h * 0.3, h * 0.08);
     },
+    spring: (w, h) => pendulum(w, h),
   },
   resistor: {
-    label: 'Αντιστάτης', w: 220, h: 60,
+    label: 'Αντιστάτης', hidden: true, w: 220, h: 60,
     draw(c, w, h) {
       path(c, [[0, h / 2], [w * 0.22, h / 2], ...zigzag(w * 0.22, w * 0.78, h / 2, h * 0.32, 7).slice(1), [w, h / 2]]);
     },
   },
   battery: {
-    label: 'Πηγή', w: 160, h: 90,
+    label: 'Πηγή', hidden: true, w: 160, h: 90,
     draw(c, w, h) {
       path(c, [[0, h / 2], [w * 0.44, h / 2]]);
       path(c, [[w * 0.56, h / 2], [w, h / 2]]);
@@ -332,7 +392,7 @@ export const STAMPS: Record<string, StampDef> = {
     },
   },
   capacitor: {
-    label: 'Πυκνωτής', w: 160, h: 90,
+    label: 'Πυκνωτής', hidden: true, w: 160, h: 90,
     draw(c, w, h) {
       path(c, [[0, h / 2], [w * 0.44, h / 2]]);
       path(c, [[w * 0.56, h / 2], [w, h / 2]]);
@@ -341,7 +401,7 @@ export const STAMPS: Record<string, StampDef> = {
     },
   },
   lamp: {
-    label: 'Λαμπτήρας', w: 160, h: 80,
+    label: 'Λαμπτήρας', hidden: true, w: 160, h: 80,
     draw(c, w, h) {
       const r = h * 0.42, q = r * Math.SQRT1_2;
       path(c, [[0, h / 2], [w / 2 - r, h / 2]]);
@@ -354,7 +414,7 @@ export const STAMPS: Record<string, StampDef> = {
     },
   },
   switch: {
-    label: 'Διακόπτης', w: 180, h: 70,
+    label: 'Διακόπτης', hidden: true, w: 180, h: 70,
     draw(c, w, h) {
       const y = h * 0.75;
       path(c, [[0, y], [w * 0.3, y]]);
@@ -367,8 +427,8 @@ export const STAMPS: Record<string, StampDef> = {
       }
     },
   },
-  ammeter: { label: 'Αμπερόμετρο', w: 160, h: 80, draw: meter('A') },
-  voltmeter: { label: 'Βολτόμετρο', w: 160, h: 80, draw: meter('V') },
+  ammeter: { label: 'Αμπερόμετρο', hidden: true, w: 160, h: 80, draw: meter('A') },
+  voltmeter: { label: 'Βολτόμετρο', hidden: true, w: 160, h: 80, draw: meter('V') },
 };
 
-Object.assign(STAMPS, KIDS);
+Object.assign(STAMPS, PHYSICS, KIDS);
