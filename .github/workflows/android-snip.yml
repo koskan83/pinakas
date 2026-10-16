@@ -21,11 +21,11 @@ jobs:
         working-directory: android-snip
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
+      # το Android SDK υπάρχει ήδη στο ubuntu-latest (ANDROID_HOME)· ό,τι λείπει το κατεβάζει το Gradle
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
