@@ -5,6 +5,7 @@ import { kvGet, kvSet } from './storage';
 import { Lessons } from './lessons';
 import { GadgetKind } from './gadgets';
 import { isNative, isOverlay, nativeScreenshot, openOverlay } from './native';
+import { initSnip, toggleSnip } from './snip';
 import { STAMPS, STAMP_CATS, type StampDef } from './stamps';
 import { PEN_ICON, PenKind } from './ui';
 import { ask, notice } from './dialog';
@@ -744,12 +745,15 @@ tplMenu.addEventListener('click', async (e) => {
 // ---------- κύριο μενού ----------
 
 if (isNative && !isOverlay) $('overlayAct').classList.remove('hidden');
+initSnip();
 const onMenu = async (e: Event): Promise<void> => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
   if (!b) return;
   const act = b.dataset.act!;
   if (!act.startsWith('bg-')) closePopups();
-  if (act === 'pdflogo') {
+  if (act === 'snip') {
+    toggleSnip();
+  } else if (act === 'pdflogo') {
     setPdfLogo(!pdfLogo);
   } else if (act === 'startscr') {
     setStartScr(!startScr);

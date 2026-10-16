@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Το σήμα του PrismaBoard (public/logo.svg) ως vector drawable -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="300dp" android:height="300dp"
+    android:viewportWidth="300" android:viewportHeight="300">
+    <group android:pivotX="150" android:pivotY="156" android:rotation="-8" android:translateX="-9">
+        <path android:strokeColor="#c2b2d8" android:strokeAlpha="0.9" android:strokeWidth="15" android:fillColor="#00000000"
+            android:pathData="M134.00 25.29 A32 32 0 0 1 166.00 25.29 A226 226 0 0 1 279.00 221.01 A32 32 0 0 1 263.00 248.72 A226 226 0 0 1 37.00 248.72 A32 32 0 0 1 21.00 221.01 A226 226 0 0 1 134.00 25.29Z" />
+    </group>
+    <group android:pivotX="150" android:pivotY="156" android:rotation="-3">
+        <path android:strokeColor="#faf29b" android:strokeAlpha="0.9" android:strokeWidth="15" android:fillColor="#00000000"
+            android:pathData="M134.00 25.29 A32 32 0 0 1 166.00 25.29 A226 226 0 0 1 279.00 221.01 A32 32 0 0 1 263.00 248.72 A226 226 0 0 1 37.00 248.72 A32 32 0 0 1 21.00 221.01 A226 226 0 0 1 134.00 25.29Z" />
+    </group>
+    <group android:pivotX="150" android:pivotY="156" android:rotation="3.5" android:translateX="9">
+        <path android:strokeColor="#94dae4" android:strokeAlpha="0.9" android:strokeWidth="15" android:fillColor="#00000000"
+            android:pathData="M134.00 25.29 A32 32 0 0 1 166.00 25.29 A226 226 0 0 1 279.00 221.01 A32 32 0 0 1 263.00 248.72 A226 226 0 0 1 37.00 248.72 A32 32 0 0 1 21.00 221.01 A226 226 0 0 1 134.00 25.29Z" />
+    </group>
+    <group android:translateX="141" android:translateY="152">
+        <path android:fillColor="#6d5a9c" android:fillType="evenOdd"
+            android:pathData="M-36 -62h24v46c7-9 17-14 29-14 23 0 40 18 40 43s-17 43-40 43c-13 0-23-5-30-15v13h-23z M11 -9c-13 0-23 9-23 22s10 22 23 22 22-9 22-22-9-22-22-22z" />
+    </group>
+</vector>

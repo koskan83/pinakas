@@ -115,6 +115,7 @@ export function mountUi(app: HTMLElement): void {
     ${mi('data-act="labels"', I.tag, 'Ονόματα κάτω από τα εικονίδια')}
     ${mi('data-act="pdflogo"', I.doc, 'Λογότυπο στις σελίδες του PDF')}
     ${mi('data-act="startscr"', I.spark, '«Τι κάνουμε σήμερα;» στο πρώτο άνοιγμα της μέρας')}
+    ${mi('data-act="snip" class="hidden"', I.screen, 'Ψαλίδι πάνω από άλλες εφαρμογές')}
     <div class="gHead">Αρχεία</div>
     ${mi('data-act="open"', I.folder, 'Άνοιγμα αρχείου ως νέο μάθημα…')}
     ${mi('data-act="save"', I.save, 'Αποθήκευση του μαθήματος σε αρχείο')}

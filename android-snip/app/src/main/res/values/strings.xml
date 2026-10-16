@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PrismaBoard ψαλίδι</string>
+    <string name="service_label">PrismaBoard ψαλίδι</string>
+    <string name="service_summary">Ο κύκλος του PrismaBoard πάνω από τις άλλες εφαρμογές, για να στέλνεις κομμάτια της οθόνης στον πίνακα</string>
+    <string name="service_description">Βάζει τον κύκλο με το σήμα του PrismaBoard πάνω από τις άλλες εφαρμογές. Όταν τον πατάς, τραβάει στιγμιότυπο της οθόνης, ώστε να επιλέξεις ένα κομμάτι (από PDF, σελίδα, βιβλίο) και να το στείλεις στο PrismaBoard. Ανοίγει και κλείνει από τις Ρυθμίσεις του PrismaBoard. Δεν διαβάζει και δεν στέλνει πουθενά αλλού τίποτα από όσα εμφανίζονται στην οθόνη.</string>
+</resources>
