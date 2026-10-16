@@ -10,7 +10,17 @@ const KEY = 'grafida.snip';
 /** Αν ο βοηθός δεν είναι εγκατεστημένος, ο Chrome ανοίγει αυτό αντί για τον βοηθό (κατέβασμα του APK). */
 export const SNIP_APK = 'https://github.com/koskan83/prismaboard/releases/download/prismasnip/PrismaBoard-psalidi.apk';
 
-export const snipAvailable = !isNative && /Android/i.test(navigator.userAgent);
+/**
+ * Android; και στις μεγάλες οθόνες (BenQ Board), όπου ο Chrome ζητά μόνος του «έκδοση για υπολογιστές»
+ * και το userAgent λέει Linux αντί για Android: τότε το καταλαβαίνουμε από την αφή.
+ */
+function isAndroid(): boolean {
+  const ua = navigator.userAgent;
+  const platform = (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform ?? '';
+  return /Android/i.test(ua) || /Android/i.test(platform) || (/Linux/i.test(ua) && !/CrOS/i.test(ua) && navigator.maxTouchPoints > 0);
+}
+
+export const snipAvailable = !isNative && isAndroid();
 
 let on = false;
 
