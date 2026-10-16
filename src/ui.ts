@@ -123,7 +123,7 @@ export function mountUi(app: HTMLElement): void {
     <div class="gHead">Για προχωρημένους</div>
     ${mi('data-act="diag"', I.target, 'Διάγνωση αφής/γραφίδας')}
     ${mi('data-act="test"', I.check, 'Λίστα δοκιμής στην τάξη')}
-    ${mi('data-act="usage"', I.check, 'Μετρητές χρήσης (αρχείο)')}
+    ${mi('data-act="usage"', I.check, 'Τι χρησιμοποιώ')}
     ${mi('data-act="news"', I.spark, 'Τι νέο')}
     <div id="verLine"></div>
   </div>
@@ -143,6 +143,25 @@ export function mountUi(app: HTMLElement): void {
       <button id="barFold"><span>▾</span>Σύμπτυξη</button>
     </div>
     <div id="subbar">
+      <div class="group hidden" id="selOpts">
+        <button id="del" title="Διαγραφή επιλογής" data-l="Διαγραφή"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></span></button>
+        <button id="dup" title="Αντίγραφο επιλογής" data-l="Αντίγραφο"><span class="txt">×2</span></button>
+        <button id="bigger" title="Μεγαλύτερο (και τα γράμματα των κειμένων)" data-l="Μεγαλύτερο"><span class="txt">＋</span></button>
+        <button id="smaller" title="Μικρότερο (και τα γράμματα των κειμένων)" data-l="Μικρότερο"><span class="txt">−</span></button>
+        <button id="flipH" title="Καθρέφτης: αριστερά–δεξιά" data-l="Καθρέφτης"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18" stroke-dasharray="2 2.5"/><path d="M9 6L3 18h6z"/><path d="M15 6l6 12h-6z" fill="currentColor" fill-opacity=".25"/></svg></span></button>
+        <button id="flipV" title="Καθρέφτης: πάνω–κάτω" data-l="Πάνω–κάτω"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18" stroke-dasharray="2 2.5"/><path d="M6 9L18 3v6z"/><path d="M6 15l12 6v-6z" fill="currentColor" fill-opacity=".25"/></svg></span></button>
+        <button id="sumBtn" title="Συνισταμένη: δύο βέλη ή ευθείες με κοινή κορυφή, ή μία γωνία" data-l="Συνισταμένη"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l5-12M4 20l11-3"/><path d="M4 20L20 5" stroke="#60a5fa"/><path d="M14 5h6v6" stroke="#60a5fa"/></svg></span></button>
+        <i class="sep recSep"></i>
+        <button data-rec="text" class="rec" title="Αναγνώριση της επιλογής ως κείμενο" data-l="Σε κείμενο"><span class="txt">Aα</span></button>
+        <button data-rec="math" class="rec" data-lv="sec" title="Αναγνώριση της επιλογής ως τύπο" data-l="Σε τύπο"><span class="txt">√x</span></button>
+        <button data-rec="solve" class="rec solve" data-lv="sec" title="Λύση της επιλεγμένης άσκησης (μπαίνει από κάτω)" data-l="Λύση"><span class="txt">x=?</span></button>
+        <button data-rec="spell" class="rec check" data-lv="pri" title="Έλεγχος ορθογραφίας: από κάτω γράφεται ποιες λέξεις θέλουν διόρθωση" data-l="Ορθογραφία"><span class="txt">αβγ</span></button>
+        <button data-speak="1" class="rec" data-lv="pri" title="Ο πίνακας διαβάζει φωναχτά το επιλεγμένο κείμενο" data-l="Διάβασέ το"><span class="txt">🔊</span></button>
+        <button data-spellwords="1" class="rec" data-lv="pri" title="Ορθογραφία με το τερατάκι με τις επιλεγμένες λέξεις (γραμμένες με το «Κείμενο» ή με το χέρι)" data-l="Τερατάκι"><span class="txt">👾</span></button>
+        <button data-rec="graph" class="rec graph" data-lv="sec" title="Γραφική παράσταση της επιλεγμένης συνάρτησης, σε άξονες που ταιριάζουν στο πεδίο ορισμού της" data-l="Γραφική"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v17h17"/><path d="M6 17c3 0 4-11 7-11s3 7 7 7"/></svg></span></button>
+        <button data-rec="figure" class="rec graph" data-lv="sec" title="Σχήμα για την επιλεγμένη εκφώνηση (π.χ. Φυσικής): μπαίνει από κάτω, αν η άσκηση χρειάζεται σχήμα" data-l="Σχήμα"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19h18M5 19L17 8v11"/><rect x="9.500" y="8.800" width="5" height="4" transform="rotate(-42.500 12 10.800)"/></svg></span></button>
+        <button data-rec="check" class="rec check" title="Έλεγχος της λύσης ενός μαθητή: δείχνει σε ποια γραμμή είναι το πρώτο λάθος" data-l="Έλεγχος"><span class="txt">✓?</span></button>
+      </div>
       <div class="group" id="penKinds">
         <button data-pen="pen"><span>${PENCIL_ICON}</span>Στυλό</button>
         <button data-pen="laser"><span>${LASER_ICON}</span>Δείκτης λέιζερ (σβήνει μόνος του)</button>
@@ -204,6 +223,7 @@ export function mountUi(app: HTMLElement): void {
       <button id="importBtn" class="accent" data-l="Εισαγ."><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>Εισαγωγή</button>
       <button id="gadgetBtn" data-l="Όργανα"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3l4.5 8h-9z"/><circle cx="17" cy="7.5" r="4"/><rect x="4" y="14" width="7" height="7" rx="1"/><path d="M14 21l7-7"/></svg></span>Όργανα και βοηθήματα</button>
     </div>
+    <div class="group hidden" id="favs"></div>
     <div class="group pages">
       <button id="prev"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></span></button>
       <div id="pageLabel">1 / 1</div>
@@ -239,26 +259,8 @@ export function mountUi(app: HTMLElement): void {
     ${mi('id="tplSave"', I.plus, 'Αποθήκευση της σελίδας ως πρότυπο')}
   </div>
 
-  <div id="selOpts" class="hidden">
-    <button id="del" title="Διαγραφή επιλογής"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></span><small>Διαγραφή</small></button>
-    <button id="dup" title="Αντίγραφο επιλογής"><span class="txt">×2</span><small>Αντίγραφο</small></button>
-    <button id="bigger" title="Μεγαλύτερο (και τα γράμματα των κειμένων)"><span class="txt">＋</span><small>Μεγαλύτερο</small></button>
-    <button id="smaller" title="Μικρότερο (και τα γράμματα των κειμένων)"><span class="txt">−</span><small>Μικρότερο</small></button>
-    <button id="flipH" title="Καθρέφτης: αριστερά–δεξιά"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18" stroke-dasharray="2 2.5"/><path d="M9 6L3 18h6z"/><path d="M15 6l6 12h-6z" fill="currentColor" fill-opacity=".25"/></svg></span><small>Καθρέφτης</small></button>
-    <button id="flipV" title="Καθρέφτης: πάνω–κάτω"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18" stroke-dasharray="2 2.5"/><path d="M6 9L18 3v6z"/><path d="M6 15l12 6v-6z" fill="currentColor" fill-opacity=".25"/></svg></span><small>Πάνω–κάτω</small></button>
-    <button id="sumBtn" title="Συνισταμένη: δύο βέλη ή ευθείες με κοινή κορυφή, ή μία γωνία"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l5-12M4 20l11-3"/><path d="M4 20L20 5" stroke="#60a5fa"/><path d="M14 5h6v6" stroke="#60a5fa"/></svg></span><small>Συνισταμένη</small></button>
-    <i class="recSep"></i>
-    <button data-rec="text" class="rec" title="Αναγνώριση της επιλογής ως κείμενο"><span class="txt">Aα</span><small>Σε κείμενο</small></button>
-    <button data-rec="math" class="rec" data-lv="sec" title="Αναγνώριση της επιλογής ως τύπο"><span class="txt">√x</span><small>Σε τύπο</small></button>
-    <button data-rec="solve" class="rec solve" data-lv="sec" title="Λύση της επιλεγμένης άσκησης (μπαίνει από κάτω)"><span class="txt">x=?</span><small>Λύση</small></button>
-    <button data-rec="spell" class="rec check" data-lv="pri" title="Έλεγχος ορθογραφίας: από κάτω γράφεται ποιες λέξεις θέλουν διόρθωση"><span class="txt">αβγ</span><small>Ορθογραφία</small></button>
-    <button data-speak="1" class="rec" data-lv="pri" title="Ο πίνακας διαβάζει φωναχτά το επιλεγμένο κείμενο"><span class="txt">🔊</span><small>Διάβασέ το</small></button>
-    <button data-spellwords="1" class="rec" data-lv="pri" title="Ορθογραφία με το τερατάκι με τις επιλεγμένες λέξεις (γραμμένες με το «Κείμενο» ή με το χέρι)"><span class="txt">👾</span><small>Τερατάκι</small></button>
-    <button data-rec="graph" class="rec graph" data-lv="sec" title="Γραφική παράσταση της επιλεγμένης συνάρτησης, σε άξονες που ταιριάζουν στο πεδίο ορισμού της"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v17h17"/><path d="M6 17c3 0 4-11 7-11s3 7 7 7"/></svg></span><small>Γραφική</small></button>
-    <button data-rec="figure" class="rec graph" data-lv="sec" title="Σχήμα για την επιλεγμένη εκφώνηση (π.χ. Φυσικής): μπαίνει από κάτω, αν η άσκηση χρειάζεται σχήμα"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19h18M5 19L17 8v11"/><rect x="9.500" y="8.800" width="5" height="4" transform="rotate(-42.500 12 10.800)"/></svg></span><small>Σχήμα</small></button>
-    <button data-rec="check" class="rec check" title="Έλεγχος της λύσης ενός μαθητή: δείχνει σε ποια γραμμή είναι το πρώτο λάθος"><span class="txt">✓?</span><small>Έλεγχος</small></button>
-  </div>
   <div id="gadgetMenu" class="popup hidden">
+    <div id="favBar"><span id="favMsg">Πάτα έως 6 όργανα για να μπουν στη μπάρα</span><button id="favEdit" class="pill" title="Διάλεξε έως 6 όργανα που θα είναι πάντα στη βασική μπάρα">☆ Αγαπημένα</button></div>
     <div class="gHead" id="recentHead">Πρόσφατα</div>
     <div class="tiles" id="recentTiles"></div>
     <div id="gTabs" data-lv="pri">

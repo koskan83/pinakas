@@ -1,10 +1,11 @@
 /** Βιβλιοθήκη μαθημάτων: κάθε μάθημα είναι ένας πίνακας που σώζεται χωριστά στη συσκευή. */
 
-import { Doc, newDoc, uid } from './model';
+import { Doc, newDoc, readDoc, uid } from './model';
 import { backupLesson, driveClientId, driveConnect, driveReady, listLessonBackups, readBackup, trashBackup } from './drive';
 import { deleteLesson, kvGet, kvSet, loadDoc, loadLesson, saveLesson } from './storage';
 import { ask, askLines, confirmBox, type WordList } from './dialog';
 import { loadLists, mergeLists } from './spell-lists';
+import { mascot } from './mascot';
 
 export interface LessonMeta {
   id: string;
@@ -42,6 +43,10 @@ interface SafeState {
   ids: Record<string, number>;
   /** Μαθήματα που σβήστηκαν εδώ: δεν ξαναέρχονται από το Drive. */
   gone: string[];
+  /** Πότε έγινε το τελευταίο αντίγραφο σε αρχείο. */
+  file?: number;
+  /** Πότε φάνηκε τελευταία η υπενθύμιση για αντίγραφο. */
+  told?: number;
 }
 const SAFE = 'grafida.safe';
 const GROUP = 'grafida.group';
@@ -71,7 +76,7 @@ export interface LessonHost {
   /** Ξαναζωγραφίζει τον πίνακα (π.χ. άλλαξαν τα ονόματα του τμήματος που δείχνει η κλήρωση). */
   redraw(): void;
   download(blob: Blob, name: string): void;
-  toast(msg: string, ms?: number): void;
+  toast(msg: string, ms?: number, action?: { label: string; run: () => void }): void;
 }
 
 
@@ -96,6 +101,8 @@ export class Lessons {
   /** Τα ονόματα των μαθητών κάθε τμήματος. Μένουν μόνο σε αυτή τη συσκευή. */
   private rosters: Record<string, string[]> = {};
   private startEl: HTMLElement;
+  /** Μαθήματα που δεν άνοιξαν σε αυτή τη συνεδρία (π.χ. από νεότερη έκδοση). */
+  private failed = new Set<string>();
 
   constructor(private host: LessonHost, parent: HTMLElement) {
     parent.insertAdjacentHTML(
@@ -221,6 +228,8 @@ export class Lessons {
       </button>
       ${rows ? `<div id="stGroups">${rows}</div>` : ''}
       <div id="stActs"><button data-st="lib">Όλα τα μαθήματα</button><button data-st="new" data-g="" class="go">＋ Νέο μάθημα</button></div>`;
+    // το τερατάκι λέει την καλημέρα
+    this.startEl.querySelector('#stHead')!.prepend(mascot(76, 1.4));
     this.startEl.classList.remove('hidden');
   }
 
@@ -302,12 +311,17 @@ export class Lessons {
 
   private async show(id: string): Promise<void> {
     const doc = (await loadLesson(id, true)) ?? newDoc();
-    this.cur = id;
     this.loading = true;
     try {
       this.host.setDoc(doc);
-    } catch {
-      this.host.setDoc(newDoc());
+      this.cur = id;
+    } catch (err) {
+      // δεν διαβάζεται (π.χ. από νεότερη έκδοση): μένει ανέγγιχτο, και ανοίγει άλλο μάθημα ή ένα νέο, ώστε να μη γραφτεί ποτέ από πάνω του
+      this.loading = false;
+      this.host.toast(`Το «${this.index.find((m) => m.id === id)?.name ?? ''}» δεν άνοιξε: ${err instanceof Error ? err.message : err}`, 8000);
+      this.failed.add(id);
+      const other = this.index.find((m) => !this.failed.has(m.id));
+      return other ? this.show(other.id) : this.show((await this.add(newDoc(), this.defaultName())).id);
     }
     this.loading = false;
     this.dirty = false;
@@ -457,7 +471,12 @@ export class Lessons {
    * Επιστρέφει 'new', 'upd', ή null αν έμεινε όπως ήταν. Το ευρετήριο το γράφει όποιος την καλεί.
    */
   private async put(meta: LessonMeta, doc: Doc): Promise<'new' | 'upd' | null> {
-    if (!meta?.id || doc?.v !== 1 || !Array.isArray(doc.pages)) return null;
+    if (!meta?.id) return null;
+    try {
+      doc = readDoc(doc);
+    } catch {
+      return null;
+    }
     const have = this.index.find((m) => m.id === meta.id);
     if (have && have.updated >= meta.updated) return null;
     await saveLesson(meta.id, doc);
@@ -602,6 +621,24 @@ export class Lessons {
     this.host.redraw();
   }
 
+  /**
+   * Μία φορά την εβδομάδα, αν υπάρχουν μαθήματα που άλλαξαν μετά το τελευταίο αντίγραφο (Drive ή αρχείο),
+   * ένα μήνυμα με κουμπί που το κάνει με ένα πάτημα. Τα μαθήματα αλλιώς ζουν μόνο σε αυτή τη συσκευή.
+   */
+  remind(): void {
+    const last = Math.max(this.safe.done ? this.safe.at : 0, this.safe.file ?? 0);
+    const first = this.safe.done || this.safe.file ? 0 : this.safe.at;
+    const since = Math.max(last, first);
+    if (Date.now() - since < REMIND_DAYS * DAY || Date.now() - (this.safe.told ?? 0) < REMIND_DAYS * DAY) return;
+    if (!this.index.some((m) => m.updated > last)) return;
+    this.safe.told = Date.now();
+    this.saveSafe();
+    const days = last ? Math.floor((Date.now() - last) / DAY) : 0;
+    const msg = last ? `Τελευταίο αντίγραφο των μαθημάτων πριν από ${days} μέρες` : 'Τα μαθήματα υπάρχουν μόνο σε αυτή τη συσκευή';
+    if (driveClientId()) this.host.toast(msg, 15000, { label: '☁ Αντίγραφο στο Drive', run: () => void this.cloudBackup() });
+    else this.host.toast(msg, 15000, { label: 'Αντίγραφο σε αρχείο', run: () => void this.backup() });
+  }
+
   private async backup(): Promise<void> {
     const out: Backup = { grafida: 'backup', v: 1, lessons: [], rosters: this.rosters, spellLists: await loadLists() };
     for (const meta of this.index) {
@@ -611,6 +648,8 @@ export class Lessons {
     const d = new Date();
     const p = (n: number): string => String(n).padStart(2, '0');
     this.host.download(new Blob([JSON.stringify(out)], { type: 'application/json' }), `mathimata_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.json`);
+    this.safe.file = Date.now();
+    this.saveSafe();
   }
 
   /** Φέρνει μαθήματα από αρχείο αντιγράφου: όσα υπάρχουν ήδη αντικαθίστανται μόνο αν το αντίγραφο είναι νεότερο. */
@@ -619,8 +658,8 @@ export class Lessons {
       const data = JSON.parse(await f.text()) as Partial<Backup> & Partial<Doc>;
       if (data.grafida !== 'backup' || !Array.isArray(data.lessons)) {
         // σκέτο αρχείο πίνακα: μπαίνει ως νέο μάθημα
-        if (data.v === 1 && Array.isArray(data.pages)) {
-          await this.add(data as Doc, f.name.replace(/\.json$/i, ''));
+        if (typeof data.v === 'number' && Array.isArray(data.pages)) {
+          await this.add(readDoc(data), f.name.replace(/\.json$/i, ''));
           this.render();
           return this.host.toast('Το αρχείο μπήκε ως νέο μάθημα');
         }

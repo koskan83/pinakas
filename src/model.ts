@@ -247,6 +247,43 @@ export function newDoc(): Doc {
   return { v: 1, bg: 'white', pages: [newPage()] };
 }
 
+/** Η μορφή των αποθηκευμένων πινάκων. Αλλάζει μόνο όταν αλλάζει κάτι που οι παλιές εκδόσεις δεν θα καταλάβαιναν. */
+export const DOC_V = 1;
+const KINDS = new Set<string>(['stroke', 'image', 'shape', 'text', 'angle', 'axes', 'stamp', 'trig']);
+const BGS = new Set<string>(['white', 'grid', 'lines', 'dark', 'dark-grid', 'dark-lines', 'write', 'squares']);
+/**
+ * Μετατροπές από κάθε παλιά μορφή στην επόμενη (από v σε v + 1). Όταν ανέβει το DOC_V, μπαίνει εδώ η μετατροπή,
+ * ώστε τα μαθήματα των προηγούμενων χρόνων να ανοίγουν πάντα σωστά.
+ */
+const UPGRADE: Record<number, (d: Record<string, unknown>) => Record<string, unknown>> = {};
+
+/**
+ * Ο μόνος δρόμος από αποθηκευμένο ή εισαγόμενο πίνακα (μάθημα, αρχείο, αντίγραφο) προς την εφαρμογή:
+ * ελέγχει τη μορφή, φέρνει παλιές μορφές στη σημερινή και διορθώνει ό,τι λείπει, χωρίς να πετάει δουλειά.
+ * Πετάει σφάλμα με κατανοητό μήνυμα αν το αρχείο δεν είναι πίνακας ή είναι από νεότερη έκδοση.
+ */
+export function readDoc(raw: unknown): Doc {
+  const r = raw as Record<string, unknown> | null;
+  if (!r || typeof r !== 'object' || typeof r.v !== 'number' || !Array.isArray(r.pages)) throw new Error('Μη έγκυρο αρχείο πίνακα');
+  if (r.v > DOC_V) throw new Error('Το μάθημα φτιάχτηκε με νεότερη έκδοση του PrismaBoard· ανανέωσε την εφαρμογή για να το ανοίξεις');
+  let d: Record<string, unknown> = r;
+  for (let v = r.v; v < DOC_V; v++) {
+    const up = UPGRADE[v];
+    if (!up) throw new Error('Μη έγκυρο αρχείο πίνακα');
+    d = { ...up(d), v: v + 1 };
+  }
+  const pages = (d.pages as unknown[]).map((p): Page => {
+    const pg = (p && typeof p === 'object' ? p : {}) as Partial<Page>;
+    const v = pg.view;
+    const view = v && [v.x, v.y, v.k].every(Number.isFinite) && v.k > 0 ? v : { x: 0, y: 0, k: 1 };
+    const items = (Array.isArray(pg.items) ? pg.items : []).filter((it): it is Item => !!it && typeof it === 'object' && KINDS.has((it as Item).kind));
+    for (const it of items) if (typeof it.id !== 'string' || !it.id) it.id = uid();
+    return { ...pg, items, view };
+  });
+  if (pages.length === 0) pages.push(newPage());
+  return { ...d, v: 1, bg: BGS.has(d.bg as string) ? (d.bg as Background) : 'white', pages };
+}
+
 /** Αναστρέψιμες πράξεις για undo/redo. */
 export type Op =
   | { t: 'add'; p: number; item: Item }

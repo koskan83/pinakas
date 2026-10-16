@@ -940,6 +940,34 @@ test('Αριθμοκυβάκια μέσα στον πίνακα: σέρνεις 
   assert(ns(back).join() === '1,2,3,4,5', 'η αναίρεση δεν ξεχώρισε το 2 από το 3');
 });
 
+test('⭐ Αγαπημένα: ο χάρακας μπαίνει στη μπάρα, ανοίγει από εκεί και μένει μετά από κλείσιμο', async () => {
+  await page.click('#gadgetBtn');
+  await page.click('#favEdit');
+  await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-gadget="ruler"]');
+  // όσο διαλέγεις, το πλακίδιο δεν ανοίγει το όργανο
+  const opened = await page.evaluate(() => document.querySelector('#gadgetMenu .tiles:not(#recentTiles) [data-gadget="ruler"]').classList.contains('on'));
+  await page.click('#favEdit');
+  // το μενού μπορεί να σκεπάζει το κουμπί του: κλείνει με Esc
+  await page.keyboard.press('Escape');
+  await page.reload();
+  await page.waitForSelector('#toolbar');
+  await sleep(400);
+  const fav = '#favs [data-fav="gadget=ruler"]';
+  assert(await visible(fav), 'ο χάρακας δεν φάνηκε στη μπάρα μετά το ξανάνοιγμα');
+  await page.click(fav);
+  const on = await page.evaluate((s) => document.querySelector(s).classList.contains('on'), fav);
+  await page.click(fav);
+  // καθαρή κατάσταση: τα αγαπημένα αδειάζουν
+  await page.click('#gadgetBtn');
+  await page.click('#favEdit');
+  await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-gadget="ruler"]');
+  await page.click('#favEdit');
+  await page.keyboard.press('Escape');
+  assert(!opened, 'στην επιλογή αγαπημένων το πλακίδιο άνοιξε τον χάρακα');
+  assert(on, 'το κουμπί της μπάρας δεν άνοιξε τον χάρακα');
+  assert(!(await visible('#favs')), 'τα αγαπημένα δεν άδειασαν');
+});
+
 await page.goto(URL_);
 await page.waitForSelector('#toolbar');
 await sleep(600);

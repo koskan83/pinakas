@@ -236,18 +236,46 @@ export function confirmBox(title: string, ok = 'Ναι', danger = false, hint?: 
 }
 
 /** Ενημερωτικό παράθυρο με λίστα (π.χ. «Τι νέο»). */
-export function notice(title: string, lines: string[], hint?: string): Promise<void> {
+export interface NoticeOptions {
+  hint?: string;
+  /** Γραμμές που φαίνονται μόνο με το κουμπί `moreLabel`. */
+  more?: string[];
+  moreLabel?: string;
+  /** Ένα ακόμα κουμπί (π.χ. λήψη σε αρχείο)· δεν κλείνει το παράθυρο. */
+  extra?: { label: string; run: () => void };
+}
+
+export function notice(title: string, lines: string[], o: NoticeOptions = {}): Promise<void> {
+  const { hint, more = [], moreLabel = 'Παλιότερα', extra } = o;
   return new Promise((res) => {
     const { back, box } = shell(title, hint);
     const ul = document.createElement('ul');
-    for (const l of lines) {
-      const li = document.createElement('li');
-      li.textContent = l;
-      ul.append(li);
-    }
+    const add = (ls: string[]): void => {
+      for (const l of ls) {
+        const li = document.createElement('li');
+        li.textContent = l;
+        ul.append(li);
+      }
+    };
+    add(lines);
     const acts = document.createElement('div');
     acts.className = 'askActs';
     const yes = button('Εντάξει', 'go');
+    // τα παλιότερα μένουν κρυμμένα πίσω από ένα κουμπί, για να διαβάζονται τα καινούρια με μια ματιά
+    if (more.length) {
+      const old = button(`${moreLabel} (${more.length})`, '');
+      old.onclick = () => {
+        add(more);
+        old.remove();
+        ul.lastElementChild?.scrollIntoView({ block: 'nearest' });
+      };
+      acts.append(old);
+    }
+    if (extra) {
+      const b = button(extra.label, '');
+      b.onclick = extra.run;
+      acts.append(b);
+    }
     acts.append(yes);
     box.append(ul, acts);
     const done = (): void => {

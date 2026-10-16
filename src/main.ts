@@ -1,5 +1,5 @@
 import { Board, EraserMode, SizedTool } from './board';
-import { AxesItem, AxesMode, Background, Doc, Item, ShapeKind, TableStyle, TextItem, Tool, isDark } from './model';
+import { AxesItem, AxesMode, Background, Item, ShapeKind, TableStyle, TextItem, Tool, isDark, readDoc } from './model';
 import { blobToPic, captureScreen, clipboardImage, openDocx, openPdf } from './importers';
 import { kvGet, kvSet } from './storage';
 import { Lessons } from './lessons';
@@ -19,7 +19,8 @@ import { clearMeasShape } from './measure-ui';
 import { ai, autoKind, openAi } from './recognize-ui';
 import { endLesson, lessonPdf, openSend, pdfLogo, pickPages, setPdfLogo } from './send-ui';
 import { initToolbar } from './toolbar-pos';
-import { trackUsage, usageReport } from './usage';
+import { cheer, mascot } from './mascot';
+import { markReady, trackUsage, usageReport, usageSummary } from './usage';
 import { askSpellWords } from './spell-lists';
 
 // ---------- εισαγωγή ----------
@@ -50,8 +51,7 @@ async function importFiles(files: File[]): Promise<void> {
         const pic = await blobToPic(f);
         board.addPicture(pic.src, pic.w, pic.h);
       } else if (/\.json$/i.test(f.name)) {
-        const doc = JSON.parse(await f.text()) as Doc;
-        if (doc?.v !== 1 || !Array.isArray(doc.pages) || doc.pages.length === 0) throw new Error('Μη έγκυρο αρχείο πίνακα');
+        const doc = readDoc(JSON.parse(await f.text()));
         // το αρχείο ανοίγει ως ξεχωριστό μάθημα· το τρέχον δεν πειράζεται
         if (lessons) await lessons.createFrom(doc, f.name.replace(/\.json$/i, ''));
         else board.loadDoc(doc);
@@ -61,7 +61,7 @@ async function importFiles(files: File[]): Promise<void> {
       }
     } catch (err) {
       console.error(err);
-      toast(`Αποτυχία εισαγωγής: ${f.name}`, 5000);
+      toast(err instanceof Error && err.message.includes('νεότερη') ? err.message : `Αποτυχία εισαγωγής: ${f.name}`, 6000);
     }
   }
 }
@@ -265,18 +265,10 @@ $('undo').onclick = () => board.undo();
 $('redo').onclick = () => board.redo();
 $('del').onclick = () => board.deleteSelected();
 $('dup').onclick = () => board.duplicateSelected();
-/** Η μπάρα μένει εκεί που είναι, για να πατηθεί το ίδιο κουμπί ξανά και ξανά. */
-const keepBar = (fn: () => void) => (): void => {
-  const el = $('selOpts');
-  const { left, top } = el.style;
-  fn();
-  el.style.left = left;
-  el.style.top = top;
-};
-$('bigger').onclick = keepBar(() => board.scaleSelected(1.25));
-$('smaller').onclick = keepBar(() => board.scaleSelected(0.8));
-$('flipH').onclick = keepBar(() => board.flipSelected(false));
-$('flipV').onclick = keepBar(() => board.flipSelected(true));
+$('bigger').onclick = () => board.scaleSelected(1.25);
+$('smaller').onclick = () => board.scaleSelected(0.8);
+$('flipH').onclick = () => board.flipSelected(false);
+$('flipV').onclick = () => board.flipSelected(true);
 $('sumBtn').onclick = () => board.addResultant();
 $('prev').onclick = () => board.goto(board.cur - 1);
 $('next').onclick = () => board.goto(board.cur + 1);
@@ -313,7 +305,8 @@ export function refreshUi(): void {
   document.querySelectorAll<HTMLElement>('[data-eraser]').forEach((b) => b.classList.toggle('on', b.dataset.eraser === board.eraserMode));
   document.querySelectorAll<HTMLElement>('[data-shape]').forEach((b) => b.classList.toggle('on', tool === 'shape' && b.dataset.shape === board.shapeKind));
 
-  // η δεύτερη σειρά δείχνει μόνο ό,τι αφορά το εργαλείο που κρατάς
+  // η δεύτερη σειρά δείχνει μόνο ό,τι αφορά το εργαλείο που κρατάς· με κάτι επιλεγμένο, πρώτα τις ενέργειες της επιλογής
+  // και δίπλα τις επιλογές του (π.χ. των αξόνων), πάντα στο ίδιο σημείο πάνω από τη μπάρα
   const ax = tool === 'select' ? board.selectedAxes : null;
   show('penKinds', isPenKind(tool));
   show('shapes', tool === 'shape');
@@ -371,29 +364,17 @@ export function refreshUi(): void {
   });
   const viewOn: Record<string, boolean> = { curtain: curtain.visible, curtainTop: curtainTop.visible, spot: spot.visible, replay: board.replaying };
   document.querySelectorAll<HTMLElement>('[data-view]').forEach((b) => b.classList.toggle('on', viewOn[b.dataset.view!]));
+  // τα αγαπημένα της μπάρας ανάβουν μαζί με το πλακίδιό τους (π.χ. ο χάρακας ή η κουρτίνα είναι ανοιχτά)
+  $('favs').querySelectorAll<HTMLElement>('[data-fav]').forEach((b) => {
+    const [a, v] = b.dataset.fav!.split('=');
+    b.classList.toggle('on', !!document.querySelector(`#gadgetMenu .tiles:not(#recentTiles) [data-${a}="${v}"].on`));
+  });
   document.querySelectorAll<HTMLElement>('.bgSw').forEach((b) => b.classList.toggle('on', b.dataset.act === `bg-${board.doc.bg}`));
   document.body.classList.toggle('dark', isDark(board.doc.bg));
   show('replayBar', board.replaying);
   $('replayBar').querySelector('[data-rp=pause]')!.textContent = board.replayPaused ? '▶' : '⏸';
   document.body.dataset.bg = board.doc.bg;
   layoutBar();
-  placeSelBar();
-}
-/** Η μπάρα ενεργειών στέκεται κάτω από την επιλογή· αν δεν χωρά εκεί, από πάνω της. */
-function placeSelBar(): void {
-  const el = $('selOpts');
-  if (el.classList.contains('hidden')) return;
-  const b = board.selectionScreenBox();
-  if (!b) return;
-  const w = el.offsetWidth, h = el.offsetHeight;
-  const W = window.innerWidth, H = window.innerHeight;
-  const x = Math.max(8, Math.min((b.x0 + b.x1) / 2 - w / 2, W - w - 8));
-  const bar = $('toolbar').getBoundingClientRect();
-  const clear = (y: number): boolean => y >= 64 && y + h <= H - 8 && !(x < bar.right + 8 && x + w > bar.left - 8 && y < bar.bottom + 8 && y + h > bar.top - 70);
-  // κάτω από το πλαίσιο (μετά τη λαβή μεγέθους), αλλιώς πάνω από τη λαβή περιστροφής, αλλιώς στην κορυφή της οθόνης
-  const y = [b.y1 + 34, b.y0 - h - 64].find(clear) ?? 70;
-  el.style.left = `${x}px`;
-  el.style.top = `${y}px`;
 }
 board.onUi = refreshUi;
 board.onKidFull = (it) => openBuildView(board, it.id, (ev) => kidFx(ev), it.name);
@@ -483,21 +464,73 @@ const tileKey = (b: HTMLElement): string => {
   return a ? `${a}=${b.dataset[a]}` : '';
 };
 let recent: string[] = (() => { try { return JSON.parse(localStorage.getItem(RECENT) ?? '[]') as string[]; } catch { return []; } })();
+/** Το πλακίδιο των Οργάνων για ένα κλειδί, μόνο αν υπάρχει στη βαθμίδα που είναι ανοιχτή (η Κλήρωση έχει πλακίδιο και στις δύο). */
+function tileFor(k: string): HTMLElement | undefined {
+  const lv = document.body.classList.contains('primary') ? 'pri' : 'sec';
+  const [a, v] = k.split('=');
+  return [...gadgetMenu.querySelectorAll<HTMLElement>(`.tiles:not(#recentTiles) [data-${a}="${v}"]`)]
+    .find((el) => (el.closest<HTMLElement>('[data-lv]')?.dataset.lv ?? lv) === lv);
+}
 function renderRecent(): void {
   const box = $('recentTiles');
-  const lv = document.body.classList.contains('primary') ? 'pri' : 'sec';
   box.innerHTML = '';
   for (const k of recent) {
-    const [a, v] = k.split('=');
-    // μόνο ό,τι υπάρχει στη βαθμίδα που είναι ανοιχτή (η Κλήρωση έχει πλακίδιο και στις δύο)
-    const src = [...gadgetMenu.querySelectorAll<HTMLElement>(`.tiles:not(#recentTiles) [data-${a}="${v}"]`)]
-      .find((el) => (el.closest<HTMLElement>('[data-lv]')?.dataset.lv ?? lv) === lv);
+    const src = tileFor(k);
     if (src) box.append(src.cloneNode(true));
   }
   const empty = box.children.length === 0;
   box.classList.toggle('hidden', empty);
   $('recentHead').classList.toggle('hidden', empty);
 }
+// ⭐ αγαπημένα: έως 6 πλακίδια των Οργάνων μένουν μόνιμα στη βασική μπάρα, ένα πάτημα μακριά
+const FAVS = 'grafida.favs';
+const FAV_MAX = 6;
+let favs: string[] = (() => { try { return JSON.parse(localStorage.getItem(FAVS) ?? '[]') as string[]; } catch { return []; } })();
+function renderFavs(): void {
+  const box = $('favs');
+  box.innerHTML = '';
+  for (const k of favs) {
+    const src = tileFor(k);
+    if (!src) continue;
+    const b = document.createElement('button');
+    b.dataset.fav = k;
+    b.dataset.l = src.querySelector('small')?.textContent ?? '';
+    b.title = src.title;
+    b.setAttribute('aria-label', src.title);
+    b.append(src.querySelector('span')!.cloneNode(true));
+    box.append(b);
+  }
+  box.classList.toggle('hidden', box.children.length === 0);
+  gadgetMenu.querySelectorAll<HTMLElement>('.tile').forEach((t) => t.classList.toggle('fav', favs.includes(tileKey(t))));
+  const editing = gadgetMenu.classList.contains('favEdit');
+  $('favEdit').textContent = editing ? '✓ Τέλος' : favs.length ? `★ Αγαπημένα (${favs.length})` : '☆ Αγαπημένα';
+  $('favMsg').textContent = editing ? `Πάτα έως ${FAV_MAX} όργανα για να μπουν στη μπάρα · ${favs.filter(tileFor).length} από ${FAV_MAX}` : '';
+  layoutBar();
+}
+$('favs').addEventListener('click', (e) => {
+  const k = (e.target as HTMLElement).closest<HTMLElement>('[data-fav]')?.dataset.fav;
+  // το κουμπί της μπάρας κάνει ακριβώς ό,τι και το πλακίδιο στα Όργανα
+  if (k) tileFor(k)?.click();
+});
+$('favEdit').onclick = () => {
+  gadgetMenu.classList.toggle('favEdit');
+  renderFavs();
+  placeNear(gadgetMenu, $('gadgetBtn'));
+};
+// όσο διαλέγεις αγαπημένα, το πάτημα σε πλακίδιο το βάζει ή το βγάζει από τη μπάρα αντί να το ανοίγει
+gadgetMenu.addEventListener('click', (e) => {
+  if (!gadgetMenu.classList.contains('favEdit')) return;
+  const b = (e.target as HTMLElement).closest<HTMLElement>('.tile');
+  const k = b && tileKey(b);
+  if (!k) return;
+  e.stopImmediatePropagation();
+  e.preventDefault();
+  if (favs.includes(k)) favs = favs.filter((x) => x !== k);
+  else if (favs.filter(tileFor).length < FAV_MAX) favs = [...favs, k];
+  else return toast(`Έως ${FAV_MAX} αγαπημένα· βγάλε πρώτα κάποιο.`);
+  try { localStorage.setItem(FAVS, JSON.stringify(favs)); } catch { /* χωρίς αποθήκευση */ }
+  renderFavs();
+}, true);
 gadgetMenu.addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('.tile');
   const k = b && tileKey(b);
@@ -522,7 +555,9 @@ gadgetMenu.addEventListener('click', (e) => {
   placeNear(gadgetMenu, $('gadgetBtn'));
 });
 $('gadgetBtn').onclick = () => {
+  gadgetMenu.classList.remove('favEdit');
   renderRecent();
+  renderFavs();
   refreshUi();
   togglePopup(gadgetMenu, $('gadgetBtn'));
 };
@@ -813,7 +848,7 @@ const onMenu = async (e: Event): Promise<void> => {
   } else if (act === 'ai') {
     openAi();
   } else if (act === 'usage') {
-    download(new Blob([usageReport()], { type: 'text/plain;charset=utf-8' }), `prismaboard_xrisi_${stamp()}.txt`);
+    void showUsage();
   } else if (act === 'diag') {
     $('diag').classList.toggle('hidden');
   } else if (act === 'end') {
@@ -986,8 +1021,14 @@ function kidFx(ev: string, x?: number, y?: number): void {
     return;
   }
   playFx(ev, fxPrefs);
-  if (ev === 'win') confetti(x, y, 180);
-  else if (ev === 'cheer') confetti(x, y, 70);
+  if (ev === 'win') {
+    confetti(x, y, 180);
+    // η μασκότ πανηγυρίζει μαζί με την τάξη
+    cheer();
+  } else if (ev === 'cheer') {
+    confetti(x, y, 70);
+    cheer();
+  }
 }
 board.onKidFx = (ev, it) => {
   const [x, y] = board.toScreen(it.x + it.w / 2, it.y + it.h / 2);
@@ -1004,6 +1045,7 @@ function setLevel(pri: boolean, save = true): void {
   document.querySelectorAll<HTMLElement>('#wLevel [data-level]').forEach((b) => b.classList.toggle('on', (b.dataset.level === 'primary') === pri));
   if (save) { try { localStorage.setItem(LEVEL, pri ? 'primary' : 'secondary'); } catch { /* χωρίς αποθήκευση */ } }
   renderColors();
+  renderFavs();
   refreshUi();
 }
 setLevel((() => { try { return localStorage.getItem(LEVEL) === 'primary'; } catch { return false; } })(), false);
@@ -1017,16 +1059,33 @@ const EMOJI: Record<string, string> = {
   '#tools [data-tool="select"]': '👆', '#penBtn': '✏️', '#tools [data-tool="highlighter"]': '🖍️', '#tools [data-tool="text"]': '🔤',
   '#tools [data-tool="eraser"]': '🧽', '#tools [data-tool="hand"]': '✋', '#undo': '↩️', '#redo': '↪️', '#importBtn': '🖼️',
   '#gadgetBtn': '🧰', '#prev': '◀️', '#next': '▶️', '#addPage': '📄',
-  '#penKinds [data-pen="pen"]': '✏️', '#penKinds [data-pen="laser"]': '🔦',
+  '#penKinds [data-pen="pen"]': '✏️', '#penKinds [data-pen="laser"]': '🔦', '#penKinds [data-auto="text"]': '🔠',
+  // σχήματα και γόμα (δεύτερη σειρά της μπάρας και Όργανα)
+  '[data-shape="line"]': '➖', '[data-shape="arrow"]': '↗️', '[data-shape="rect"]': '🟦', '[data-shape="ellipse"]': '⚪',
+  '[data-shape="triangle"]': '🔺', '[data-shape="rhombus"]': '🔷', '[data-shape="para"]': '🔶', '[data-shape="angle"]': '📐',
+  '[data-ins="table"]': '🔲', '[data-eraser="partial"]': '⭕', '[data-eraser="stroke"]': '〰️', '#eraseAll': '🗑️',
+  // επιλογή
+  '#del': '🗑️', '#dup': '👯', '#bigger': '➕', '#smaller': '➖', '#flipH': '↔️', '#flipV': '↕️',
+  // Όργανα
+  '[data-kid="numline"]': '➡️', '[data-kid="hundred"]': '💯', '[data-kid="times"]': '✖️', '[data-kid="colops"]': '🧮',
+  '[data-kid="fracpie"]': '🥧', '[data-kid="fracbar"]': '🟩', '[data-gadget="timer"]': '⏱️', '[data-gadget="ruler"]': '📏',
+  '[data-gadget="protractor"]': '📐', '[data-gadget="compass"]': '🧭', '[data-view="curtainTop"]': '⏫', '[data-view="curtain"]': '⏬',
+  '[data-view="spot"]': '🔦', '[data-view="replay"]': '🎬',
 };
+// όπου υπάρχει το ίδιο κουμπί πολλές φορές (π.χ. σχήμα στη μπάρα και στα Όργανα), όλα παίρνουν το ίδιο emoji
 for (const [sel, em] of Object.entries(EMOJI)) {
-  const span = document.querySelector<HTMLElement>(`${sel} > span`);
-  if (span) span.dataset.em = em;
+  document.querySelectorAll<HTMLElement>(`${sel} > span`).forEach((span) => { span.dataset.em = em; });
 }
+// τα αγαπημένα είναι αντίγραφα των πλακιδίων: ξαναφτιάχνονται για να πάρουν και τα emoji
+renderFavs();
 
 const WELCOME = 'grafida.welcome';
 function openWelcome(): void {
   closePopups();
+  // το τερατάκι χαιρετά στη γνωριμία
+  const head = $('wHead');
+  head.querySelector('.mascot')?.remove();
+  head.append(mascot(84, 1.5));
   $('welcome').classList.remove('hidden');
 }
 function closeWelcome(): void {
@@ -1034,9 +1093,27 @@ function closeWelcome(): void {
   try { localStorage.setItem(WELCOME, '1'); } catch { /* χωρίς αποθήκευση */ }
 }
 $('wGo').onclick = closeWelcome;
-const showNews = (): Promise<void> => notice('Τι νέο στο PrismaBoard', NEWS, `Έκδοση ${VERSION}`);
+/** «Τι χρησιμοποιώ»: τα πιο συχνά κουμπιά, όσα δεν πατήθηκαν ποτέ και πόσο κρατά το άνοιγμα, όλα από αυτή τη συσκευή. */
+function showUsage(): Promise<void> {
+  const u = usageSummary();
+  const since = new Date(u.since).toLocaleDateString('el', { day: 'numeric', month: 'long', year: 'numeric' });
+  const lines = [
+    ...(u.openMs !== null ? [`Άνοιγμα της εφαρμογής: περίπου ${(u.openMs / 1000).toLocaleString('el', { maximumFractionDigits: 1 })}″`] : []),
+    ...(u.top.length ? u.top.map(([l, n], i) => `${i + 1}. ${l} — ${n} ${n === 1 ? 'φορά' : 'φορές'}`) : ['Δεν έχει πατηθεί ακόμα κανένα κουμπί.']),
+  ];
+  return notice('Τι χρησιμοποιώ', lines, {
+    hint: `Από ${since}, μόνο σε αυτή τη συσκευή· δεν στέλνεται πουθενά.`,
+    more: u.never.map((l) => `Ποτέ: ${l}`),
+    moreLabel: 'Δεν πατήθηκαν ποτέ',
+    extra: { label: 'Σε αρχείο', run: () => download(new Blob([usageReport()], { type: 'text/plain;charset=utf-8' }), `prismaboard_xrisi_${stamp()}.txt`) },
+  });
+}
+
+// μόνο τα τρία τελευταία νέα· τα υπόλοιπα με ένα πάτημα
+const showNews = (): Promise<void> => notice('Τι νέο στο PrismaBoard', NEWS.slice(0, 3), { hint: `Έκδοση ${VERSION}`, more: NEWS.slice(3) });
 $('verLine').textContent = `Έκδοση ${VERSION}`;
-$('wHelp').onclick = () => window.open('./odigies.pdf', '_blank');
+// οι οδηγίες ως σελίδα, με κινούμενα κλιπ· το PDF μένει για εκτύπωση
+$('wHelp').onclick = () => window.open('./odigies.html', '_blank');
 $('welcome').addEventListener('pointerdown', (e) => {
   if (e.target === $('welcome')) closeWelcome();
 });
@@ -1055,7 +1132,6 @@ document.addEventListener('fullscreenchange', () => {
   if (label) label.textContent = on ? 'Έξοδος από πλήρη οθόνη' : 'Πλήρης οθόνη';
 });
 board.onView = () => {
-  placeSelBar();
   const t = `${Math.round(board.zoom * 100)}%`;
   if ($('zoomFit').textContent !== t) $('zoomFit').textContent = t;
 };
@@ -1112,6 +1188,7 @@ void (async () => {
   await lessons?.init().catch((err) => console.error(err));
   refreshUi();
   initToolbar();
+  if (!isOverlay) markReady();
   // την πρώτη φορά σε κάθε συσκευή, μια σύντομη γνωριμία
   let seen = true;
   try { seen = localStorage.getItem(WELCOME) === '1'; } catch { /* χωρίς αποθήκευση: δεν ενοχλούμε */ }
@@ -1123,6 +1200,8 @@ void (async () => {
   else if (startScr) lessons?.start();
   // μετά από ενημέρωση, μία φορά σε κάθε συσκευή: τι άλλαξε
   if (newsPending(seen) && !isOverlay) void showNews();
+  // μία φορά την εβδομάδα: υπενθύμιση για αντίγραφο ασφαλείας των μαθημάτων
+  if (seen) lessons?.remind();
 })();
 
 if (!isOverlay) trackUsage();

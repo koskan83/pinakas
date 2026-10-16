@@ -19,7 +19,10 @@ export function initToolbar(): void {
   const KEY = 'grafida.toolbar';
   const st: BarState = { scale: 1, folded: false, pos: null, vertical: false };
   try {
-    Object.assign(st, JSON.parse(localStorage.getItem(KEY) ?? '{}'));
+    const saved = localStorage.getItem(KEY);
+    // πρώτη φορά σε μεγάλη οθόνη (διαδραστικός πίνακας): η μπάρα ξεκινά μεγαλύτερη, για να φαίνεται από τα θρανία
+    if (!saved && window.innerWidth >= 1800) st.scale = 1.3;
+    Object.assign(st, JSON.parse(saved ?? '{}'));
   } catch {
     /* χωρίς αποθηκευμένες ρυθμίσεις */
   }

@@ -80,6 +80,8 @@ body.inking #toolbar { pointer-events: none; }
 /* δεύτερη σειρά: επιλογές του εργαλείου που κρατάς */
 #subbar {
   position: absolute; right: 12px; bottom: calc(100% + 6px); display: flex; gap: 4px 6px; width: max-content;
+  /* πολλές επιλογές μαζί (π.χ. άξονες): η σειρά σπάει σε δύο γραμμές, χωρίς κύλιση */
+  max-width: calc((100vw - 16px) / var(--ts)); flex-wrap: wrap; justify-content: center;
   padding: 4px 7px; border-radius: 14px; background: var(--bar); box-shadow: 0 4px 16px rgba(0,0,0,.28);
 }
 #toolbar.sub-below #subbar { bottom: auto; top: calc(100% + 6px); }
@@ -416,18 +418,12 @@ body.dark #libHead .lg.onLight { display: block; }
 #lessonName.warn::after { content: ''; display: inline-block; width: 10px; height: 10px; margin-left: 8px; border-radius: 50%; background: #f59e0b; }
 
 /* ενέργειες για ό,τι είναι επιλεγμένο: δίπλα στην επιλογή, με λέξη κάτω από κάθε εικονίδιο */
-#selOpts { position: fixed; z-index: 12; display: flex; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 16px); gap: 4px; padding: 5px; border-radius: 16px; background: var(--bar); color: var(--fg); box-shadow: 0 4px 16px rgba(0,0,0,.28); transition: opacity .12s; }
-#selOpts.hidden { display: none; }
-body.inking #selOpts { opacity: 0; pointer-events: none; }
-#selOpts button { min-width: 74px; height: 62px; padding: 4px 8px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+/* οι ενέργειες της επιλογής: πρώτη ομάδα της δεύτερης σειράς, πάντα στο ίδιο σημείο */
 #selOpts button.hidden, #selOpts .recSep.hidden { display: none; }
-#selOpts button:hover { background: var(--bar-2); }
-#selOpts button span { height: 28px; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 700; }
-#selOpts button span svg { width: 26px; height: 26px; }
-#selOpts button small { font-size: 13px; line-height: 1; white-space: nowrap; }
+#selOpts button span.txt { font-size: 18px; font-weight: 700; }
 #selOpts #del { color: #f87171; }
 #selOpts .solve span { color: var(--accent); }
-#selOpts .recSep { width: 1px; margin: 8px 2px; background: var(--bar-3); }
+#selOpts .recSep { background: var(--bar-3); }
 
 /* οθόνη πρώτης χρήσης */
 #welcome { position: fixed; inset: 0; z-index: 46; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
@@ -517,10 +513,11 @@ body.primary [data-lv="sec"], body:not(.primary) [data-lv="pri"] { display: none
 #wLevel button.on { border-color: var(--ok); }
 @media (max-width: 640px) { #wLevel { grid-template-columns: 1fr; } }
 
-/* στο Δημοτικό: emoji αντί για γραμμικά εικονίδια στη γραμμή εργαλείων */
-body.primary #toolbar span[data-em] { font-size: 0; }
-body.primary #toolbar span[data-em] > * { display: none; }
-body.primary #toolbar span[data-em]::before { content: attr(data-em); font-size: 25px; line-height: 26px; display: block; height: 26px; font-family: "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif; }
+/* στο Δημοτικό: παντού emoji αντί για γραμμικά εικονίδια (μπάρα, δεύτερη σειρά, επιλογή, Όργανα) */
+body.primary span[data-em] { font-size: 0 !important; }
+body.primary span[data-em] > * { display: none !important; }
+body.primary span[data-em]::before { content: attr(data-em); font-size: 25px; line-height: 26px; display: block; height: 26px; font-style: normal; font-weight: 400; letter-spacing: 0; font-family: "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif; }
+body.primary .tile span[data-em]::before { font-size: 26px; line-height: 30px; height: 30px; }
 body.primary #toolbar button:disabled span[data-em]::before { opacity: .35; filter: grayscale(1); }
 .tiles.small { grid-template-columns: repeat(11, 1fr); }
 /* Δημοτικό: καρτέλες στα Όργανα, μεγαλύτερα πλακίδια με ολόκληρα ονόματα */
@@ -574,7 +571,9 @@ body.primary #gadgetMenu .tiles[data-tab] { animation: tabIn .14s ease-out; }
 
 /* ετικέτες και στη μπάρα των αξόνων / ελατηρίου: οι επεξηγήσεις τους δεν φαίνονται ποτέ στην αφή */
 #toolbar.labels #subbar button[data-l] { width: 54px; height: 54px; flex-direction: column; gap: 2px; }
-#toolbar.labels #subbar button[data-l]::after { content: attr(data-l); font-size: 10.5px; line-height: 1; opacity: .8; }
+#toolbar.labels #subbar button[data-l]::after { content: attr(data-l); font-size: 12px; line-height: 1; opacity: .9; white-space: nowrap; }
+/* οι ενέργειες της επιλογής έχουν μεγαλύτερα ονόματα: παίρνουν όσο πλάτος χρειάζονται */
+#toolbar.labels #selOpts button[data-l] { width: auto; min-width: 54px; padding: 0 6px; }
 #subbar .sep { width: 1px; align-self: stretch; margin: 4px 3px; background: var(--bar-2); }
 #toolbar.vertical #subbar .sep { width: auto; height: 1px; margin: 3px 4px; }
 #menu .gHead { padding: 8px 12px 2px; }
@@ -590,3 +589,64 @@ body.primary #gadgetMenu .tiles[data-tab] { animation: tabIn .14s ease-out; }
 /* κομφετί: πάνω απ' όλα, χωρίς να πιάνει αγγίγματα */
 .confetti { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 95; pointer-events: none; }
 @media print { .confetti { display: none !important; } }
+
+/* ⭐ αγαπημένα: γραμμή επιλογής στα Όργανα και κουμπιά στη βασική μπάρα */
+#favBar { display: flex; align-items: center; gap: 8px; justify-content: flex-end; padding: 0 2px 6px; }
+#favMsg { flex: 1; font-size: 14px; opacity: .8; }
+.popup #favBar button.pill { padding: 7px 14px; font-size: 15px; border-radius: 99px; }
+#gadgetMenu.favEdit #favBar button.pill { background: var(--accent); color: #fff; }
+#gadgetMenu.favEdit #recentHead, #gadgetMenu.favEdit #recentTiles { display: none; }
+#gadgetMenu .tile { position: relative; }
+#gadgetMenu .tile.fav::after { content: '★'; position: absolute; top: 3px; right: 6px; font-size: 13px; color: #f59e0b; }
+#gadgetMenu.favEdit .tile:not(.fav) { opacity: .7; }
+#gadgetMenu.favEdit .tile:not(.fav)::after { content: '☆'; position: absolute; top: 3px; right: 6px; font-size: 13px; opacity: .7; }
+#gadgetMenu.favEdit .tile.fav { box-shadow: inset 0 0 0 2px #f59e0b; }
+#toolbar #favs button span b { font-size: 21px; font-weight: 600; font-style: italic; }
+#toolbar #favs button span b.em { font-size: 22px; font-weight: 400; font-style: normal; font-family: "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif; }
+#toolbar #favs button span b.sm { font-size: 15px; font-style: normal; }
+
+/* ονόματα κάτω από τα εικονίδια: να διαβάζονται από τα θρανία */
+#toolbar.labels > .group > button[data-l] { width: 56px; }
+#toolbar.labels > .group > button[data-l]::after { font-size: 12px; opacity: .9; max-width: 54px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- δύο θέματα: λιτό για Γυμνάσιο – Λύκειο (τα χρώματα στην αρχή), χαρούμενο και στρογγυλό για το Δημοτικό ---------- */
+body.primary {
+  --bar: #3b1d7a;
+  --bar-2: #5b3aa8;
+  --bar-3: #6d4bc0;
+  --fg: #f5f3ff;
+  --on-bg: #fde047;
+  --on-fg: #3b0764;
+  --go: #fde047;
+  --ring: rgba(255, 255, 255, .35);
+  --accent: #db2777;
+  font-family: ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+/* σε σκούρο φόντο πίνακα: ζεστή, φωτεινή μπάρα */
+body.primary.dark {
+  --bar: #fff7ed;
+  --bar-2: #fde4c8;
+  --bar-3: #fbd3a5;
+  --fg: #3b0764;
+  --on-bg: #7c3aed;
+  --on-fg: #ffffff;
+  --go: #c2410c;
+  --ring: rgba(59, 7, 100, .25);
+}
+body.primary #toolbar { border-radius: 26px; }
+body.primary #toolbar button { border-radius: 16px; }
+body.primary .popup, body.primary #subbar, body.primary .askBox, body.primary #stBox, body.primary #wBox, body.primary .fab { border-radius: 24px; }
+body.primary .popup button.tile { border-radius: 18px; }
+body.primary #toolbar button.on { box-shadow: 0 3px 0 rgba(0, 0, 0, .25); }
+
+/* ---------- η μασκότ 👾 ---------- */
+canvas.mascot { position: static; display: block; touch-action: auto; }
+#wHead .mascot { margin-left: auto; flex-shrink: 0; }
+#stHead { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; align-items: center; }
+#stHead .mascot { grid-row: 1 / span 2; }
+.mascotPop { position: fixed; left: 16px; bottom: 96px; z-index: 96; display: flex; align-items: flex-end; pointer-events: none; animation: mascotIn .45s cubic-bezier(.3, 1.6, .5, 1); }
+.mascotPop b { margin: 0 0 84px -6px; padding: 10px 18px; border-radius: 20px 20px 20px 4px; background: #fff; color: #3b0764; font-size: 28px; font-weight: 800; box-shadow: 0 6px 18px rgba(0, 0, 0, .25); white-space: nowrap; }
+.mascotPop.out { transition: transform .45s ease-in, opacity .45s; transform: translateY(160%); opacity: 0; }
+@keyframes mascotIn { from { transform: translateY(160%) rotate(-12deg); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .mascotPop { animation: none; } .mascotPop.out { transition: none; } }
+@media print { .mascotPop { display: none !important; } }

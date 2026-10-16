@@ -1,5 +1,5 @@
 import {
-  AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TableStyle, TextItem, Tool, View, angleEnds, cloneItem, distToSeg, erasePartial, flipItem, hitItem, inLasso, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, pointInPolygon, reboxShape, recognizeShape, rotateItem, roundAngle, scaleItem, translateItem, trianglePts, uid, unrot,
+  AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TableStyle, TextItem, Tool, View, angleEnds, cloneItem, distToSeg, erasePartial, flipItem, hitItem, inLasso, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, pointInPolygon, readDoc, reboxShape, recognizeShape, rotateItem, roundAngle, scaleItem, translateItem, trianglePts, uid, unrot,
 } from './model';
 import { Params } from './expr';
 import { STAMPS, SpringState, stampTexts, type KidArea, type KidAsk } from './stamps';
@@ -236,10 +236,7 @@ export class Board {
   }
 
   loadDoc(d: Doc): void {
-    if (!d || d.v !== 1 || !Array.isArray(d.pages) || d.pages.length === 0) {
-      throw new Error('Μη έγκυρο αρχείο πίνακα');
-    }
-    this.doc = d;
+    this.doc = readDoc(d);
     this.cur = 0;
     this.region = null;
     this.selected = null;
@@ -849,22 +846,6 @@ export class Board {
 
   selectedIds(): Set<string> {
     return new Set(this.multi.length ? this.multi : this.selected ? [this.selected] : []);
-  }
-
-  /** Το πλαίσιο της επιλογής σε συντεταγμένες οθόνης (για τη μπάρα ενεργειών δίπλα της). */
-  selectionScreenBox(): Box | null {
-    const ids = this.selectedIds();
-    // όταν υπάρχει κυκλωμένη περιοχή, η μπάρα στέκεται κάτω από αυτήν (η επιλογή μπορεί να είναι ολόκληρη σελίδα-εικόνα)
-    let b: Box | null = this.region;
-    for (const it of b ? [] : this.page.items) {
-      if (!ids.has(it.id)) continue;
-      const ib = itemBounds(it);
-      b = b ? { x0: Math.min(b.x0, ib.x0), y0: Math.min(b.y0, ib.y0), x1: Math.max(b.x1, ib.x1), y1: Math.max(b.y1, ib.y1) } : ib;
-    }
-    if (!b) return null;
-    const [x0, y0] = this.toScreen(b.x0, b.y0);
-    const [x1, y1] = this.toScreen(b.x1, b.y1);
-    return { x0, y0, x1, y1 };
   }
 
   groupBounds(): Box | null {

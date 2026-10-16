@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AngleItem, Item, Pic, Pt, Shape, Stroke, angleDegrees, cloneItem, erasePartial, flipItem, hitItem, itemBounds, itemFlip, newDoc, pointInPolygon,
-  recognizeShape, rotateItem, scaleItem, translateItem, trianglePts, unrot, wrapText } from '../src/model';
+  recognizeShape, rotateItem, scaleItem, translateItem, trianglePts, unrot, wrapText, readDoc, DOC_V } from '../src/model';
 
 const rect = (o: Partial<Shape> = {}): Shape => ({ kind: 'shape', id: 'r', shape: 'rect', x0: 0, y0: 0, x1: 200, y1: 100, color: '#111111', width: 4, ...o });
 const line = (o: Partial<Shape> = {}): Shape => ({ kind: 'shape', id: 'l', shape: 'line', x0: 0, y0: 0, x1: 100, y1: 0, color: '#111111', width: 4, ...o });
@@ -248,5 +248,27 @@ describe('γράμματα των σχημάτων Φυσικής', () => {
     expect(inc[0].x).toBeCloseTo(320 * 0.21);
     expect(inc[0].size).toBeCloseTo(180 * 0.14);
     expect(stampTexts(STAMPS.pulley, 200, 300).map((l) => l.t)).toEqual(['m₁', 'm₂']);
+  });
+});
+
+describe('ανάγνωση αποθηκευμένου πίνακα', () => {
+  it('δέχεται σημερινό πίνακα χωρίς να πετάει δουλειά', () => {
+    const d = readDoc({ v: 1, bg: 'grid', pages: [{ items: [rect()], view: { x: 5, y: 6, k: 2 } }] });
+    expect(d.bg).toBe('grid');
+    expect(d.pages[0].items).toHaveLength(1);
+    expect(d.pages[0].view).toEqual({ x: 5, y: 6, k: 2 });
+  });
+  it('διορθώνει ό,τι λείπει ή είναι χαλασμένο', () => {
+    const d = readDoc({ v: 1, bg: 'μωβ', pages: [{ items: [null, { kind: 'άγνωστο' }, { ...rect(), id: '' }] }] });
+    expect(d.bg).toBe('white');
+    expect(d.pages[0].items).toHaveLength(1);
+    expect(d.pages[0].items[0].id).not.toBe('');
+    expect(d.pages[0].view).toEqual({ x: 0, y: 0, k: 1 });
+    expect(readDoc({ v: 1, pages: [] }).pages).toHaveLength(1);
+  });
+  it('απορρίπτει ό,τι δεν είναι πίνακας ή είναι από νεότερη έκδοση', () => {
+    expect(() => readDoc(null)).toThrow('Μη έγκυρο');
+    expect(() => readDoc({ pages: [] })).toThrow('Μη έγκυρο');
+    expect(() => readDoc({ v: DOC_V + 1, pages: [] })).toThrow('νεότερη');
   });
 });

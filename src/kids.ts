@@ -627,7 +627,7 @@ function spellFeast(c: C, w: number, h: number, u: number, from: { x: number; y:
   c.restore();
 }
 /** Το τερατάκι που τρώει τα λάθη, με κέντρο το (x, y): `open` από 0 (κλειστό στόμα) έως 1 (ορθάνοιχτο). */
-function monster(c: C, x: number, y: number, r: number, open: number): void {
+export function monster(c: C, x: number, y: number, r: number, open: number): void {
   c.save();
   c.lineJoin = 'round';
   c.lineWidth = Math.max(1.5, r * 0.08);

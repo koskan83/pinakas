@@ -46,7 +46,8 @@ self.addEventListener('fetch', (e) => {
   e.respondWith(
     fetch(req)
       .then((res) => {
-        if (res.ok) {
+        // μόνο ολόκληρες απαντήσεις: τα βίντεο έρχονται σε κομμάτια (206), που δεν αποθηκεύονται
+        if (res.status === 200) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }
