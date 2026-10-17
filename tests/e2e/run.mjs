@@ -358,6 +358,30 @@ test('«Τακτοποίηση» χειρόγραφου: η σειρά ισιώ�
   await page.mouse.click(1000, 600);
 });
 
+test('«Σε σελίδα»: η επιλογή πάει σε νέα σελίδα στην ίδια θέση, και μία αναίρεση τη γυρίζει πίσω', async () => {
+  const mine = (list) => list.filter((i) => i.kind === 'stroke' && i.pts[0][1] > 420 && i.pts[0][1] < 560);
+  await pen();
+  await drag(200, 500, 300, 480);
+  await drag(320, 500, 420, 480);
+  await tool('select');
+  await lasso(180, 450, 440, 530);
+  await page.click('#selOpts #moveBtn');
+  await page.click('#moveGrid .new');
+  assert((await page.textContent('#pageLabel')).trim() === '2 / 2', 'δεν πήγε στη νέα σελίδα');
+  let d = await doc();
+  assert(mine(d.pages[0].items).length === 0 && mine(d.pages[1].items).length === 2, 'οι γραμμές δεν μεταφέρθηκαν');
+  await page.click('#undo');
+  d = await doc();
+  assert((await page.textContent('#pageLabel')).trim() === '1 / 2', 'η αναίρεση δεν γύρισε στην πρώτη σελίδα');
+  assert(mine(d.pages[0].items).length === 2 && mine(d.pages[1].items).length === 0, 'η αναίρεση δεν γύρισε τις γραμμές');
+  await lasso(180, 450, 440, 530);
+  await page.click('#selOpts #del');
+  await page.click('#next');
+  await page.click('#menuBtn');
+  await page.click('#menu [data-act="delpage"]');
+  await page.mouse.click(1000, 600);
+});
+
 test('Πίνακας 3 × 3 ως ορίζουσα', async () => {
   await page.click('#gadgetBtn');
   await page.click('#gadgetMenu .tiles:not(#recentTiles) [data-ins="table"]');
@@ -539,7 +563,8 @@ test('Διαγραφή σελίδας με «Αναίρεση»· το Esc κλ�
 test('Εξαγωγή σε PDF μόνο της τρέχουσας σελίδας', async () => {
   const p = await download(async () => {
     await page.click('#menuBtn');
-    await page.click('#menu [data-act="pdf"]');
+    await page.click('#menu [data-act="savewhere"]');
+    await page.click('#whereMenu [data-act="pdf"]');
     await page.waitForSelector('#pagePick:not(.hidden)');
     await page.click('#ppCur');
     await page.click('#ppOk');
@@ -551,7 +576,8 @@ test('Εξαγωγή σε PDF μόνο της τρέχουσας σελίδας'
 test('Εξαγωγή σε PDF με επιλογή σελίδων', async () => {
   pdfPath = await download(async () => {
     await page.click('#menuBtn');
-    await page.click('#menu [data-act="pdf"]');
+    await page.click('#menu [data-act="savewhere"]');
+    await page.click('#whereMenu [data-act="pdf"]');
     await page.waitForSelector('#pagePick:not(.hidden)');
     await page.click('#ppOk');
   });
@@ -562,7 +588,8 @@ test('Εξαγωγή σε PDF με επιλογή σελίδων', async () => {
 
 test('Αποστολή με επιλογή σελίδων: το QR εμφανίζεται μετά το ανέβασμα', async () => {
   await page.click('#menuBtn');
-  await page.click('#menu [data-act="send"]');
+  await page.click('#menu [data-act="savewhere"]');
+    await page.click('#whereMenu [data-act="send"]');
   await page.click('#sendDrive');
   await page.waitForSelector('#pagePick:not(.hidden)');
   await page.click('#ppOk');
@@ -1163,6 +1190,31 @@ await page.goto(URL_);
 await page.waitForSelector('#toolbar');
 await sleep(600);
 let failed = 0;
+// στο τέλος: το περίγραμμα αλλάζει την προβολή της σελίδας
+test('Περίγραμμα Α4: η εικόνα της σελίδας βγαίνει ακριβώς Α4, όρθια ή πλάγια', async () => {
+  const pngSize = async () => {
+    const p = await download(async () => {
+      await page.click('#menuBtn');
+      await page.click('#menu [data-act="savewhere"]');
+      await page.click('#whereMenu [data-act="png"]');
+    });
+    const b = readFileSync(p);
+    return [b.readUInt32BE(16), b.readUInt32BE(20)];
+  };
+  await pen();
+  await drag(300, 300, 400, 320);
+  for (const [a4, ratio] of [['v', 1188 / 840], ['h', 840 / 1188]]) {
+    await page.click('#menuBtn');
+    await page.click(`#menu [data-act="a4-${a4}"]`);
+    const [w, h] = await pngSize();
+    assert(Math.abs(h / w - ratio) < 0.01, `με Α4 ${a4} η εικόνα είναι ${w}×${h}`);
+  }
+  await page.click('#menuBtn');
+  await page.click('#menu [data-act="a4-off"]');
+  assert(!(await doc()).a4, 'το περίγραμμα δεν έσβησε');
+  await page.click('#undo');
+});
+
 for (const t of tests) {
   try {
     await t.fn();

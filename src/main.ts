@@ -184,6 +184,21 @@ $('flipV').onclick = () => board.flipSelected(true);
 $('sumBtn').onclick = () => board.addResultant();
 $('angBtn').onclick = () => board.toggleLineAngles();
 $('tidyBtn').onclick = () => board.tidySelection();
+// «Σε σελίδα»: οι αριθμοί των σελίδων (η τρέχουσα σβηστή) και «＋ Νέα» στο τέλος
+const moveMenu = $('moveMenu');
+$('moveBtn').onclick = () => {
+  const n = board.doc.pages.length;
+  $('moveGrid').innerHTML = Array.from({ length: n }, (_, i) => `<button data-to="${i}"${i === board.cur ? ' disabled' : ''}>${i + 1}</button>`).join('') + `<button data-to="${n}" class="new">＋ Νέα</button>`;
+  togglePopup(moveMenu, $('moveBtn'));
+};
+$('moveGrid').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>('[data-to]');
+  if (!b) return;
+  closePopups();
+  const to = Number(b.dataset.to);
+  board.moveSelectionTo(to);
+  toast(`Μεταφέρθηκε στη σελίδα ${to + 1}`);
+});
 $('prev').onclick = () => board.goto(board.cur - 1);
 $('next').onclick = () => board.goto(board.cur + 1);
 $('addPage').onclick = () => board.addPage();
@@ -239,6 +254,7 @@ export function refreshUi(): void {
   $('selOpts').querySelector('.recSep')!.classList.toggle('hidden', !(writing || region) || !board.hasSelection);
   show('sumBtn', !!board.resultantSource);
   show('tidyBtn', board.selectedInk().length >= 2);
+  show('moveBtn', board.hasSelection);
   // «Γωνία»: αναμμένο όσο φαίνεται η γωνία, σβηστό όταν είναι κρυμμένη
   const angs = board.lineAngleItems();
   show('angBtn', angs.length > 0);
@@ -289,6 +305,7 @@ export function refreshUi(): void {
     b.classList.toggle('on', !!document.querySelector(`#gadgetMenu .tiles:not(#recentTiles) [data-${a}="${v}"].on`));
   });
   document.querySelectorAll<HTMLElement>('.bgSw').forEach((b) => b.classList.toggle('on', b.dataset.act === `bg-${board.doc.bg}`));
+  document.querySelectorAll<HTMLElement>('.a4Sw').forEach((b) => b.classList.toggle('on', b.dataset.act === `a4-${board.doc.a4 ?? 'off'}`));
   document.body.classList.toggle('dark', isDark(board.doc.bg));
   show('replayBar', board.replaying);
   $('replayBar').querySelector('[data-rp=pause]')!.textContent = board.replayPaused ? '▶' : '⏸';
@@ -728,6 +745,8 @@ const onMenu = async (e: Event): Promise<void> => {
     board.setBackground(act.slice(3) as Background);
     if (i >= 0) board.color = palette()[i];
     refreshUi();
+  } else if (act.startsWith('a4-')) {
+    board.setA4(act === 'a4-off' ? undefined : (act.slice(3) as 'v' | 'h'));
   } else if (act === 'fit') {
     board.fitView();
   } else if (act === 'clear') {

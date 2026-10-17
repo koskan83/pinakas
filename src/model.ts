@@ -232,6 +232,17 @@ export interface Doc {
   v: 1;
   bg: Background;
   pages: Page[];
+  /** Αχνό περίγραμμα σελίδας Α4 (όρθιας ή πλάγιας) για στοίχιση· με αυτό, το PDF και η εικόνα κόβονται στα όριά του. */
+  a4?: A4;
+}
+
+export type A4 = 'v' | 'h';
+
+/** Το περίγραμμα Α4 σε μονάδες του πίνακα (40 = 1 cm, όπως το πλέγμα), με την πάνω αριστερή γωνία στο (0, 0). */
+export function a4Frame(a4: A4 | undefined): { x0: number; y0: number; x1: number; y1: number } | null {
+  if (a4 !== 'v' && a4 !== 'h') return null;
+  const [w, h] = a4 === 'v' ? [840, 1188] : [1188, 840];
+  return { x0: 0, y0: 0, x1: w, y1: h };
 }
 
 export type Tool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'hand' | 'shape' | 'text' | 'laser' | 'measure';
@@ -283,7 +294,8 @@ export function readDoc(raw: unknown): Doc {
     return { ...pg, items, view };
   });
   if (pages.length === 0) pages.push(newPage());
-  return { ...d, v: 1, bg: BGS.has(d.bg as string) ? (d.bg as Background) : 'white', pages };
+  const a4 = d.a4 === 'v' || d.a4 === 'h' ? d.a4 : undefined;
+  return { ...d, v: 1, bg: BGS.has(d.bg as string) ? (d.bg as Background) : 'white', pages, a4 };
 }
 
 /** Αναστρέψιμες πράξεις για undo/redo. */
@@ -292,7 +304,9 @@ export type Op =
   | { t: 'del'; p: number; items: { item: Item; i: number }[] }
   | { t: 'mod'; p: number; before: Item; after: Item }
   /** Ολόκληρη η λίστα της σελίδας πριν και μετά (σβήσιμο με γόμα). */
-  | { t: 'set'; p: number; before: Item[]; after: Item[] };
+  | { t: 'set'; p: number; before: Item[]; after: Item[] }
+  /** Αλλαγή σε πολλές σελίδες μαζί (μεταφορά σε άλλη σελίδα): η αναίρεση δείχνει την `p`, η επανάληψη την `to`. */
+  | { t: 'pages'; p: number; to: number; sets: { p: number; before: Item[]; after: Item[] }[] };
 
 export function distToSeg(px: number, py: number, a: Pt, b: Pt): number {
   const dx = b[0] - a[0];

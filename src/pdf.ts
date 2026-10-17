@@ -34,8 +34,8 @@ export function buildPdf(pages: PdfPage[]): Blob {
   obj(2, `<< /Type /Pages /Count ${pages.length} /Kids [${kids}] >>`);
   pages.forEach((pg, i) => {
     const n = 3 + i * 3;
-    // πλάτος Α4 οριζόντιο (842 pt), ύψος ανάλογα με την εικόνα
-    const W = 842;
+    // πλάτος Α4 οριζόντιο (842 pt), ή όρθιο (595 pt) όταν η εικόνα είναι ψηλότερη απ' όσο φαρδιά· ύψος ανάλογα με την εικόνα
+    const W = pg.h > pg.w ? 595 : 842;
     const H = +((W * pg.h) / pg.w).toFixed(2);
     const content = enc.encode(`q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`);
     obj(n, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${n + 2} 0 R >> >> /Contents ${n + 1} 0 R >>`);

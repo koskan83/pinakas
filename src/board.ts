@@ -1,5 +1,5 @@
 import {
-  AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TableStyle, TextItem, Tool, View, angleEnds, cloneItem, erasePartial, hitItem, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, readDoc, trianglePts, uid,
+  A4, AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TableStyle, TextItem, Tool, View, a4Frame, angleEnds, cloneItem, erasePartial, hitItem, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, readDoc, trianglePts, uid,
 } from './model';
 import { Params } from './expr';
 import { STAMPS, SpringState, type KidAsk } from './stamps';
@@ -239,6 +239,46 @@ export class Board {
     this.onUi();
   }
 
+  /** Αχνό περίγραμμα Α4 (όρθιο, πλάγιο ή κανένα). Μόλις ανάψει, η προβολή δείχνει ολόκληρο το περίγραμμα. */
+  setA4(a4: A4 | undefined): void {
+    this.doc.a4 = a4;
+    if (a4) this.fitBox(this.page, a4Frame(a4)!);
+    this.redraw();
+    this.onChange();
+    this.onUi();
+  }
+
+  /**
+   * Μεταφέρει την επιλογή σε άλλη σελίδα (`to` = αριθμός σελίδας, ή το πλήθος τους για νέα σελίδα στο τέλος),
+   * στην ίδια θέση, και πηγαίνει εκεί με τα στοιχεία επιλεγμένα. Μία αναίρεση τα γυρίζει πίσω.
+   */
+  moveSelectionTo(to: number): void {
+    const ids = this.selectedIds();
+    if (!ids.size || to === this.cur || to < 0 || to > this.doc.pages.length) return;
+    // η νέα σελίδα ανοίγει με την ίδια προβολή, ώστε τα στοιχεία να φαίνονται εκεί που ήταν
+    if (to === this.doc.pages.length) this.doc.pages.push({ ...newPage(), view: { ...this.page.view } });
+    const from = this.cur;
+    const src = this.page.items, dst = this.doc.pages[to];
+    const moving = src.filter((x) => ids.has(x.id));
+    const after = src.filter((x) => !ids.has(x.id));
+    const op: Op = { t: 'pages', p: from, to, sets: [{ p: from, before: src.slice(), after: after.slice() }, { p: to, before: dst.items.slice(), after: [...dst.items, ...moving] }] };
+    this.doc.pages[from].items = after;
+    dst.items = [...dst.items, ...moving];
+    this.goto(to);
+    if (moving.length === 1) this.selected = moving[0].id;
+    else this.multi = moving.map((x) => x.id);
+    // αν τα στοιχεία δεν φαίνονται στη σελίδα που πήγαν, η προβολή πάει πάνω τους (χωρίς αλλαγή μεγέθυνσης)
+    const v = dst.view;
+    const b = moving.map(itemBounds).reduce((a, c) => ({ x0: Math.min(a.x0, c.x0), y0: Math.min(a.y0, c.y0), x1: Math.max(a.x1, c.x1), y1: Math.max(a.y1, c.y1) }));
+    const [vx0, vy0] = this.toWorld(0, 0), [vx1, vy1] = this.toWorld(this.W, this.H - this.bottomInset);
+    if (b.x1 < vx0 || b.x0 > vx1 || b.y1 < vy0 || b.y0 > vy1) {
+      v.x = this.W / 2 - ((b.x0 + b.x1) / 2) * v.k;
+      v.y = (this.H - this.bottomInset) / 2 - ((b.y0 + b.y1) / 2) * v.k;
+    }
+    this.redraw();
+    this.push(op);
+  }
+
   setBackground(bg: Background): void {
     this.doc.bg = bg;
     this.redraw();
@@ -351,6 +391,10 @@ export class Board {
   }
 
   private apply(op: Op, inverse: boolean): void {
+    if (op.t === 'pages') {
+      for (const st of op.sets) this.doc.pages[st.p].items = (inverse ? st.before : st.after).slice();
+      return;
+    }
     if (op.t === 'set') {
       this.doc.pages[op.p].items = (inverse ? op.before : op.after).slice();
       return;
@@ -381,7 +425,7 @@ export class Board {
     if (!op) return;
     this.apply(op, true);
     this.redoStack.push(op);
-    this.afterHistory(op);
+    this.afterHistory(op, op.p);
   }
 
   redo(): void {
@@ -389,11 +433,11 @@ export class Board {
     if (!op) return;
     this.apply(op, false);
     this.undoStack.push(op);
-    this.afterHistory(op);
+    this.afterHistory(op, op.t === 'pages' ? op.to : op.p);
   }
 
-  private afterHistory(op: Op): void {
-    this.cur = op.p;
+  private afterHistory(op: Op, show: number): void {
+    this.cur = show;
     this.selected = null;
     this.multi = [];
     this.syncLinks();
@@ -764,23 +808,32 @@ export class Board {
   private fitPage(page: Page): void {
     const items = page.items;
     const v = page.view;
-    if (items.length === 0) {
+    const frame = a4Frame(this.doc.a4);
+    if (items.length === 0 && !frame) {
       v.x = 0; v.y = 0; v.k = 1;
       return;
     }
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    // με περίγραμμα Α4, η προσαρμογή δείχνει όλο το περίγραμμα (και ό,τι βγαίνει έξω από αυτό)
+    let { x0, y0, x1, y1 } = frame ?? { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
     for (const it of items) {
       const b = itemBounds(it);
       x0 = Math.min(x0, b.x0); y0 = Math.min(y0, b.y0);
       x1 = Math.max(x1, b.x1); y1 = Math.max(y1, b.y1);
     }
+    this.fitBox(page, { x0, y0, x1, y1 });
+  }
+
+  private fitBox(page: Page, { x0, y0, x1, y1 }: { x0: number; y0: number; x1: number; y1: number }): void {
+    const v = page.view;
     const bw = Math.max(x1 - x0, 1);
     const bh = Math.max(y1 - y0, 1);
-    const availH = Math.max(this.H - this.bottomInset, 100);
+    // πάνω μένει χώρος για το ☰ και το όνομα του μαθήματος, κάτω για τη μπάρα
+    const top = this.H > 400 ? 64 : 0;
+    const availH = Math.max(this.H - this.bottomInset - top, 100);
     const k = Math.min(this.W / (bw * 1.06), availH / (bh * 1.06), 4);
     v.k = k;
     v.x = this.W / 2 - ((x0 + x1) / 2) * k;
-    v.y = availH / 2 - ((y0 + y1) / 2) * k;
+    v.y = top + availH / 2 - ((y0 + y1) / 2) * k;
   }
 
   // ---------- συντεταγμένες ----------
@@ -870,6 +923,7 @@ export class Board {
     const [x0, y0] = this.toWorld(0, 0);
     const [x1, y1] = this.toWorld(this.W, this.H);
     this.r.paintBackground(c, x0, y0, x1, y1, v.k);
+    this.r.paintA4(c, v.k);
     const hidden = this.dragPreviewIds();
     const rp = this.replay;
     const items = this.page.items;

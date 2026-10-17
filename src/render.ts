@@ -1,7 +1,7 @@
 /** Σχεδίαση των στοιχείων του πίνακα στον καμβά: γραμμές, σχήματα, άξονες, ανάλυση, τριγωνομετρικός κύκλος, μετρήσεις. */
 
 import {
-  AngleItem, AxesAn, AxesItem, Doc, FnDef, Item, Page, Pic, Pt, Shape, StampItem, Stroke, TextItem, TrigItem, angleDegrees, angleEnds, axesRange, isDark, isPoly, itemCenter, itemFlip, itemRot, strokeTaper, tableLines, textFont, textLines, trianglePts,
+  AngleItem, AxesAn, a4Frame, AxesItem, Doc, FnDef, Item, Page, Pic, Pt, Shape, StampItem, Stroke, TextItem, TrigItem, angleDegrees, angleEnds, axesRange, isDark, isPoly, itemCenter, itemFlip, itemRot, strokeTaper, tableLines, textFont, textLines, trianglePts,
 } from './model';
 import { Fn, Params, compileCached, domText, fnOf, keyPoints } from './expr';
 import { Asymptotes, asymptotes, integrate, lineEq, nf, oneSided, riemann, slope, crossings } from './analysis';
@@ -77,6 +77,29 @@ export class Renderer {
       c.lineTo(x1, y);
     }
     c.stroke();
+  }
+
+  /** Αχνό περίγραμμα Α4 (μόνο στην οθόνη): λίγο πιο σκούρο έξω, διακεκομμένο όριο και «Α4» κάτω δεξιά. */
+  paintA4(c: CanvasRenderingContext2D, k: number): void {
+    const f = a4Frame(this.b.doc.a4);
+    if (!f) return;
+    const dark = isDark(this.b.doc.bg);
+    c.save();
+    c.beginPath();
+    c.rect(-1e6, -1e6, 2e6, 2e6);
+    c.rect(f.x0, f.y0, f.x1 - f.x0, f.y1 - f.y0);
+    c.fillStyle = dark ? 'rgba(255,255,255,0.045)' : 'rgba(15,23,42,0.045)';
+    c.fill('evenodd');
+    c.strokeStyle = dark ? 'rgba(203,213,225,0.45)' : 'rgba(71,85,105,0.45)';
+    c.lineWidth = 1.5 / k;
+    c.setLineDash([9 / k, 7 / k]);
+    c.strokeRect(f.x0, f.y0, f.x1 - f.x0, f.y1 - f.y0);
+    c.fillStyle = c.strokeStyle;
+    c.font = `${13 / k}px system-ui, sans-serif`;
+    c.textBaseline = 'top';
+    c.textAlign = 'right';
+    c.fillText(this.b.doc.a4 === 'v' ? 'Α4 όρθια' : 'Α4 πλάγια', f.x1, f.y1 + 5 / k);
+    c.restore();
   }
 
   drawStroke(c: CanvasRenderingContext2D, s: Stroke): void {

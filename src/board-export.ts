@@ -1,6 +1,6 @@
 /** Σελίδες ως εικόνες: εκτύπωση, μικρογραφίες, PNG και JPEG για το PDF (μέθοδοι της Board, σε δικό τους αρχείο). */
 
-import { Background, Pic, isDark, itemBounds } from './model';
+import { Background, Pic, a4Frame, isDark, itemBounds } from './model';
 import type { Board } from './board';
 
 /** Ζωγραφίζει ολόκληρη μια σελίδα (όλα τα στοιχεία της με περιθώριο) σε νέο καμβά. */
@@ -44,6 +44,9 @@ export function drawPage(bd: Board, pi: number, opaque: boolean, paper: boolean)
     }
     x0 -= 30; y0 -= 30; x1 += 30; y1 += 30;
   }
+  // με περίγραμμα Α4, η σελίδα βγαίνει ακριβώς όσο το περίγραμμα, αν έχει κάτι μέσα του (αλλιώς όσο τα στοιχεία της)
+  const f = a4Frame(bd.doc.a4);
+  if (f && items.some((it) => { const b = itemBounds(it); return b.x1 > f.x0 && b.x0 < f.x1 && b.y1 > f.y0 && b.y0 < f.y1; })) ({ x0, y0, x1, y1 } = f);
   const bw = x1 - x0;
   const bh = y1 - y0;
   const s = Math.min(2, 4096 / Math.max(bw, bh));

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AngleItem, Item, Pic, Pt, Shape, Stroke, angleDegrees, cloneItem, erasePartial, flipItem, hitItem, itemBounds, itemFlip, newDoc, pointInPolygon,
-  recognizeShape, rotateItem, smoothStroke, snapLine, strokeTaper, scaleItem, translateItem, trianglePts, unrot, wrapText, readDoc, DOC_V } from '../src/model';
+  recognizeShape, rotateItem, smoothStroke, snapLine, strokeTaper, scaleItem, translateItem, trianglePts, unrot, wrapText, readDoc, DOC_V, a4Frame } from '../src/model';
 
 const rect = (o: Partial<Shape> = {}): Shape => ({ kind: 'shape', id: 'r', shape: 'rect', x0: 0, y0: 0, x1: 200, y1: 100, color: '#111111', width: 4, ...o });
 const line = (o: Partial<Shape> = {}): Shape => ({ kind: 'shape', id: 'l', shape: 'line', x0: 0, y0: 0, x1: 100, y1: 0, color: '#111111', width: 4, ...o });
@@ -265,6 +265,14 @@ describe('ανάγνωση αποθηκευμένου πίνακα', () => {
     expect(d.pages[0].items[0].id).not.toBe('');
     expect(d.pages[0].view).toEqual({ x: 0, y: 0, k: 1 });
     expect(readDoc({ v: 1, pages: [] }).pages).toHaveLength(1);
+  });
+  it('κρατά το περίγραμμα Α4 και πετά ό,τι άγνωστο', () => {
+    expect(readDoc({ v: 1, pages: [], a4: 'h' }).a4).toBe('h');
+    expect(readDoc({ v: 1, pages: [], a4: 'A3' }).a4).toBeUndefined();
+    // 40 μονάδες = 1 cm, όπως το πλέγμα: 21 × 29,7 cm
+    expect(a4Frame('v')).toEqual({ x0: 0, y0: 0, x1: 840, y1: 1188 });
+    expect(a4Frame('h')).toEqual({ x0: 0, y0: 0, x1: 1188, y1: 840 });
+    expect(a4Frame(undefined)).toBeNull();
   });
   it('απορρίπτει ό,τι δεν είναι πίνακας ή είναι από νεότερη έκδοση', () => {
     expect(() => readDoc(null)).toThrow('Μη έγκυρο');

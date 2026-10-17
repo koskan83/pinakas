@@ -88,10 +88,6 @@ export function mountUi(app: HTMLElement): void {
     ${mi('data-act="savewhere"', I.save, 'Αποθήκευση…')}
     ${mi('data-act="openwhere"', I.folder, 'Άνοιγμα…')}
     ${mi('data-act="end" class="end"', I.send, 'Τέλος μαθήματος: QR για τους μαθητές')}
-    ${mi('data-act="send"', I.send, 'Αποστολή με επιλογή σελίδων…')}
-    <div class="gHead">Εξαγωγή</div>
-    ${mi('data-act="pdf"', I.doc, 'Εξαγωγή σε PDF…')}
-    ${mi('data-act="png"', I.image, 'Εξαγωγή σελίδας σε PNG')}
     <div class="gHead">Σελίδα</div>
     <div class="bgRow">
       <span>Φόντο</span>
@@ -103,6 +99,12 @@ export function mountUi(app: HTMLElement): void {
       <button data-act="bg-dark-lines" class="bgSw dark lines" title="Σκούρο με γραμμές τετραδίου"></button>
       <button data-act="bg-write" class="bgSw write" data-lv="pri" title="Τετράδιο γραφής: γραμμές με βοηθητική για τα μικρά γράμματα"></button>
       <button data-act="bg-squares" class="bgSw squares" data-lv="pri" title="Τετράδιο αριθμητικής: μεγάλα τετράγωνα"></button>
+    </div>
+    <div class="bgRow">
+      <span>Περίγραμμα Α4</span>
+      <button data-act="a4-off" class="a4Sw off" title="Χωρίς περίγραμμα">✕</button>
+      <button data-act="a4-v" class="a4Sw v" title="Αχνό περίγραμμα Α4 όρθιας: για στοίχιση, και το PDF βγαίνει ακριβώς Α4"><i></i></button>
+      <button data-act="a4-h" class="a4Sw h" title="Αχνό περίγραμμα Α4 πλάγιας: για στοίχιση, και το PDF βγαίνει ακριβώς Α4"><i></i></button>
     </div>
     ${mi('data-act="fit"', I.fit, 'Προσαρμογή προβολής')}
     ${mi('data-act="clear"', I.clear, 'Καθαρισμός σελίδας')}
@@ -139,6 +141,10 @@ export function mountUi(app: HTMLElement): void {
     <div class="gHead" data-for="save">Αποθήκευση του μαθήματος</div>
     ${mi('data-act="save" data-for="save"', I.save, 'Στον δίσκο, σε αρχείο')}
     ${mi('data-act="drivesave" data-for="save" data-drive', I.cloudUp, 'Στο Google Drive')}
+    <div class="gHead" data-for="save">Εξαγωγή και αποστολή</div>
+    ${mi('data-act="pdf" data-for="save"', I.doc, 'Σε PDF…')}
+    ${mi('data-act="png" data-for="save"', I.image, 'Η σελίδα σε εικόνα PNG')}
+    ${mi('data-act="send" data-for="save"', I.send, 'Στους μαθητές, με επιλογή σελίδων…')}
     <div class="gHead" data-for="open">Άνοιγμα μαθήματος</div>
     ${mi('data-act="open" data-for="open"', I.folder, 'Από τον δίσκο, από αρχείο…')}
     ${mi('data-act="driveopen" data-for="open" data-drive', I.cloudDown, 'Από το Google Drive…')}
@@ -169,6 +175,7 @@ export function mountUi(app: HTMLElement): void {
         <button id="sumBtn" title="Συνισταμένη: δύο βέλη ή ευθείες με κοινή κορυφή, ή μία γωνία" data-l="Συνισταμένη"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l5-12M4 20l11-3"/><path d="M4 20L20 5" stroke="#60a5fa"/><path d="M14 5h6v6" stroke="#60a5fa"/></svg></span></button>
         <button id="tidyBtn" title="Τακτοποίηση της χειρόγραφης γραφής: ίσια σειρά, ίσα κενά ανάμεσα στις λέξεις (μένει χειρόγραφη)" data-l="Τακτοποίηση"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18" stroke-dasharray="2 2.5"/><path d="M4 16c1-6 3-6 4 0M10 16c0-3 1-5 3-5s3 2 3 5M18 9v7"/></svg></span></button>
         <button id="angBtn" title="Γωνία ανάμεσα στις ευθείες: κρύψιμο ή εμφάνιση (σβήνεται και με τη γόμα πάνω στις μοίρες)" data-l="Γωνία"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 19H4L16 5"/><path d="M11 19a7 7 0 0 0-2.400-5.300"/></svg></span></button>
+        <button id="moveBtn" title="Μεταφορά της επιλογής σε άλλη σελίδα (ή σε νέα), στην ίδια θέση" data-l="Σε σελίδα"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h8l3 3v5M4 4v16h7"/><path d="M14 17h7M18 14l3 3-3 3"/></svg></span></button>
         <i class="sep recSep"></i>
         <button data-rec="text" class="rec" title="Αναγνώριση της επιλογής ως κείμενο" data-l="Σε κείμενο"><span class="txt">Aα</span></button>
         <button data-rec="math" class="rec" data-lv="sec" title="Αναγνώριση της επιλογής ως τύπο" data-l="Σε τύπο"><span class="txt">√x</span></button>
@@ -394,6 +401,10 @@ export function mountUi(app: HTMLElement): void {
   <div id="labelMenu" class="popup hidden">
     <div id="labelGrid"></div>
     ${mi('id="labelOther"', I.keys, 'Άλλο…')}
+  </div>
+  <div id="moveMenu" class="popup hidden">
+    <div class="gHead">Μεταφορά σε σελίδα</div>
+    <div id="moveGrid"></div>
   </div>
   <div id="scaleMenu" class="popup hidden">
     <div id="scaleGrid"></div>

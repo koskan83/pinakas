@@ -212,6 +212,17 @@ body.inking #toolbar { pointer-events: none; }
 #labelGrid { display: grid; grid-template-columns: repeat(6, 48px); gap: 4px; }
 #labelGrid button { padding: 12px 0; text-align: center; font-style: italic; font-size: 19px; }
 #scaleMenu { min-width: 0; }
+#moveMenu { min-width: 0; }
+#moveMenu .gHead { padding: 4px 4px 8px; }
+#moveGrid { display: grid; grid-template-columns: repeat(5, 56px); gap: 4px; max-height: 50vh; overflow-y: auto; }
+#moveGrid button { padding: 10px 0; text-align: center; font-size: 17px; font-variant-numeric: tabular-nums; }
+#moveGrid button:disabled { opacity: .35; }
+#moveGrid button.new { grid-column: span 2; }
+.popup button.a4Sw { width: 40px; height: 40px; padding: 0; border-radius: 9px; border: 2px solid var(--bar-2); display: grid; place-items: center; font-size: 15px; }
+.popup button.a4Sw i { display: block; border: 1.5px dashed currentColor; border-radius: 1px; }
+.popup button.a4Sw.v i { width: 15px; height: 21px; }
+.popup button.a4Sw.h i { width: 21px; height: 15px; }
+.popup button.a4Sw.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 #scaleGrid { display: grid; grid-template-columns: repeat(6, 56px); gap: 4px; }
 #scaleGrid button { padding: 10px 0; text-align: center; font-size: 17px; font-variant-numeric: tabular-nums; }
 #scaleGrid button.on { background: var(--accent); color: #fff; }
