@@ -33,11 +33,13 @@ export async function importFiles(files: File[]): Promise<void> {
         const pic = await blobToPic(f);
         board.addPicture(pic.src, pic.w, pic.h);
       } else if (/\.json$/i.test(f.name)) {
-        const doc = readDoc(JSON.parse(await f.text()));
-        // το αρχείο ανοίγει ως ξεχωριστό μάθημα· το τρέχον δεν πειράζεται
-        if (lessons) await lessons.createFrom(doc, f.name.replace(/\.json$/i, ''));
-        else board.loadDoc(doc);
-        toast('Το αρχείο άνοιξε ως νέο μάθημα');
+        // μάθημα: ανοίγει χωριστά (ή ως το ίδιο, αν υπάρχει ήδη εδώ)· το τρέχον δεν πειράζεται
+        const text = await f.text();
+        if (lessons) await lessons.openJson(text, f.name);
+        else {
+          const j = JSON.parse(text);
+          board.loadDoc(readDoc(j?.grafida === 'backup' ? j.lessons?.[0]?.doc : j));
+        }
       } else {
         toast(`Μη υποστηριζόμενο αρχείο: ${f.name}`);
       }

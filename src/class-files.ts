@@ -110,9 +110,10 @@ function downloadAs(blob: Blob, name: string): void {
 
 /**
  * Σώζει ένα αρχείο του μαθήματος στον φάκελο του τμήματος (βλ. πάνω) και, αν είναι αναμμένο, και στο Drive.
- * `name`: το όνομα από την classFileName.
+ * `name`: το όνομα από την classFileName. `upload`: άλλος τρόπος για το Drive (το αρχείο ενός μαθήματος ανεβαίνει ως το ίδιο
+ * το μάθημα στο Drive, όχι ως δεύτερο αρχείο δίπλα του).
  */
-export async function saveClassFile(blob: Blob, name: string, group: string | undefined, toast: Toast): Promise<void> {
+export async function saveClassFile(blob: Blob, name: string, group: string | undefined, toast: Toast, upload?: () => Promise<unknown>): Promise<void> {
   let where = '';
   let action: { label: string; run: () => void } | undefined;
   try {
@@ -146,7 +147,7 @@ export async function saveClassFile(blob: Blob, name: string, group: string | un
               if (ok) toast(`Αποθηκεύτηκε στο «${await writeIn(dir, group, blob, name)}»`);
             }).catch(() => toast('Δεν αποθηκεύτηκε στον φάκελο', 5000)),
           });
-          return void (driveCopy() && driveReady() && copyToDrive(blob, name, group, toast, ''));
+          return void (driveCopy() && driveReady() && copyToDrive(blob, name, group, toast, '', upload));
         }
       } else downloadAs(blob, name);
     } else downloadAs(blob, name);
@@ -159,18 +160,18 @@ export async function saveClassFile(blob: Blob, name: string, group: string | un
   const local = where ? `Αποθηκεύτηκε ${where}` : isNative ? 'Αποθηκεύτηκε' : `Αποθηκεύτηκε: ${name}`;
   // απλό κατέβασμα: το δείχνει ήδη ο browser, και δεν σβήνουμε άλλο μήνυμα (π.χ. την «Αναίρεση» μιας διαγραφής)
   if (!driveCopy()) return void ((where || isNative) && toast(local, 5000, action));
-  if (driveReady()) return copyToDrive(blob, name, group, toast, local);
+  if (driveReady()) return copyToDrive(blob, name, group, toast, local, upload);
   // χωρίς σύνδεση με το Google σε αυτή τη συσκευή: ένα πάτημα συνδέει και ανεβάζει
   toast(local, 10000, {
     label: '☁ Και στο Drive',
-    run: () => void driveConnect().then(() => copyToDrive(blob, name, group, toast, local)).catch((err) => toast(`Δεν ανέβηκε: ${err instanceof Error ? err.message : err}`, 6000)),
+    run: () => void driveConnect().then(() => copyToDrive(blob, name, group, toast, local, upload)).catch((err) => toast(`Δεν ανέβηκε: ${err instanceof Error ? err.message : err}`, 6000)),
   });
 }
 
-function copyToDrive(blob: Blob, name: string, group: string | undefined, toast: Toast, local: string): void {
+function copyToDrive(blob: Blob, name: string, group: string | undefined, toast: Toast, local: string, upload?: () => Promise<unknown>): void {
   const dest = `«${ROOT}${group ? `/${safeName(group)}` : ''}»`;
   toast(`${local ? `${local}· ` : ''}ανεβαίνει και στο Drive…`, 0);
-  saveToDrive(blob, name, group ? safeName(group) : undefined)
+  (upload ? upload() : saveToDrive(blob, name, group ? safeName(group) : undefined))
     .then(() => toast(`${local ? `${local} και` : 'Ανέβηκε'} στο Drive, στο ${dest}`, 6000))
     .catch((err) => toast(`${local ? `${local}· ` : ''}στο Drive δεν ανέβηκε: ${err instanceof Error ? err.message : err}`, 8000));
 }

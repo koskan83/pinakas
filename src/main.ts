@@ -25,7 +25,7 @@ import { initTemplates, renderTemplates } from './templates-ui';
 import { initDiag, initText } from './text-ui';
 import { loadKids, onKidsLoaded } from './kids/lazy';
 import { canPickFolder, chooseFolder, classFileName, driveCopy, folderLabel, saveClassFile, setDriveCopy } from './class-files';
-import { driveClientId } from './drive';
+import { driveClientId, drivePreload } from './drive';
 
 // ---------- εισαγωγή ----------
 
@@ -478,6 +478,8 @@ $('menuBtn').onclick = () => {
   const open = menu.classList.contains('hidden');
   closePopups();
   menu.classList.toggle('hidden', !open);
+  // το παράθυρο της Google να είναι έτοιμο πριν πατηθεί το «☁ …» (αλλιώς ο browser το μπλοκάρει)
+  if (open) drivePreload();
 };
 document.addEventListener('pointerdown', (e) => {
   if (!(e.target as HTMLElement).closest('.popup, #menuBtn, #importBtn, #gadgetBtn, #colorBtn, #axesOpts')) closePopups();
@@ -638,6 +640,7 @@ async function showFilePrefs(): Promise<void> {
   const where = await folderLabel();
   dir.lastChild!.textContent = `Φάκελος για τα αρχεία των μαθημάτων: ${where ?? 'Λήψεις'}…`;
   drv.classList.toggle('hidden', !driveClientId());
+  for (const a of ['drivesave', 'driveopen']) document.querySelector(`#menu [data-act="${a}"]`)!.classList.toggle('hidden', !driveClientId() || isOverlay);
   drv.classList.toggle('on', driveCopy());
   drv.lastChild!.textContent = `Αρχεία και στο Google Drive, στον φάκελο του τμήματος: ${driveCopy() ? 'ναι' : 'όχι'}`;
 }
@@ -685,7 +688,12 @@ const onMenu = async (e: Event): Promise<void> => {
   } else if (act === 'open') {
     ($('fileOpen') as HTMLInputElement).click();
   } else if (act === 'save') {
-    void saveLesson(new Blob([JSON.stringify(board.doc)], { type: 'application/json' }), 'json');
+    if (lessons) void lessons.exportFile();
+    else void saveLesson(new Blob([JSON.stringify(board.doc)], { type: 'application/json' }), 'json');
+  } else if (act === 'drivesave') {
+    void lessons?.saveToDrive();
+  } else if (act === 'driveopen') {
+    void lessons?.openFromDrive();
   } else if (act === 'png') {
     void saveLesson(await board.exportPng(), 'png', ` σελίδα ${board.cur + 1}`);
   } else if (act === 'send') {

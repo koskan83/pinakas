@@ -1,9 +1,10 @@
 /** Βιβλιοθήκη μαθημάτων: κάθε μάθημα είναι ένας πίνακας που σώζεται χωριστά στη συσκευή. */
 
 import { Doc, newDoc, readDoc, uid } from './model';
-import { backupLesson, driveClientId, driveConnect, driveReady, listLessonBackups, readBackup, trashBackup } from './drive';
+import { backupLesson, driveClientId, driveConnect, driveReady, listDriveLessons, listLessonBackups, readBackup, trashBackup, type RemoteLesson } from './drive';
 import { deleteLesson, kvGet, kvSet, loadDoc, loadLesson, saveLesson } from './storage';
-import { ask, askLines, confirmBox, type WordList } from './dialog';
+import { ask, askLines, chooseBox, confirmBox, type Choice, type WordList } from './dialog';
+import { classFileName, safeName, saveClassFile } from './class-files';
 import { loadLists, mergeLists } from './spell-lists';
 import { mascot } from './mascot';
 
@@ -51,6 +52,8 @@ interface SafeState {
 const SAFE = 'grafida.safe';
 const GROUP = 'grafida.group';
 const DAY = 86400000;
+/** Η ένδειξη του Drive δίπλα στο όνομα του μαθήματος και στις κάρτες. */
+const CLOUD = { '': '', ok: '☁ ✓', chg: '☁ ↑' } as const;
 /** Μετά από τόσες μέρες χωρίς αντίγραφο το κουμπί των μαθημάτων δείχνει υπενθύμιση. */
 const REMIND_DAYS = 7;
 
@@ -107,7 +110,7 @@ export class Lessons {
   constructor(private host: LessonHost, parent: HTMLElement) {
     parent.insertAdjacentHTML(
       'beforeend',
-      `<button id="lessonName" class="fab hidden" title="Μετονομασία μαθήματος"><i id="libOpen" title="Μαθήματα"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/></svg></i><span></span></button>
+      `<button id="lessonName" class="fab hidden" title="Μετονομασία μαθήματος"><i id="libOpen" title="Μαθήματα"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/></svg></i><span></span><em class="cl"></em></button>
       <div id="lib" class="hidden">
         <div id="libHead">
           <img class="lg onDark" src="./logo-light.svg" alt="" /><img class="lg onLight" src="./logo.svg" alt="" />
@@ -120,8 +123,8 @@ export class Lessons {
         </div>
         <div id="libSafe">
           <span id="libSafeMsg"></span>
-          <button data-lib="cloud" class="go" title="Ανεβάζει στο δικό σου Google Drive όσα μαθήματα άλλαξαν">☁ Αντίγραφο στο Drive</button>
-          <button data-lib="cloudGet" title="Φέρνει από το Google Drive μαθήματα που λείπουν ή είναι νεότερα εκεί">☁ Φέρε από το Drive</button>
+          <button data-lib="cloud" class="go" title="Ανεβάζει στο δικό σου Google Drive όσα μαθήματα άλλαξαν, το καθένα στον φάκελο του τμήματός του">☁ Όλα στο Drive</button>
+          <button data-lib="cloudGet" title="Διαλέγεις ένα μάθημα από το Google Drive σου (από οποιαδήποτε συσκευή) και ανοίγει εδώ">☁ Άνοιγμα από το Drive…</button>
         </div>
         <div id="libGroups"></div>
         <div id="libGrid"></div>
@@ -134,7 +137,13 @@ export class Lessons {
     this.el = parent.querySelector<HTMLElement>('#lib')!;
     this.label = parent.querySelector<HTMLElement>('#lessonName')!;
     // το εικονίδιο ανοίγει τα μαθήματα· το ίδιο το όνομα μετονομάζει το ανοιχτό μάθημα
-    this.label.onclick = (e) => void ((e.target as HTMLElement).closest('#libOpen') ? this.open() : this.rename(this.current));
+    // το ☁ με αλλαγές τις ανεβάζει στο Drive
+    this.label.onclick = (e) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('#libOpen')) return void this.open();
+      if (t.closest('.cl.chg')) return void this.saveToDrive();
+      void this.rename(this.current);
+    };
     this.el.addEventListener('click', (e) => void this.click(e));
     const file = this.el.querySelector<HTMLInputElement>('#libFile')!;
     file.onchange = () => {
@@ -295,9 +304,13 @@ export class Lessons {
   }
 
   /** Νέο μάθημα από έτοιμο πίνακα (π.χ. αρχείο που άνοιξε ο χρήστης) και άνοιγμά του. */
-  async createFrom(doc: Doc, name: string): Promise<void> {
+  async createFrom(doc: Doc, name: string, group?: string): Promise<void> {
     await this.flush(true);
     const meta = await this.add(doc, name);
+    if (group) {
+      meta.group = group;
+      await kvSet(INDEX, this.index);
+    }
     await this.show(meta.id);
   }
 
@@ -340,11 +353,169 @@ export class Lessons {
   }
 
   private renderLabel(): void {
-    const name = this.current?.name ?? '';
+    const cur = this.current;
+    const name = cur?.name ?? '';
     this.label.querySelector('span')!.textContent = name;
     this.label.classList.toggle('hidden', !name);
     this.label.classList.toggle('warn', this.overdue);
+    const st = cur ? this.cloud(cur) : '';
+    const cl = this.label.querySelector<HTMLElement>('.cl')!;
+    cl.className = `cl ${st}`;
+    cl.textContent = CLOUD[st];
+    cl.title = st === 'ok' ? 'Αποθηκευμένο και στο Google Drive' : st === 'chg' ? 'Έχει αλλαγές που δεν έχουν ανέβει στο Drive: πάτα για ανέβασμα' : '';
   }
+
+  /** Η κατάσταση ενός μαθήματος στο Drive: 'ok' ανεβασμένο όπως είναι, 'chg' άλλαξε μετά, '' δεν έχει ανέβει ποτέ από εδώ. */
+  private cloud(m: LessonMeta): '' | 'ok' | 'chg' {
+    if (!driveClientId() || !(m.id in this.safe.ids)) return '';
+    return this.safe.ids[m.id] >= m.updated ? 'ok' : 'chg';
+  }
+
+  /** Ένα μάθημα ως αρχείο: το ίδιο για τον φάκελο, τη συσκευή και το Drive. Κρατά όνομα και τμήμα, ώστε να ξανανοίγει ως το ίδιο μάθημα. */
+  private lessonBlob(meta: LessonMeta, doc: Doc): Blob {
+    const { thumb: _thumb, ...slim } = meta;
+    const out: Backup = { grafida: 'backup', v: 1, lessons: [{ meta: slim, doc }] };
+    return new Blob([JSON.stringify(out)], { type: 'application/json' });
+  }
+
+  /**
+   * Ανεβάζει ένα μάθημα στο Drive, στον φάκελο του τμήματός του. `remote`: το αρχείο του εκεί (null: δεν υπάρχει·
+   * undefined: άγνωστο, το ψάχνουμε). Επιστρέφει τον φάκελο, π.χ. «PrismaBoard/Β2».
+   */
+  private async uploadOne(meta: LessonMeta, remote?: RemoteLesson | null): Promise<string> {
+    const doc = await loadLesson(meta.id);
+    if (!doc) throw new Error('το μάθημα δεν διαβάστηκε');
+    if (remote === undefined) remote = (await listLessonBackups()).find((r) => r.id === meta.id) ?? null;
+    const where = await backupLesson(meta.id, safeName(meta.name), meta.updated, this.lessonBlob(meta, doc), meta.group ? safeName(meta.group) : undefined, remote ?? undefined);
+    this.safe.ids[meta.id] = meta.updated;
+    this.safe.gone = this.safe.gone.filter((g) => g !== meta.id);
+    this.saveSafe();
+    this.renderLabel();
+    return where;
+  }
+
+  /** ☰ → «Αποθήκευση στο Google Drive»: το ανοιχτό μάθημα, τώρα, στον φάκελο του τμήματός του. */
+  async saveToDrive(): Promise<void> {
+    if (this.busy || !driveClientId()) return;
+    this.busy = true;
+    try {
+      // η σύνδεση πρώτα, όσο «μετράει» ακόμα το πάτημα του κουμπιού
+      await driveConnect();
+      await this.flush(true);
+      const meta = this.current;
+      if (!meta) return;
+      this.host.toast(`Αποθήκευση του «${meta.name}» στο Drive…`, 0);
+      const where = await this.uploadOne(meta);
+      this.host.toast(`Αποθηκεύτηκε στο Google Drive, στο «${where}». Ανοίγει από κάθε συσκευή με ☰ → «Άνοιγμα από το Google Drive».`, 7000);
+    } catch (err) {
+      console.error(err);
+      this.host.toast(`Δεν αποθηκεύτηκε στο Drive: ${err instanceof Error ? err.message : err}`, 8000);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** ☰ → «Αποθήκευση σε αρχείο» και το «Αρχείο» της κάρτας: στον φάκελο του τμήματος (βλ. class-files.ts). */
+  async exportFile(meta = this.current): Promise<void> {
+    if (!meta) return;
+    if (meta.id === this.cur) await this.flush(true);
+    const doc = await loadLesson(meta.id);
+    if (!doc) return;
+    // το αντίγραφο στο Drive (αν είναι αναμμένο) είναι το ίδιο το μάθημα στο Drive, όχι δεύτερο αρχείο δίπλα του
+    await saveClassFile(this.lessonBlob(meta, doc), classFileName(meta.name, meta.group, 'json'), meta.group, this.host.toast, () => this.uploadOne(meta));
+  }
+
+  /** ☰ → «Άνοιγμα από το Google Drive»: λίστα με τα μαθήματα του Drive (από όλες τις συσκευές) ανά τμήμα· ένα πάτημα ανοίγει. */
+  async openFromDrive(): Promise<void> {
+    if (this.busy || !driveClientId()) return;
+    this.busy = true;
+    let list: RemoteLesson[];
+    try {
+      await driveConnect();
+      this.host.toast('Ψάχνω στο Drive…', 0);
+      await this.flush(false);
+      list = await listDriveLessons();
+      this.host.toast('', 1);
+    } catch (err) {
+      console.error(err);
+      return this.host.toast(`Δεν άνοιξε το Drive: ${err instanceof Error ? err.message : err}`, 8000);
+    } finally {
+      this.busy = false;
+    }
+    const known = (r: RemoteLesson): LessonMeta | undefined => (r.id ? this.index.find((m) => m.id === r.id) : undefined);
+    const NONE = 'Χωρίς τμήμα';
+    const sec = (r: RemoteLesson): string => r.group || known(r)?.group || NONE;
+    const when = (t: number): string => `${new Date(t).toLocaleDateString('el', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date(t).toLocaleTimeString('el', { hour: '2-digit', minute: '2-digit' })}`;
+    const rows = list
+      .map((r) => ({ r, s: sec(r) }))
+      .sort((a, b) => (a.s === b.s ? b.r.updated - a.r.updated : a.s === NONE ? 1 : b.s === NONE ? -1 : a.s.localeCompare(b.s, 'el')));
+    const items: Choice[] = rows.map(({ r, s }) => {
+      const have = known(r);
+      const badge = !r.id ? 'αρχείο' : !have ? 'δεν είναι εδώ' : r.updated > have.updated ? 'νεότερο στο Drive' : r.updated < have.updated ? 'νεότερο εδώ' : 'ίδιο με εδώ';
+      return { key: r.fileId, title: r.name, sub: when(r.updated), badge, badgeGo: !!r.id && (!have || r.updated > have.updated), section: s };
+    });
+    const newer = list.filter((r) => r.id && !this.safe.gone.includes(r.id) && r.updated > (known(r)?.updated ?? 0)).length;
+    const pick = await chooseBox('Άνοιγμα από το Google Drive', items, {
+      hint: 'Τα μαθήματα που έχεις αποθηκεύσει στο Google Drive σου, από όλες τις συσκευές. Στο Drive είναι στον φάκελο PrismaBoard, με έναν υποφάκελο για κάθε τμήμα.',
+      empty: 'Δεν υπάρχουν ακόμα μαθήματα στο Drive. Αποθήκευσε ένα από ☰ → «Αποθήκευση στο Google Drive».',
+      extra: newer > 1 ? [{ key: '*', label: `Φέρε όλα τα νεότερα (${newer})` }] : [],
+    });
+    if (!pick) return;
+    if (pick === '*') return this.cloudRestore();
+    const r = list.find((x) => x.fileId === pick);
+    if (!r) return;
+    this.host.toast(`Κατεβαίνει το «${r.name}»…`, 0);
+    try {
+      await this.openJson(await readBackup(r.fileId), r.name, r);
+    } catch (err) {
+      console.error(err);
+      this.host.toast(`Το «${r.name}» δεν άνοιξε: ${err instanceof Error ? err.message : err}`, 8000);
+    }
+  }
+
+  /**
+   * Ανοίγει ένα αρχείο .json (από τη συσκευή ή από το Drive, `remote`):
+   * - ένα μάθημα: αν υπάρχει ήδη εδώ, ανοίγει αυτό (με τις αλλαγές του αρχείου, αν είναι νεότερο), αλλιώς μπαίνει ως νέο·
+   * - αντίγραφο πολλών μαθημάτων: επαναφορά όλων·
+   * - σκέτος πίνακας (παλιότερες εκδόσεις): νέο μάθημα.
+   */
+  async openJson(text: string, name: string, remote?: RemoteLesson): Promise<void> {
+    const data = JSON.parse(text) as Partial<Backup> & Partial<Doc>;
+    const src = remote ? 'το Drive' : 'το αρχείο';
+    if (data.grafida === 'backup' && Array.isArray(data.lessons)) {
+      if (data.lessons.length !== 1 || data.rosters || data.spellLists) return this.restoreAll(data);
+      const { meta, doc } = data.lessons[0];
+      if (!meta?.id) throw new Error('άγνωστη μορφή');
+      await this.flush(false);
+      const was = this.index.find((m) => m.id === meta.id)?.updated ?? 0;
+      this.safe.gone = this.safe.gone.filter((g) => g !== meta.id);
+      const r = await this.put(meta, doc);
+      if (!this.index.some((m) => m.id === meta.id)) throw new Error('το μάθημα δεν διαβάζεται');
+      // από το Drive και ίδιο πια με εκεί: ☁ ✓
+      if (remote && (r || was === meta.updated)) this.safe.ids[meta.id] = meta.updated;
+      this.saveSafe();
+      await kvSet(INDEX, this.index);
+      if (meta.id !== this.cur) await this.show(meta.id);
+      this.close();
+      this.renderLabel();
+      const nm = this.current?.name ?? name;
+      if (r === 'upd') this.host.toast(`Άνοιξε το «${nm}», με τις αλλαγές από ${src}`, 6000);
+      else if (!r && was > meta.updated) {
+        this.host.toast(`Άνοιξε το «${nm}» όπως είναι σε αυτή τη συσκευή: είναι νεότερο από ${src}`, 10000, {
+          label: 'Άνοιγμα του παλιότερου ως αντίγραφο',
+          run: () => void this.createFrom(readDoc(doc), `${meta.name} (από ${remote ? 'Drive' : 'αρχείο'})`.slice(0, 60), meta.group),
+        });
+      } else this.host.toast(`Άνοιξε το «${nm}»`);
+      return;
+    }
+    if (typeof data.v === 'number' && Array.isArray(data.pages)) {
+      await this.createFrom(readDoc(data), name.replace(/\.json$/i, '').slice(0, 60));
+      this.close();
+      return this.host.toast('Το αρχείο άνοιξε ως νέο μάθημα');
+    }
+    throw new Error('άγνωστη μορφή');
+  }
+
 
   private saveSafe(): void {
     try {
@@ -401,13 +572,10 @@ export class Lessons {
       let done = 0;
       for (const meta of todo) {
         if (!quiet) this.host.toast(`Αντίγραφο στο Drive… ${done + 1} από ${todo.length}`, 0);
-        const doc = await loadLesson(meta.id);
-        if (!doc) continue;
-        const { thumb: _thumb, ...slim } = meta;
-        const out: Backup = { grafida: 'backup', v: 1, lessons: [{ meta: slim, doc }] };
-        await backupLesson(meta.id, meta.name.replace(/[\\/:*?"<>|]/g, '_'), meta.updated, new Blob([JSON.stringify(out)], { type: 'application/json' }), remote.find((r) => r.id === meta.id)?.fileId);
-        this.safe.ids[meta.id] = meta.updated;
-        this.saveSafe();
+        await this.uploadOne(meta, remote.find((r) => r.id === meta.id) ?? null).catch((err) => {
+          // μάθημα που δεν διαβάζεται από τη συσκευή: το προσπερνάμε
+          if (!/δεν διαβάστηκε/.test(String(err))) throw err;
+        });
         done++;
       }
       for (const id of gone.slice()) {
@@ -538,7 +706,7 @@ export class Lessons {
         return `<div class="card${m.id === this.cur ? ' on' : ''}" data-id="${m.id}">
           <div class="th">${m.thumb ? `<img src="${m.thumb}" alt="" />` : ''}</div>
           <div class="nm">${m.group ? `<span class="grp">${esc(m.group)}</span>` : ''}${esc(m.name)}</div>
-          <div class="info">${when} · ${m.pages} ${m.pages === 1 ? 'σελίδα' : 'σελίδες'}</div>
+          <div class="info">${when} · ${m.pages} ${m.pages === 1 ? 'σελίδα' : 'σελίδες'}${this.cloud(m) ? ` · <span class="cl ${this.cloud(m)}">${CLOUD[this.cloud(m)]}</span>` : ''}</div>
           <div class="acts">
             <button data-card="rename">Όνομα</button>
             <button data-card="group">Τμήμα</button>
@@ -578,7 +746,7 @@ export class Lessons {
     }
     if (top === 'backup') return void this.backup();
     if (top === 'cloud') return void this.cloudBackup();
-    if (top === 'cloudGet') return void this.cloudRestore();
+    if (top === 'cloudGet') return void this.openFromDrive();
     if (top === 'restore') return this.el.querySelector<HTMLInputElement>('#libFile')!.click();
 
     const card = t.closest<HTMLElement>('.card');
@@ -603,8 +771,7 @@ export class Lessons {
       if (doc) Object.assign(await this.add(doc, `${meta.name} (αντίγραφο)`), { thumb: meta.thumb, group: meta.group });
       await kvSet(INDEX, this.index);
     } else if (act === 'file') {
-      const doc = await loadLesson(meta.id);
-      if (doc) this.host.download(new Blob([JSON.stringify(doc)], { type: 'application/json' }), `${meta.name.replace(/[\\/:*?"<>|]/g, '_')}.json`);
+      await this.exportFile(meta);
     } else if (act === 'del') {
       if (!(await confirmBox(`Να διαγραφεί το μάθημα «${meta.name}»;`, 'Διαγραφή', true, 'Δεν αναιρείται.'))) return;
       this.index = this.index.filter((m) => m.id !== meta.id);
@@ -655,37 +822,32 @@ export class Lessons {
   /** Φέρνει μαθήματα από αρχείο αντιγράφου: όσα υπάρχουν ήδη αντικαθίστανται μόνο αν το αντίγραφο είναι νεότερο. */
   private async restore(f: File): Promise<void> {
     try {
-      const data = JSON.parse(await f.text()) as Partial<Backup> & Partial<Doc>;
-      if (data.grafida !== 'backup' || !Array.isArray(data.lessons)) {
-        // σκέτο αρχείο πίνακα: μπαίνει ως νέο μάθημα
-        if (typeof data.v === 'number' && Array.isArray(data.pages)) {
-          await this.add(readDoc(data), f.name.replace(/\.json$/i, ''));
-          this.render();
-          return this.host.toast('Το αρχείο μπήκε ως νέο μάθημα');
-        }
-        throw new Error('άγνωστη μορφή');
-      }
-      let added = 0, updated = 0, skipped = 0;
-      for (const { meta, doc } of data.lessons) {
-        const r = await this.put(meta, doc);
-        if (r === 'new') added++; else if (r === 'upd') updated++; else skipped++;
-      }
-      await kvSet(INDEX, this.index);
-      // λίστες μαθητών: μπαίνουν μόνο για τμήματα που δεν έχουν ήδη λίστα εδώ
-      let lists = 0;
-      for (const [g, names] of Object.entries(data.rosters ?? {})) {
-        if (this.rosters[g]?.length || !Array.isArray(names)) continue;
-        this.rosters[g] = names.filter((n) => typeof n === 'string').slice(0, 60);
-        lists++;
-      }
-      if (lists) await kvSet(ROSTERS, this.rosters);
-      // λίστες λέξεων: μπαίνουν όσες δεν υπάρχουν ήδη εδώ με το ίδιο όνομα
-      if (Array.isArray(data.spellLists)) await mergeLists(data.spellLists, false);
-      this.render();
-      this.host.redraw();
-      this.host.toast(`Επαναφορά: ${added} νέα, ${updated} ενημερώθηκαν, ${skipped} έμειναν όπως ήταν`, 6000);
+      await this.openJson(await f.text(), f.name);
     } catch (err) {
-      this.host.toast(`Το αρχείο δεν είναι αντίγραφο μαθημάτων (${err instanceof Error ? err.message : err})`, 6000);
+      this.host.toast(`Το αρχείο δεν είναι μάθημα ή αντίγραφο μαθημάτων (${err instanceof Error ? err.message : err})`, 6000);
     }
+  }
+
+  /** Επαναφορά από αντίγραφο πολλών μαθημάτων: μπαίνουν όσα λείπουν και όσα είναι νεότερα στο αντίγραφο. */
+  private async restoreAll(data: Partial<Backup>): Promise<void> {
+    let added = 0, updated = 0, skipped = 0;
+    for (const { meta, doc } of data.lessons ?? []) {
+      const r = await this.put(meta, doc);
+      if (r === 'new') added++; else if (r === 'upd') updated++; else skipped++;
+    }
+    await kvSet(INDEX, this.index);
+    // λίστες μαθητών: μπαίνουν μόνο για τμήματα που δεν έχουν ήδη λίστα εδώ
+    let lists = 0;
+    for (const [g, names] of Object.entries(data.rosters ?? {})) {
+      if (this.rosters[g]?.length || !Array.isArray(names)) continue;
+      this.rosters[g] = names.filter((n) => typeof n === 'string').slice(0, 60);
+      lists++;
+    }
+    if (lists) await kvSet(ROSTERS, this.rosters);
+    // λίστες λέξεων: μπαίνουν όσες δεν υπάρχουν ήδη εδώ με το ίδιο όνομα
+    if (Array.isArray(data.spellLists)) await mergeLists(data.spellLists, false);
+    this.render();
+    this.host.redraw();
+    this.host.toast(`Επαναφορά: ${added} νέα, ${updated} ενημερώθηκαν, ${skipped} έμειναν όπως ήταν`, 6000);
   }
 }

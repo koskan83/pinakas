@@ -647,3 +647,18 @@ canvas.mascot { position: static; display: block; touch-action: auto; }
 @keyframes mascotIn { from { transform: translateY(160%) rotate(-12deg); } to { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .mascotPop { animation: none; } .mascotPop.out { transition: none; } }
 @media print { .mascotPop { display: none !important; } }
+/* διάλεξε από λίστα (π.χ. μάθημα από το Drive) */
+.chooseList { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin: 0 -6px; padding: 0 6px; }
+.chooseList .chSec { font-size: 15px; font-weight: 700; opacity: .65; margin: 10px 2px 0; }
+.chooseList .chRow { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 14px; border-radius: 14px; background: var(--bar-2); color: var(--fg); text-align: left; flex-shrink: 0; }
+.chooseList .chTx { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.chooseList .chTx b { font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chooseList .chTx small { font-size: 15px; opacity: .7; }
+.chooseList .chBadge { font-style: normal; font-size: 14px; padding: 3px 10px; border-radius: 999px; background: var(--bar-3); white-space: nowrap; }
+.chooseList .chBadge.go { background: #16a34a; color: #fff; font-weight: 600; }
+.chooseList .chEmpty { font-size: 17px; opacity: .75; }
+/* η κατάσταση του μαθήματος στο Drive, δίπλα στο όνομά του */
+#lessonName .cl { font-style: normal; font-size: 15px; margin-left: 8px; opacity: .8; white-space: nowrap; }
+#lessonName .cl.chg { color: #f59e0b; opacity: 1; }
+#libGrid .card .info .cl { white-space: nowrap; }
+#libGrid .card .info .cl.chg { color: #f59e0b; }

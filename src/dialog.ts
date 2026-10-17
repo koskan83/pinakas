@@ -292,6 +292,102 @@ export function notice(title: string, lines: string[], o: NoticeOptions = {}): P
   });
 }
 
+/** Μια γραμμή του `chooseBox`. */
+export interface Choice {
+  key: string;
+  title: string;
+  /** Μικρή γραμμή κάτω από τον τίτλο (π.χ. ημερομηνία). */
+  sub?: string;
+  /** Ετικέτα δεξιά (π.χ. «νέο»)· `badgeGo`: τονισμένη. */
+  badge?: string;
+  badgeGo?: boolean;
+  /** Επικεφαλίδα ενότητας: οι γραμμές με την ίδια μπαίνουν μαζί, με τη σειρά που έρχονται. */
+  section?: string;
+}
+
+/**
+ * Διάλεξε ένα από μια λίστα (π.χ. μάθημα από το Drive). Επιστρέφει το `key` της γραμμής ή ενός από τα κουμπιά `extra`,
+ * ή null αν ακυρώθηκε.
+ */
+export function chooseBox(title: string, items: Choice[], o: { hint?: string; empty?: string; extra?: { key: string; label: string }[] } = {}): Promise<string | null> {
+  return new Promise((res) => {
+    const { back, box } = shell(title, o.hint);
+    const list = document.createElement('div');
+    list.className = 'chooseList';
+    let section: string | undefined;
+    for (const it of items) {
+      if (it.section !== undefined && it.section !== section) {
+        section = it.section;
+        const h = document.createElement('div');
+        h.className = 'chSec';
+        h.textContent = section;
+        list.append(h);
+      }
+      const b = document.createElement('button');
+      b.className = 'chRow';
+      b.dataset.key = it.key;
+      const t = document.createElement('span');
+      t.className = 'chTx';
+      const tb = document.createElement('b');
+      tb.textContent = it.title;
+      t.append(tb);
+      if (it.sub) {
+        const s = document.createElement('small');
+        s.textContent = it.sub;
+        t.append(s);
+      }
+      b.append(t);
+      if (it.badge) {
+        const g = document.createElement('i');
+        g.className = it.badgeGo ? 'chBadge go' : 'chBadge';
+        g.textContent = it.badge;
+        b.append(g);
+      }
+      list.append(b);
+    }
+    if (!items.length) {
+      const s = document.createElement('small');
+      s.className = 'chEmpty';
+      s.textContent = o.empty ?? 'Δεν υπάρχει τίποτα εδώ.';
+      list.append(s);
+    }
+    const acts = document.createElement('div');
+    acts.className = 'askActs';
+    const no = button('Άκυρο', 'no');
+    acts.append(no);
+    for (const x of o.extra ?? []) {
+      const b = button(x.label, 'go');
+      b.dataset.key = x.key;
+      acts.append(b);
+    }
+    box.append(list, acts);
+    const done = (v: string | null): void => {
+      if (open !== cancel) return;
+      open = null;
+      removeEventListener('keydown', key, true);
+      back.remove();
+      res(v);
+    };
+    const cancel = (): void => done(null);
+    const key = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        cancel();
+      }
+    };
+    open = cancel;
+    addEventListener('keydown', key, true);
+    no.onclick = cancel;
+    box.addEventListener('click', (e) => {
+      const k = (e.target as HTMLElement).closest<HTMLElement>('[data-key]')?.dataset.key;
+      if (k) done(k);
+    });
+    back.addEventListener('pointerdown', (e) => {
+      if (e.target === back) cancel();
+    });
+  });
+}
+
 /** Μια φυλαγμένη λίστα λέξεων της ορθογραφίας. */
 export interface WordList { name: string; text: string }
 

@@ -64,8 +64,8 @@ const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 
-// ψεύτικη Google: η σύνδεση πετυχαίνει αμέσως και το Drive δέχεται ό,τι του στείλεις
-const drive = { uploads: 0, perms: 0 };
+// ψεύτικη Google: η σύνδεση πετυχαίνει αμέσως και το Drive είναι ένα μικρό Drive στη μνήμη (φάκελοι, αρχεία, ετικέτες, αναζήτηση)
+const drive = { uploads: 0, perms: 0, files: new Map(), seq: 0, folders: 0 };
 await ctx.route('https://accounts.google.com/gsi/client', (r) => r.fulfill({
   contentType: 'text/javascript',
   body: `window.google={accounts:{oauth2:{initTokenClient:(o)=>({requestAccessToken:()=>setTimeout(()=>o.callback({access_token:'fake',expires_in:3600}),10)})}}};`,
@@ -81,15 +81,61 @@ await ctx.route('https://generativelanguage.googleapis.com/**', (r) => {
     : '✓ Σωστή επιλογή: το 2';
   return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }) });
 });
+/** Μεταδεδομένα και περιεχόμενο από ένα σώμα «multipart/related». */
+function multipart(req) {
+  const b = /boundary=(\S+)/.exec(req.headers()['content-type'] ?? '')?.[1];
+  const parts = (req.postDataBuffer() ?? Buffer.alloc(0)).toString('utf8').split(`--${b}`).slice(1, 3);
+  const body = (p) => p.slice(p.indexOf('\r\n\r\n') + 4).replace(/\r\n$/, '');
+  return { meta: JSON.parse(body(parts[0]) || '{}'), type: /Content-Type: ([^\r\n]+)/.exec(parts[1])?.[1] ?? '', content: body(parts[1]) };
+}
+/** Τα κριτήρια που χρησιμοποιεί η εφαρμογή στις αναζητήσεις του Drive. */
+function matches(f, q) {
+  const name = /name='((?:[^'\\]|\\.)*)'/.exec(q)?.[1]?.replace(/\\(.)/g, '$1');
+  const mime = /mimeType='([^']*)'/.exec(q)?.[1];
+  const parent = /'([^']*)' in parents/.exec(q)?.[1];
+  const prop = /appProperties has \{ key='(\w+)' and value='([^']*)' \}/.exec(q);
+  return !f.trashed && (name === undefined || f.name === name) && (mime === undefined || f.mimeType === mime)
+    && (parent === undefined || f.parents.includes(parent)) && (!prop || f.appProperties[prop[1]] === prop[2]);
+}
+const view = (f) => ({ id: f.id, name: f.name, parents: f.parents, appProperties: f.appProperties, modifiedTime: new Date(f.modified).toISOString() });
 await ctx.route('https://www.googleapis.com/**', (r) => {
   const req = r.request();
   const u = new URL(req.url());
-  let body = { id: 'x' };
-  if (req.method() === 'GET') body = { files: [{ id: 'folder' }] };
-  else if (u.pathname.startsWith('/upload')) { drive.uploads++; body = { id: 'file1' }; }
-  else if (u.pathname.endsWith('/permissions')) drive.perms++;
-  return r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+  const m = req.method();
+  const json = (body) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+  const id = /\/files\/([^/]+)/.exec(u.pathname)?.[1];
+  if (u.pathname.endsWith('/permissions')) { drive.perms++; return json({ id: 'perm' }); }
+  if (m === 'GET' && id) {
+    const f = drive.files.get(id);
+    if (!f) return r.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
+    return u.searchParams.get('alt') === 'media' ? r.fulfill({ contentType: f.mimeType, body: f.content }) : json(view(f));
+  }
+  if (m === 'GET') return json({ files: [...drive.files.values()].filter((f) => matches(f, u.searchParams.get('q') ?? '')).map(view) });
+  const upload = u.pathname.startsWith('/upload');
+  if (m === 'POST') {
+    const { meta, type, content } = upload ? multipart(req) : { meta: req.postDataJSON(), type: '', content: '' };
+    const folder = meta.mimeType === 'application/vnd.google-apps.folder';
+    const f = { id: folder ? `folder${++drive.folders}` : `file${++drive.seq}`, name: meta.name, mimeType: meta.mimeType ?? type, parents: meta.parents ?? [], appProperties: meta.appProperties ?? {}, content, modified: Date.now(), trashed: false };
+    drive.files.set(f.id, f);
+    if (upload) drive.uploads++;
+    return json({ id: f.id });
+  }
+  // PATCH: νέο περιεχόμενο και ετικέτες, μετακίνηση σε φάκελο, κάδος
+  const f = drive.files.get(id);
+  if (!f) return r.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
+  const { meta, content } = upload ? multipart(req) : { meta: req.postDataJSON() ?? {} };
+  if (upload) { f.content = content; drive.uploads++; }
+  if (meta.name) f.name = meta.name;
+  if (meta.appProperties) Object.assign(f.appProperties, meta.appProperties);
+  if (meta.trashed) f.trashed = true;
+  const add = u.searchParams.get('addParents'), rm = u.searchParams.get('removeParents');
+  if (rm) f.parents = f.parents.filter((p) => !rm.split(',').includes(p));
+  if (add) f.parents.push(add);
+  f.modified = Date.now();
+  return json({ id: f.id });
 });
+/** Ο φάκελος του Drive με αυτό το όνομα (π.χ. «Β2»). */
+const driveFolder = (name) => [...drive.files.values()].find((f) => f.name === name && f.mimeType === 'application/vnd.google-apps.folder');
 
 const tmp = mkdtempSync(join(tmpdir(), 'prismaboard-e2e-'));
 process.on('exit', () => rmSync(tmp, { recursive: true, force: true }));
@@ -126,10 +172,10 @@ async function download(action) {
 async function doc() {
   const p = await download(async () => {
     await page.click('#menuBtn');
-    await page.click('#menu [data-act="more"]');
-    await page.click('#setMenu [data-act="save"]');
+    await page.click('#menu [data-act="save"]');
   });
-  return JSON.parse(readFileSync(p, 'utf8'));
+  const j = JSON.parse(readFileSync(p, 'utf8'));
+  return j.grafida === 'backup' ? j.lessons[0].doc : j;
 }
 const items = async (pi = 0) => (await doc()).pages[pi].items;
 function assert(cond, msg) {
@@ -772,14 +818,14 @@ test('Τμήμα με ονόματα: η Κλήρωση βγάζει μαθητ�
 test('Αρχεία ανά τμήμα: ρωτά μία φορά πού να μπαίνουν, και το όνομα έχει μπροστά το τμήμα', async () => {
   await page.evaluate(() => localStorage.removeItem('grafida.files'));
   await page.click('#menuBtn');
-  await page.click('#menu [data-act="more"]');
-  await page.click('#setMenu [data-act="save"]');
+  await page.click('#menu [data-act="save"]');
   await page.waitForSelector('#ask .no');
   assert((await page.textContent('#ask .no')) === 'Στις Λήψεις', 'δεν ρώτησε πού να μπαίνουν τα αρχεία');
   const p = await download(() => page.click('#ask .no'));
   const name = p.split(/[\\/]/).pop();
   assert(/^Β2 – Δοκιμή Β2 νέο \d\d-\d\d-\d{4}\.json$/.test(name), `το αρχείο λέγεται «${name}»`);
-  assert(JSON.parse(readFileSync(p, 'utf8')).pages.length >= 1, 'το αρχείο δεν είναι μάθημα');
+  const saved = JSON.parse(readFileSync(p, 'utf8'));
+  assert(saved.lessons?.[0]?.doc?.pages?.length >= 1 && saved.lessons[0].meta.group === 'Β2', 'το αρχείο δεν είναι μάθημα με το τμήμα του');
   // δεύτερη φορά δεν ξαναρωτά
   await doc();
   assert(!(await visible('#ask')), 'ξαναρώτησε για τον φάκελο');
@@ -866,6 +912,60 @@ test('Αντίγραφο μαθημάτων στο Drive', async () => {
   await page.waitForFunction(() => document.getElementById('libSafeMsg').textContent.startsWith('Όλα τα μαθήματα έχουν αντίγραφο'), null, { timeout: 20000 });
   assert(drive.uploads - before >= 1, 'δεν ανέβηκε αντίγραφο');
   await page.click('#lib [data-lib="close"]');
+});
+
+test('☁ Αποθήκευση στο Drive και ☁ Άνοιγμα από το Drive (μάθημα από άλλη συσκευή)', async () => {
+  // κάθε μάθημα πάει στον φάκελο του τμήματός του, με το τμήμα στις ετικέτες του
+  const b2 = driveFolder('Β2');
+  const onDrive = [...drive.files.values()].filter((f) => f.appProperties.pbKind === 'lesson');
+  assert(b2 && onDrive.some((f) => f.parents.includes(b2.id) && f.appProperties.pbGroup === 'Β2'), 'τα μαθήματα του Β2 δεν μπήκαν στο PrismaBoard/Β2');
+  const cloud = () => page.textContent('#lessonName .cl');
+  // το μάθημα που είναι ανοιχτό τώρα: σε αυτό γυρίζουμε στο τέλος, για τα επόμενα σενάρια
+  await page.click('#libOpen');
+  const prev = await page.getAttribute('#libGrid .card.on', 'data-id');
+  await page.click('#lib [data-lib="close"]');
+  await page.waitForFunction(() => document.querySelector('#lessonName .cl')?.textContent === '☁ ✓');
+  // μια αλλαγή: το ☁ δείχνει ότι θέλει ανέβασμα· το «☁ Αποθήκευση στο Drive» το ανεβάζει
+  await pen();
+  await drag(320, 420, 520, 460);
+  await page.waitForFunction(() => document.querySelector('#lessonName .cl')?.textContent === '☁ ↑', null, { timeout: 8000 });
+  const before = drive.uploads;
+  await page.click('#menuBtn');
+  await page.click('#menu [data-act="drivesave"]');
+  await page.waitForFunction(() => document.getElementById('toast')?.textContent.includes('Αποθηκεύτηκε στο Google Drive'), null, { timeout: 10000 });
+  assert(drive.uploads === before + 1 && (await cloud()) === '☁ ✓', 'το μάθημα δεν ανέβηκε');
+  assert([...drive.files.values()].filter((f) => f.appProperties.pbKind === 'lesson').length === onDrive.length, 'έγινε δεύτερο αρχείο αντί να γραφτεί από πάνω');
+  // η γραμμή φεύγει, για να μη μπλέκεται με τα επόμενα σενάρια
+  await page.click('#undo');
+  // μάθημα που ανέβηκε από άλλη συσκευή: φαίνεται στο τμήμα του και ανοίγει με ένα πάτημα
+  const d = await doc();
+  const t = Date.now();
+  const other = { grafida: 'backup', v: 1, lessons: [{ meta: { id: 'apo-laptop', name: 'Από το laptop', updated: t, pages: d.pages.length, group: 'Γ1' }, doc: d }] };
+  drive.files.set('fileLaptop', { id: 'fileLaptop', name: 'Από το laptop.json', mimeType: 'application/json', parents: [], appProperties: { pbKind: 'lesson', pbLesson: 'apo-laptop', pbUpdated: String(t), pbGroup: 'Γ1' }, content: JSON.stringify(other), modified: t, trashed: false });
+  const openFromDrive = async () => {
+    await page.click('#menuBtn');
+    await page.click('#menu [data-act="driveopen"]');
+    await page.waitForSelector('#ask .chRow');
+  };
+  await openFromDrive();
+  const sections = await page.$$eval('#ask .chSec', (els) => els.map((e) => e.textContent));
+  assert(sections.includes('Γ1') && sections.includes('Β2'), `λείπουν τμήματα από τη λίστα (${sections})`);
+  assert((await page.textContent('#ask [data-key="fileLaptop"]')).includes('δεν είναι εδώ'), 'δεν δείχνει ότι το μάθημα λείπει από εδώ');
+  await page.click('#ask [data-key="fileLaptop"]');
+  await page.waitForFunction(() => document.querySelector('#lessonName span')?.textContent === 'Από το laptop', null, { timeout: 10000 });
+  assert((await cloud()) === '☁ ✓', 'το μάθημα από το Drive δεν φαίνεται ίδιο με εκεί');
+  // δεύτερο άνοιγμα: ανοίγει το ίδιο μάθημα, δεν φτιάχνει διπλό
+  await openFromDrive();
+  assert((await page.textContent('#ask [data-key="fileLaptop"]')).includes('ίδιο με εδώ'), 'δεν δείχνει ότι είναι ίδιο με εδώ');
+  await page.click('#ask [data-key="fileLaptop"]');
+  await sleep(500);
+  await page.click('#libOpen');
+  await page.waitForSelector('#lib:not(.hidden)');
+  await page.click('#libGroups [data-group=""]');
+  const n = await page.$$eval('#libGrid .card .nm', (els) => els.filter((e) => e.textContent.includes('Από το laptop')).length);
+  assert(n === 1, `το μάθημα υπάρχει ${n} φορές`);
+  await page.click(`#libGrid .card[data-id="${prev}"] .nm`);
+  await page.waitForSelector('#lib.hidden', { state: 'attached' });
 });
 
 test('Σελίδα μαθητή (QR): δείχνει το αρχείο του Drive με κουμπί λήψης· λάθος σύνδεσμος δίνει μήνυμα', async () => {

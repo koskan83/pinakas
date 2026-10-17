@@ -27,6 +27,8 @@ const I = {
   lib: P('M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z'),
   folder: P('M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'),
   save: P('M12 4v11M7 11l5 5 5-5M4 20h16'),
+  cloudUp: P('M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.5 4.5 0 0 1-1 8.9M12 12v8M9 15l3-3 3 3'),
+  cloudDown: P('M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.5 4.5 0 0 1-1 8.9M12 12v8M9 17l3 3 3-3'),
   doc: P('M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6'),
   image: IC('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/>'),
   fit: P('M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'),
@@ -83,9 +85,15 @@ export function mountUi(app: HTMLElement): void {
   <div id="menu" class="popup hidden">
     <div class="gHead">Μάθημα</div>
     ${mi('data-act="lib"', I.lib, 'Μαθήματα…')}
+    ${mi('data-act="drivesave" class="hidden"', I.cloudUp, 'Αποθήκευση στο Google Drive')}
+    ${mi('data-act="driveopen" class="hidden"', I.cloudDown, 'Άνοιγμα από το Google Drive…')}
     ${mi('data-act="end" class="end"', I.send, 'Τέλος μαθήματος: QR για τους μαθητές')}
     ${mi('data-act="send"', I.send, 'Αποστολή με επιλογή σελίδων…')}
+    <div class="gHead">Αρχεία σε αυτή τη συσκευή</div>
+    ${mi('data-act="save"', I.save, 'Αποθήκευση μαθήματος σε αρχείο')}
+    ${mi('data-act="open"', I.folder, 'Άνοιγμα μαθήματος από αρχείο…')}
     ${mi('data-act="pdf"', I.doc, 'Εξαγωγή σε PDF…')}
+    ${mi('data-act="png"', I.image, 'Εξαγωγή σελίδας σε PNG')}
     <div class="gHead">Σελίδα</div>
     <div class="bgRow">
       <span>Φόντο</span>
@@ -119,9 +127,6 @@ export function mountUi(app: HTMLElement): void {
     ${mi('data-act="startscr"', I.spark, '«Τι κάνουμε σήμερα;» στο πρώτο άνοιγμα της μέρας')}
     ${mi('data-act="snip" class="hidden"', I.screen, 'Ψαλίδι πάνω από άλλες εφαρμογές')}
     <div class="gHead">Αρχεία</div>
-    ${mi('data-act="open"', I.folder, 'Άνοιγμα αρχείου ως νέο μάθημα…')}
-    ${mi('data-act="save"', I.save, 'Αποθήκευση του μαθήματος σε αρχείο')}
-    ${mi('data-act="png"', I.image, 'Εξαγωγή σελίδας σε PNG')}
     ${mi('data-act="filesdir" class="hidden"', I.folder, 'Φάκελος για τα αρχεία των μαθημάτων…')}
     ${mi('data-act="filesdrive" class="hidden"', I.save, 'Αρχεία και στο Google Drive, στον φάκελο του τμήματος')}
     <div class="gHead">Για προχωρημένους</div>
