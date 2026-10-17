@@ -975,7 +975,7 @@ export class Board {
 
   async exportPng(): Promise<Blob> { return X.exportPng(this); }
 
-  async exportJpegPages(onProgress: (done: number, total: number) => void, mark?: HTMLImageElement, only?: number[]): Promise<{ jpeg: Uint8Array; w: number; h: number }[]> { return X.exportJpegPages(this, onProgress); }
+  async exportJpegPages(onProgress: (done: number, total: number) => void, mark?: HTMLImageElement, only?: number[]): Promise<{ jpeg: Uint8Array; w: number; h: number }[]> { return X.exportJpegPages(this, onProgress, mark, only); }
 
   // ---------- είσοδος ----------
 

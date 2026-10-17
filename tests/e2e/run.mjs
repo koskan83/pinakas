@@ -153,7 +153,8 @@ async function download(action) {
 async function doc() {
   const p = await download(async () => {
     await page.click('#menuBtn');
-    await page.click('#menu [data-act="save"]');
+    await page.click('#menu [data-act="savewhere"]');
+    await page.click('#whereMenu [data-act="save"]');
   });
   const j = JSON.parse(readFileSync(p, 'utf8'));
   return j.grafida === 'backup' ? j.lessons[0].doc : j;
@@ -479,6 +480,18 @@ test('Διαγραφή σελίδας με «Αναίρεση»· το Esc κλ�
   assert(opened && !(await visible('#gadgetMenu')), 'το Esc δεν έκλεισε τα Όργανα');
 });
 
+test('Εξαγωγή σε PDF μόνο της τρέχουσας σελίδας', async () => {
+  const p = await download(async () => {
+    await page.click('#menuBtn');
+    await page.click('#menu [data-act="pdf"]');
+    await page.waitForSelector('#pagePick:not(.hidden)');
+    await page.click('#ppCur');
+    await page.click('#ppOk');
+  });
+  const n = (readFileSync(p).toString('latin1').match(/\/Type\s*\/Page\b/g) ?? []).length;
+  assert(n === 1, `με «Μόνο αυτή» το PDF έχει ${n} σελίδες αντί για 1`);
+});
+
 test('Εξαγωγή σε PDF με επιλογή σελίδων', async () => {
   pdfPath = await download(async () => {
     await page.click('#menuBtn');
@@ -799,7 +812,8 @@ test('Τμήμα με ονόματα: η Κλήρωση βγάζει μαθητ�
 test('Αρχεία ανά τμήμα: ρωτά μία φορά πού να μπαίνουν, και το όνομα έχει μπροστά το τμήμα', async () => {
   await page.evaluate(() => localStorage.removeItem('grafida.files'));
   await page.click('#menuBtn');
-  await page.click('#menu [data-act="save"]');
+  await page.click('#menu [data-act="savewhere"]');
+    await page.click('#whereMenu [data-act="save"]');
   await page.waitForSelector('#ask .no');
   assert((await page.textContent('#ask .no')) === 'Στις Λήψεις', 'δεν ρώτησε πού να μπαίνουν τα αρχεία');
   const p = await download(() => page.click('#ask .no'));
@@ -912,7 +926,8 @@ test('☁ Αποθήκευση στο Drive και ☁ Άνοιγμα από τ�
   await page.waitForFunction(() => document.querySelector('#lessonName .cl')?.textContent === '☁ ↑', null, { timeout: 8000 });
   const before = drive.uploads;
   await page.click('#menuBtn');
-  await page.click('#menu [data-act="drivesave"]');
+  await page.click('#menu [data-act="savewhere"]');
+    await page.click('#whereMenu [data-act="drivesave"]');
   await page.waitForFunction(() => document.getElementById('toast')?.textContent.includes('Αποθηκεύτηκε στο Google Drive'), null, { timeout: 10000 });
   assert(drive.uploads === before + 1 && (await cloud()) === '☁ ✓', 'το μάθημα δεν ανέβηκε');
   assert([...drive.files.values()].filter((f) => f.appProperties.pbKind === 'lesson').length === onDrive.length, 'έγινε δεύτερο αρχείο αντί να γραφτεί από πάνω');
@@ -925,7 +940,8 @@ test('☁ Αποθήκευση στο Drive και ☁ Άνοιγμα από τ�
   drive.files.set('fileLaptop', { id: 'fileLaptop', name: 'Από το laptop.json', mimeType: 'application/json', parents: [], appProperties: { pbKind: 'lesson', pbLesson: 'apo-laptop', pbUpdated: String(t), pbGroup: 'Γ1' }, content: JSON.stringify(other), modified: t, trashed: false });
   const openFromDrive = async () => {
     await page.click('#menuBtn');
-    await page.click('#menu [data-act="driveopen"]');
+    await page.click('#menu [data-act="openwhere"]');
+    await page.click('#whereMenu [data-act="driveopen"]');
     await page.waitForSelector('#ask .chRow');
   };
   await openFromDrive();

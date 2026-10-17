@@ -85,13 +85,11 @@ export function mountUi(app: HTMLElement): void {
   <div id="menu" class="popup hidden">
     <div class="gHead">Μάθημα</div>
     ${mi('data-act="lib"', I.lib, 'Μαθήματα…')}
-    ${mi('data-act="drivesave" class="hidden"', I.cloudUp, 'Αποθήκευση στο Google Drive')}
-    ${mi('data-act="driveopen" class="hidden"', I.cloudDown, 'Άνοιγμα από το Google Drive…')}
+    ${mi('data-act="savewhere"', I.save, 'Αποθήκευση…')}
+    ${mi('data-act="openwhere"', I.folder, 'Άνοιγμα…')}
     ${mi('data-act="end" class="end"', I.send, 'Τέλος μαθήματος: QR για τους μαθητές')}
     ${mi('data-act="send"', I.send, 'Αποστολή με επιλογή σελίδων…')}
-    <div class="gHead">Αρχεία σε αυτή τη συσκευή</div>
-    ${mi('data-act="save"', I.save, 'Αποθήκευση μαθήματος σε αρχείο')}
-    ${mi('data-act="open"', I.folder, 'Άνοιγμα μαθήματος από αρχείο…')}
+    <div class="gHead">Εξαγωγή</div>
     ${mi('data-act="pdf"', I.doc, 'Εξαγωγή σε PDF…')}
     ${mi('data-act="png"', I.image, 'Εξαγωγή σελίδας σε PNG')}
     <div class="gHead">Σελίδα</div>
@@ -135,6 +133,14 @@ export function mountUi(app: HTMLElement): void {
     ${mi('data-act="usage"', I.check, 'Τι χρησιμοποιώ')}
     ${mi('data-act="news"', I.spark, 'Τι νέο')}
     <div id="verLine"></div>
+  </div>
+  <div id="whereMenu" class="popup hidden">
+    <div class="gHead" data-for="save">Αποθήκευση του μαθήματος</div>
+    ${mi('data-act="save" data-for="save"', I.save, 'Στον δίσκο, σε αρχείο')}
+    ${mi('data-act="drivesave" data-for="save" data-drive', I.cloudUp, 'Στο Google Drive')}
+    <div class="gHead" data-for="open">Άνοιγμα μαθήματος</div>
+    ${mi('data-act="open" data-for="open"', I.folder, 'Από τον δίσκο, από αρχείο…')}
+    ${mi('data-act="driveopen" data-for="open" data-drive', I.cloudDown, 'Από το Google Drive…')}
   </div>
 
   <div id="zoomCtl">

@@ -482,7 +482,7 @@ body.dark #wHead .onLight { display: block; }
 .askText:focus { outline: none; border-color: var(--focus); }
 
 #menu button.end { background: var(--ok); color: #fff; font-weight: 600; }
-#setMenu .gHead { padding: 8px 12px 2px; }
+#setMenu .gHead, #whereMenu .gHead { padding: 8px 12px 2px; }
 
 #libGroups { display: flex; align-items: center; gap: 8px; padding: 10px 20px 0; flex-wrap: wrap; font-size: 16px; }
 #libGroups.hidden { display: none; }
@@ -649,6 +649,8 @@ canvas.mascot { position: static; display: block; touch-action: auto; }
 #stHead .mascot { grid-row: 1 / span 2; }
 .mascotPop { position: fixed; left: 16px; bottom: 96px; z-index: 96; display: flex; align-items: flex-end; pointer-events: none; animation: mascotIn .45s cubic-bezier(.3, 1.6, .5, 1); }
 .mascotPop b { margin: 0 0 84px -6px; padding: 10px 18px; border-radius: 20px 20px 20px 4px; background: #fff; color: #3b0764; font-size: 28px; font-weight: 800; box-shadow: 0 6px 18px rgba(0, 0, 0, .25); white-space: nowrap; }
+.mascotPop.left { flex-direction: row-reverse; }
+.mascotPop.left b { margin: 0 -6px 84px 0; border-radius: 20px 20px 4px 20px; }
 .mascotPop.out { transition: transform .45s ease-in, opacity .45s; transform: translateY(160%); opacity: 0; }
 @keyframes mascotIn { from { transform: translateY(160%) rotate(-12deg); } to { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .mascotPop { animation: none; } .mascotPop.out { transition: none; } }

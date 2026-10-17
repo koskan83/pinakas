@@ -394,7 +394,7 @@ export class Lessons {
     return where;
   }
 
-  /** ☰ → «Αποθήκευση στο Google Drive»: το ανοιχτό μάθημα, τώρα, στον φάκελο του τμήματός του. */
+  /** ☰ → «Αποθήκευση…» → «Στο Google Drive»: το ανοιχτό μάθημα, τώρα, στον φάκελο του τμήματός του. */
   async saveToDrive(): Promise<void> {
     if (this.busy || !driveClientId()) return;
     this.busy = true;
@@ -415,7 +415,7 @@ export class Lessons {
     }
   }
 
-  /** ☰ → «Αποθήκευση σε αρχείο» και το «Αρχείο» της κάρτας: στον φάκελο του τμήματος (βλ. class-files.ts). */
+  /** ☰ → «Αποθήκευση…» → «Στον δίσκο» και το «Αρχείο» της κάρτας: στον φάκελο του τμήματος (βλ. class-files.ts). */
   async exportFile(meta = this.current): Promise<void> {
     if (!meta) return;
     if (meta.id === this.cur) await this.flush(true);
@@ -457,7 +457,7 @@ export class Lessons {
     const newer = list.filter((r) => r.id && !this.safe.gone.includes(r.id) && r.updated > (known(r)?.updated ?? 0)).length;
     const pick = await chooseBox('Άνοιγμα από το Google Drive', items, {
       hint: 'Τα μαθήματα που έχεις αποθηκεύσει στο Google Drive σου, από όλες τις συσκευές. Στο Drive είναι στον φάκελο PrismaBoard, με έναν υποφάκελο για κάθε τμήμα.',
-      empty: 'Δεν υπάρχουν ακόμα μαθήματα στο Drive. Αποθήκευσε ένα από ☰ → «Αποθήκευση στο Google Drive».',
+      empty: 'Δεν υπάρχουν ακόμα μαθήματα στο Drive. Αποθήκευσε ένα από ☰ → «Αποθήκευση…» → «Στο Google Drive».',
       extra: newer > 1 ? [{ key: '*', label: `Φέρε όλα τα νεότερα (${newer})` }] : [],
     });
     if (!pick) return;

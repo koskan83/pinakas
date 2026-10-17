@@ -40,18 +40,39 @@ export function mascot(size: number, talk = 0): HTMLCanvasElement {
 const CHEERS = ['Μπράβο!', 'Τέλεια!', 'Σούπερ!', 'Ναι!', 'Υπέροχα!'];
 let popping: HTMLElement | null = null;
 
-/** Το τερατάκι πετάγεται κάτω αριστερά με ένα συννεφάκι («Μπράβο!») και φεύγει μόνο του. */
-export function cheer(text = CHEERS[Math.floor(Math.random() * CHEERS.length)]): void {
+/** Ένα ορθογώνιο της οθόνης (σε px του παραθύρου): εκεί που είναι το παιχνίδι που πέτυχε. */
+export interface Spot { left: number; top: number; right: number; bottom: number }
+
+/**
+ * Το τερατάκι πετάγεται με ένα συννεφάκι («Μπράβο!») και φεύγει μόνο του.
+ * `near`: δίπλα στο παιχνίδι, δεξιά του (ή αριστερά, αν δεν χωρά), στο ύψος της βάσης του· χωρίς αυτό, κάτω αριστερά.
+ */
+export function cheer(near?: Spot, text = CHEERS[Math.floor(Math.random() * CHEERS.length)]): void {
   popping?.remove();
   const box = document.createElement('div');
   box.className = 'mascotPop';
   const bubble = document.createElement('b');
   bubble.textContent = text;
   box.append(mascot(120, 1.2), bubble);
-  // στέκεται πάνω στη γραμμή εργαλείων όταν εκείνη είναι κάτω, αλλιώς στη γωνία
+  // στέκεται πάνω στη γραμμή εργαλείων όταν εκείνη είναι κάτω, όχι πάνω της
   const bar = document.getElementById('toolbar')?.getBoundingClientRect();
-  box.style.bottom = `${bar && bar.height > 0 && bar.top > innerHeight / 2 ? innerHeight - bar.top - 6 : 16}px`;
+  const floor = bar && bar.height > 0 && bar.top > innerHeight / 2 ? bar.top - 6 : innerHeight - 16;
+  if (!near) box.style.bottom = `${innerHeight - floor}px`;
   document.body.append(box);
+  if (near) {
+    const w = box.offsetWidth, h = box.offsetHeight, gap = 8;
+    // το ορατό κομμάτι του παιχνιδιού (μπορεί να βγαίνει από την οθόνη)
+    const l = Math.max(near.left, 0), r = Math.min(near.right, innerWidth), b = Math.min(near.bottom, floor);
+    let x = r + gap;
+    if (x + w > innerWidth - gap && l - w - gap >= gap) {
+      // αριστερά του παιχνιδιού: το τερατάκι κολλητά σε αυτό, το συννεφάκι προς τα έξω
+      x = l - w - gap;
+      box.classList.add('left');
+    } else if (x + w > innerWidth - gap) x = r - w - gap;
+    box.style.left = `${Math.round(Math.max(gap, Math.min(x, innerWidth - w - gap)))}px`;
+    box.style.top = `${Math.round(Math.max(gap, Math.min(b - h, floor - h)))}px`;
+    box.style.bottom = 'auto';
+  }
   popping = box;
   setTimeout(() => box.classList.add('out'), 2200);
   setTimeout(() => {
