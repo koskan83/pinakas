@@ -182,6 +182,8 @@ $('smaller').onclick = () => board.scaleSelected(0.8);
 $('flipH').onclick = () => board.flipSelected(false);
 $('flipV').onclick = () => board.flipSelected(true);
 $('sumBtn').onclick = () => board.addResultant();
+$('angBtn').onclick = () => board.toggleLineAngles();
+$('tidyBtn').onclick = () => board.tidySelection();
 $('prev').onclick = () => board.goto(board.cur - 1);
 $('next').onclick = () => board.goto(board.cur + 1);
 $('addPage').onclick = () => board.addPage();
@@ -236,6 +238,11 @@ export function refreshUi(): void {
   document.querySelectorAll<HTMLElement>('#selOpts .rec').forEach((b) => b.classList.toggle('hidden', b.dataset.speak || b.dataset.spellwords ? !(writing || region) : b.dataset.rec === 'text' || b.dataset.rec === 'math' ? !ink : !(writing || region)));
   $('selOpts').querySelector('.recSep')!.classList.toggle('hidden', !(writing || region) || !board.hasSelection);
   show('sumBtn', !!board.resultantSource);
+  show('tidyBtn', board.selectedInk().length >= 2);
+  // «Γωνία»: αναμμένο όσο φαίνεται η γωνία, σβηστό όταν είναι κρυμμένη
+  const angs = board.lineAngleItems();
+  show('angBtn', angs.length > 0);
+  $('angBtn').classList.toggle('on', angs.length > 0 && angs.some((x) => !x.noAng));
   show('axesOpts', !!ax);
   const sp = tool === 'select' ? board.selectedSpring : null;
   show('springOpts', !!sp);
@@ -674,6 +681,8 @@ const onMenu = async (e: Event): Promise<void> => {
     setPdfLogo(!pdfLogo);
   } else if (act === 'startscr') {
     setStartScr(!startScr);
+  } else if (act === 'prettyink') {
+    setPrettyInk(!board.prettyInk);
   } else if (act === 'labels') {
     setLabels(!$('toolbar').classList.contains('labels'));
   } else if (act === 'fxsound' || act === 'fxclick') {
@@ -985,6 +994,18 @@ function setStartScr(on: boolean): void {
   }
 }
 setStartScr((() => { try { return localStorage.getItem('grafida.startscr') !== '0'; } catch { return true; } })());
+/** Ομορφότερη γραφή (βλ. smoothStroke, strokeTaper): ανοιχτή μέχρι να την κλείσει ο χρήστης. */
+function setPrettyInk(on: boolean): void {
+  board.prettyInk = on;
+  document.querySelector('[data-act=prettyink]')!.classList.toggle('on', on);
+  board.redraw();
+  try {
+    localStorage.setItem('grafida.prettyInk', on ? '1' : '0');
+  } catch {
+    /* χωρίς αποθήκευση */
+  }
+}
+setPrettyInk((() => { try { return localStorage.getItem('grafida.prettyInk') !== '0'; } catch { return true; } })());
 
 // το διαφανές παράθυρο δεν έχει μαθήματα και δεν πειράζει ό,τι είναι αποθηκευμένο
 export const lessons = isOverlay

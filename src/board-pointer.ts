@@ -1,6 +1,6 @@
 /** Γραφίδα, δάχτυλα και ποντίκι: τι κάνει κάθε άγγιγμα ανάλογα με το εργαλείο (μέθοδοι της Board, σε δικό τους αρχείο). */
 
-import { AxesItem, Item, Pt, inLasso, itemBounds, reboxShape, recognizeShape, rotateItem, roundAngle, scaleItem, translateItem, uid, unrot } from './model';
+import { AxesItem, Item, Pt, inLasso, itemBounds, reboxShape, recognizeShape, rotateItem, roundAngle, smoothStroke, snapLine, scaleItem, translateItem, uid, unrot } from './model';
 import { STAMPS } from './stamps';
 import type { Board, PState, Twist } from './board';
 
@@ -364,6 +364,8 @@ export function armSnap(bd: Board, ps: PState): void {
     const r = recognizeShape(ps.stroke.pts);
     if (!r) return;
     const s = ps.stroke;
+    // η ευθεία κουμπώνει από την αρχή στις 0°, 15°, 30°… (βλ. snapLine)
+    if (r.t === 'shape' && r.shape === 'line') ({ x: r.x1, y: r.y1 } = snapLine(r.x0, r.y0, r.x1, r.y1));
     ps.live = r.t === 'angle'
       ? { kind: 'angle', id: uid(), x: r.x, y: r.y, a1: r.a1, a2: r.a2, len1: r.len1, len2: r.len2, color: s.color, width: s.width }
       : {
@@ -462,8 +464,7 @@ export function moveOne(bd: Board, ps: PState, e: PointerEvent): void {
           l.a2 = roundAngle(Math.atan2(wy - l.y, wx - l.x));
           l.len2 = Math.max(20, Math.hypot(wx - l.x, wy - l.y));
         } else if (l.shape === 'line') {
-          l.x1 = wx;
-          l.y1 = wy;
+          ({ x: l.x1, y: l.y1 } = snapLine(l.x0, l.y0, wx, wy));
         }
         break;
       }
@@ -500,6 +501,8 @@ export function moveOne(bd: Board, ps: PState, e: PointerEvent): void {
         l.a2 = roundAngle(Math.atan2(wy - l.y, wx - l.x));
         l.len1 = d;
         l.len2 = d;
+      } else if ((l.shape === 'line' || l.shape === 'arrow') && !l.angleWith) {
+        ({ x: l.x1, y: l.y1 } = snapLine(l.x0, l.y0, wx, wy));
       } else {
         l.x1 = wx;
         l.y1 = wy;
@@ -662,6 +665,8 @@ export function up(bd: Board, e: PointerEvent): void {
     case 'draw':
     case 'shape': {
       clearTimeout(ps.timer);
+      // ομορφότερη γραφή: το τρέμουλο του χεριού (λίγα pixel της οθόνης) φεύγει όταν σηκωθεί η γραφίδα
+      if (ps.mode === 'draw' && !ps.live && ps.stroke && !ps.stroke.hl && bd.prettyInk) ps.stroke.pts = smoothStroke(ps.stroke.pts, 2.6 / bd.page.view.k);
       const s: Item = ps.live ?? ps.stroke!;
       if (ps.mode === 'shape' && ps.live) {
         const l = ps.live;

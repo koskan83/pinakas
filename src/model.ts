@@ -48,6 +48,8 @@ export interface Shape {
   pts?: Pt[];
   /** Ευθεία/βέλος με κοινή αρχή: id του άλλου σχήματος, για να δείχνεται η μεταξύ τους γωνία. */
   angleWith?: string;
+  /** Η γωνία με το angleWith δεν φαίνεται (σβήστηκε με τη γόμα ή κρύφτηκε με το «Γωνία»)· η σύνδεση μένει. */
+  noAng?: boolean;
   /** Διακεκομμένη γραμμή. */
   dash?: boolean;
   /** Περιστροφή γύρω από το κέντρο (rad)· μόνο για ορθογώνιο και έλλειψη, τα άλλα σχήματα στρέφουν τα σημεία τους. */
@@ -624,6 +626,76 @@ export function angleDegrees(a: AngleItem): number {
 export function roundAngle(a: number): number {
   const step = Math.PI / 180;
   return Math.round(a / step) * step;
+}
+
+/**
+ * Λιγότερο τρέμουλο: κάθε σημείο γίνεται μέσος όρος των γειτόνων του κατά μήκος της γραμμής (καμπάνα πλάτους `sigma`).
+ * Οι δύο άκρες μένουν στη θέση τους· οι γωνίες στρογγυλεύουν μόνο όσο το `sigma`, που είναι λίγα pixel.
+ */
+export function smoothStroke(pts: Pt[], sigma: number): Pt[] {
+  const n = pts.length;
+  if (n < 4 || sigma <= 0) return pts;
+  const s = [0];
+  for (let i = 1; i < n; i++) s.push(s[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const out: Pt[] = [pts[0]];
+  for (let i = 1; i < n - 1; i++) {
+    // κοντά στις άκρες το παράθυρο μικραίνει, για να μη «μαζεύει» η γραμμή
+    const reach = Math.min(3 * sigma, s[i], s[n - 1] - s[i]);
+    const sg = Math.max(reach / 3, 1e-6);
+    let x = 0, y = 0, wsum = 0;
+    for (let j = i; j >= 0 && s[i] - s[j] <= reach; j--) {
+      const w = Math.exp(-((s[i] - s[j]) ** 2) / (2 * sg * sg));
+      x += pts[j][0] * w; y += pts[j][1] * w; wsum += w;
+    }
+    for (let j = i + 1; j < n && s[j] - s[i] <= reach; j++) {
+      const w = Math.exp(-((s[j] - s[i]) ** 2) / (2 * sg * sg));
+      x += pts[j][0] * w; y += pts[j][1] * w; wsum += w;
+    }
+    out.push([x / wsum, y / wsum]);
+  }
+  out.push(pts[n - 1]);
+  return out;
+}
+
+/**
+ * Πάχος σαν αληθινό στυλό, ως συντελεστής (0..1] για κάθε σημείο: λεπταίνει στην αρχή και στο τέλος της γραμμής,
+ * και λίγο όπου το χέρι πήγε γρήγορα (τα σημεία έρχονται σε σταθερό ρυθμό, άρα πιο αραιά σημεία = πιο γρήγορα).
+ */
+export function strokeTaper(pts: Pt[], width: number): number[] {
+  const n = pts.length, w = Math.max(width, 1);
+  const s = [0];
+  for (let i = 1; i < n; i++) s.push(s[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const total = s[n - 1], ramp = 2.5 * w;
+  const raw = pts.map((_, i) => {
+    const gap = (s[Math.min(i + 1, n - 1)] - s[Math.max(i - 1, 0)]) / (i === 0 || i === n - 1 ? 1 : 2);
+    const fast = 1 - 0.28 * Math.min(1, Math.max(0, (gap / w - 1) / 5));
+    const ends = Math.min(1, 0.5 + 0.5 * Math.min(s[i], total - s[i]) / ramp);
+    return { fast, ends };
+  });
+  // η ταχύτητα αλλάζει ομαλά: μέσος όρος σε 5 σημεία, για να μη «κυματίζει» το πάχος
+  return raw.map((r, i) => {
+    let f = 0, c = 0;
+    for (let j = Math.max(0, i - 2); j <= Math.min(n - 1, i + 2); j++) { f += raw[j].fast; c++; }
+    return r.ends * (f / c);
+  });
+}
+
+/**
+ * Η άκρη (x, y) μιας ευθείας από το (x0, y0), «κουμπωμένη» σε πολλαπλάσιο των 15° όταν απέχει ως 4° από αυτό (το μήκος μένει ίδιο).
+ * `deg`: η γωνία με το οριζόντιο, από 0° ως 90°· `snap`: αν κούμπωσε.
+ */
+export function snapLine(x0: number, y0: number, x: number, y: number): { x: number; y: number; deg: number; snap: boolean } {
+  const len = Math.hypot(x - x0, y - y0);
+  if (len < 1e-6) return { x, y, deg: 0, snap: false };
+  const a = (Math.atan2(y0 - y, x - x0) * 180) / Math.PI;
+  const near = Math.round(a / 15) * 15;
+  const snap = Math.abs(a - near) <= 4;
+  const use = snap ? near : a;
+  let deg = Math.abs(use) % 180;
+  if (deg > 90) deg = 180 - deg;
+  if (!snap) return { x, y, deg, snap };
+  const r = (near * Math.PI) / 180;
+  return { x: x0 + len * Math.cos(r), y: y0 - len * Math.sin(r), deg, snap };
 }
 
 export function axesRange(a: AxesItem): { xmin: number; xmax: number; ymin: number; ymax: number } {

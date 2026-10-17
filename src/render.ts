@@ -1,13 +1,13 @@
 /** Σχεδίαση των στοιχείων του πίνακα στον καμβά: γραμμές, σχήματα, άξονες, ανάλυση, τριγωνομετρικός κύκλος, μετρήσεις. */
 
 import {
-  AngleItem, AxesAn, AxesItem, Doc, FnDef, Item, Page, Pic, Pt, Shape, StampItem, Stroke, TextItem, TrigItem, angleDegrees, angleEnds, axesRange, isDark, isPoly, itemCenter, itemFlip, itemRot, tableLines, textFont, textLines, trianglePts,
+  AngleItem, AxesAn, AxesItem, Doc, FnDef, Item, Page, Pic, Pt, Shape, StampItem, Stroke, TextItem, TrigItem, angleDegrees, angleEnds, axesRange, isDark, isPoly, itemCenter, itemFlip, itemRot, strokeTaper, tableLines, textFont, textLines, trianglePts,
 } from './model';
 import { Fn, Params, compileCached, domText, fnOf, keyPoints } from './expr';
 import { Asymptotes, asymptotes, integrate, lineEq, nf, oneSided, riemann, slope, crossings } from './analysis';
 import { STAMPS, SpringState } from './stamps';
 import { CM } from './gadgets';
-import { ANGLE_KEY, HL_ALPHA, angleSides, fmt, fmtU, hlFlat, measureAngles, measureSides, radText, sideText, trigPoint, unitsFor } from './measure';
+import { ANGLE_KEY, HL_ALPHA, angleSides, fmt, fmtU, hlFlat, lineAngleMark, measureAngles, measureSides, radText, sideText, trigPoint, unitsFor } from './measure';
 
 /** Ό,τι χρειάζεται η σχεδίαση από τον πίνακα. */
 export interface RenderHost {
@@ -19,6 +19,8 @@ export interface RenderHost {
   fnPreview: { index: number | null; expr: string; color: string } | null;
   paramPreview: Params | null;
   transparent: boolean;
+  /** Πάχος σαν στυλό στις γραμμές του χεριού. */
+  prettyInk: boolean;
   lctx: CanvasRenderingContext2D;
   ink(color: string, hl?: boolean): string;
   getImg(p: Pic): HTMLImageElement | null;
@@ -100,12 +102,27 @@ export class Renderer {
       c.arc(pts[0][0], pts[0][1], w / 2, 0, Math.PI * 2);
       c.fill();
     } else {
+      // πάχος σαν στυλό (όχι στο υπογραμμιστικό και στις ευθείες του χάρακα): κάθε κομμάτι με το πάχος του σημείου του,
+      // και τα διαδοχικά κομμάτια με το ίδιο (στρογγυλεμένο) πάχος σε ένα πέρασμα
+      const taper = this.b.prettyInk && !s.hl && pts.length >= 4 ? strokeTaper(pts, w) : null;
+      const level = (i: number): number => (taper ? Math.round(taper[Math.min(i, pts.length - 1)] * 16) : 16);
+      let cur = level(0);
+      c.lineWidth = (w * cur) / 16;
       c.beginPath();
       c.moveTo(pts[0][0], pts[0][1]);
+      let px = pts[0][0], py = pts[0][1];
       for (let i = 1; i < pts.length - 1; i++) {
-        const mx = (pts[i][0] + pts[i + 1][0]) / 2;
-        const my = (pts[i][1] + pts[i + 1][1]) / 2;
-        c.quadraticCurveTo(pts[i][0], pts[i][1], mx, my);
+        const lv = level(i);
+        if (lv !== cur) {
+          c.stroke();
+          cur = lv;
+          c.lineWidth = (w * cur) / 16;
+          c.beginPath();
+          c.moveTo(px, py);
+        }
+        px = (pts[i][0] + pts[i + 1][0]) / 2;
+        py = (pts[i][1] + pts[i + 1][1]) / 2;
+        c.quadraticCurveTo(pts[i][0], pts[i][1], px, py);
       }
       const last = pts[pts.length - 1];
       c.lineTo(last[0], last[1]);
@@ -150,24 +167,10 @@ export class Renderer {
     }
     c.stroke();
     // γωνία με το πιο κοντινό (σε άνοιγμα) προηγούμενο βέλος/ευθεία που ξεκινά από το ίδιο σημείο
-    const l2 = Math.hypot(s.x1 - s.x0, s.y1 - s.y0);
-    if (s.angleWith && l2 > 20) {
-      const a2 = Math.atan2(s.y1 - s.y0, s.x1 - s.x0);
-      let best: { a1: number; d: number; len: number } | null = null;
-      for (const o of this.b.page.items) {
-        if (o.id === s.id) break;
-        if (o.kind !== 'shape' || (o.shape !== 'arrow' && o.shape !== 'line') || Math.hypot(o.x0 - s.x0, o.y0 - s.y0) >= 1) continue;
-        const l1 = Math.hypot(o.x1 - o.x0, o.y1 - o.y0);
-        if (l1 <= 20) continue;
-        const a1 = Math.atan2(o.y1 - o.y0, o.x1 - o.x0);
-        let d = Math.abs(a1 - a2) % (2 * Math.PI);
-        if (d > Math.PI) d = 2 * Math.PI - d;
-        if (!best || d < best.d) best = { a1, d, len: Math.min(l1, l2) };
-      }
-      if (best) {
-        c.globalAlpha = 1;
-        this.drawAngleMark(c, s.x0, s.y0, best.a1, a2, best.len, s.width, Math.round((best.d * 180) / Math.PI));
-      }
+    const m = lineAngleMark(this.b.page.items, s);
+    if (m) {
+      c.globalAlpha = 1;
+      this.drawAngleMark(c, s.x0, s.y0, m.a1, m.a2, m.len, s.width, m.deg, m.r);
     }
     c.restore();
   }

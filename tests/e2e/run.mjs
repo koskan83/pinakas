@@ -295,10 +295,66 @@ test('Σχήμα από τα Όργανα, επιλογή και διαγραφ�
   assert((await items()).filter((i) => i.kind === 'shape').length === 1, 'η διαγραφή δεν έγινε');
 });
 
+test('Γωνία ανάμεσα σε δύο ευθείες: σβήνει με τη γόμα και ξαναφαίνεται με το «Γωνία»', async () => {
+  const lines = async () => (await items()).filter((i) => i.kind === 'shape' && i.shape === 'line');
+  await page.click('#gadgetBtn');
+  await page.click('#gadgetMenu [data-shape="line"]');
+  await drag(300, 520, 560, 520);
+  await page.click('#gadgetBtn');
+  await page.click('#gadgetMenu [data-shape="line"]');
+  await drag(300, 520, 300, 330);
+  let l = await lines();
+  assert(l.length === 2 && l[1].angleWith === l[0].id && !l[1].noAng, 'η δεύτερη ευθεία δεν κούμπωσε στην πρώτη');
+  // η γόμα κατά μήκος της διχοτόμου περνά από το τόξο και τις μοίρες, μακριά από τις ευθείες
+  await tool('eraser');
+  await drag(300 + 40 * Math.SQRT1_2, 520 - 40 * Math.SQRT1_2, 300 + 110 * Math.SQRT1_2, 520 - 110 * Math.SQRT1_2);
+  l = await lines();
+  assert(l.length === 2, 'η γόμα έσβησε ευθεία αντί για τη γωνία');
+  assert(l[1].noAng === true, 'η γωνία δεν σβήστηκε με τη γόμα');
+  await tool('select');
+  await page.mouse.click(300, 425);
+  assert(await visible('#selOpts #angBtn'), 'δεν εμφανίστηκε το «Γωνία» στην επιλεγμένη ευθεία');
+  await page.click('#selOpts #angBtn');
+  assert(!(await lines())[1].noAng, 'το «Γωνία» δεν ξανάφερε τη γωνία');
+  await page.click('#selOpts #angBtn');
+  assert((await lines())[1].noAng === true, 'το «Γωνία» δεν έκρυψε τη γωνία');
+  await page.click('#selOpts #del');
+  await page.mouse.click(430, 520);
+  await page.click('#selOpts #del');
+  assert((await lines()).length === 0, 'οι ευθείες της δοκιμής δεν σβήστηκαν');
+});
+
 test('Λάσο σε χειρόγραφο: εμφανίζονται αναγνώριση, λύση και έλεγχος', async () => {
   await tool('select');
   await lasso(260, 250, 560, 350);
   for (const k of ['text', 'math', 'solve', 'check', 'graph']) assert(await visible(`#selOpts [data-rec="${k}"]`), `λείπει το κουμπί «${k}»`);
+  await page.mouse.click(1000, 600);
+});
+
+test('«Τακτοποίηση» χειρόγραφου: η σειρά ισιώνει, και μία αναίρεση τη γυρίζει πίσω', async () => {
+  const ink = async () => (await items()).filter((i) => i.kind === 'stroke' && i.pts[0][1] > 420 && i.pts[0][1] < 560);
+  await pen();
+  // πέντε «γράμματα» σε σειρά που ανεβαίνει προς τα δεξιά
+  for (let i = 0; i < 5; i++) {
+    const x = 160 + i * 45, y = 520 - i * 8;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    for (const [dx, dy] of [[6, -20], [12, 0], [18, -20]]) await page.mouse.move(x + dx, y + dy, { steps: 3 });
+    await page.mouse.up();
+  }
+  const before = await ink();
+  await tool('select');
+  await lasso(140, 450, 420, 540);
+  assert(await visible('#selOpts #tidyBtn'), 'δεν εμφανίστηκε το «Τακτοποίηση»');
+  await page.click('#selOpts #tidyBtn');
+  const after = await ink();
+  const firstY = (s) => s.pts[0][1];
+  const spread = (list) => Math.max(...list.map(firstY)) - Math.min(...list.map(firstY));
+  assert(after.length === before.length && spread(after) < spread(before) / 3, `η σειρά δεν ίσιωσε (${spread(before).toFixed(1)} → ${spread(after).toFixed(1)})`);
+  await page.click('#undo');
+  assert(Math.abs(spread(await ink()) - spread(before)) < 0.5, 'η αναίρεση δεν γύρισε τη σειρά όπως ήταν');
+  await lasso(140, 450, 420, 540);
+  await page.click('#selOpts #del');
   await page.mouse.click(1000, 600);
 });
 

@@ -7,6 +7,44 @@ export function trigPoint(t: TrigItem): Pt {
 }
 
 
+/**
+ * Η γωνία που δείχνει μια ευθεία/βέλος με `angleWith`: με το πιο κοντινό (σε άνοιγμα) προηγούμενο βέλος/ευθεία που ξεκινά από το ίδιο σημείο.
+ * `r`: η ακτίνα του τόξου· `lx, ly`: πού γράφονται οι μοίρες. null όταν δεν δείχνεται γωνία.
+ */
+export function lineAngleMark(items: Item[], s: Shape): { a1: number; a2: number; len: number; deg: number; r: number; lx: number; ly: number } | null {
+  const l2 = Math.hypot(s.x1 - s.x0, s.y1 - s.y0);
+  if (!s.angleWith || s.noAng || l2 <= 20) return null;
+  const a2 = Math.atan2(s.y1 - s.y0, s.x1 - s.x0);
+  let best: { a1: number; d: number; len: number } | null = null;
+  for (const o of items) {
+    if (o.id === s.id) break;
+    if (o.kind !== 'shape' || (o.shape !== 'arrow' && o.shape !== 'line') || Math.hypot(o.x0 - s.x0, o.y0 - s.y0) >= 1) continue;
+    const l1 = Math.hypot(o.x1 - o.x0, o.y1 - o.y0);
+    if (l1 <= 20) continue;
+    const a1 = Math.atan2(o.y1 - o.y0, o.x1 - o.x0);
+    let d = Math.abs(a1 - a2) % (2 * Math.PI);
+    if (d > Math.PI) d = 2 * Math.PI - d;
+    if (!best || d < best.d) best = { a1, d, len: Math.min(l1, l2) };
+  }
+  if (!best) return null;
+  const r = Math.max(18, Math.min(46, best.len * 0.4));
+  const mid = best.a1 + Math.atan2(Math.sin(a2 - best.a1), Math.cos(a2 - best.a1)) / 2;
+  return { a1: best.a1, a2, len: best.len, deg: Math.round((best.d * 180) / Math.PI), r, lx: s.x0 + (r + 26) * Math.cos(mid), ly: s.y0 + (r + 26) * Math.sin(mid) };
+}
+
+/** Η γόμα στο (x, y) με ακτίνα `rad` περνά πάνω από τις μοίρες ή το τόξο της γωνίας ανάμεσα σε δύο ευθείες. */
+export function hitsLineAngle(items: Item[], s: Shape, x: number, y: number, rad: number): boolean {
+  const m = lineAngleMark(items, s);
+  if (!m) return false;
+  if (Math.abs(x - m.lx) < 26 + rad && Math.abs(y - m.ly) < 13 + rad) return true;
+  // πάνω στο τόξο, ανάμεσα στις δύο πλευρές
+  const d = Math.hypot(x - s.x0, y - s.y0);
+  if (Math.abs(d - m.r) > rad + 4) return false;
+  const span = Math.atan2(Math.sin(m.a2 - m.a1), Math.cos(m.a2 - m.a1));
+  const at = Math.atan2(Math.sin(Math.atan2(y - s.y0, x - s.x0) - m.a1), Math.cos(Math.atan2(y - s.y0, x - s.x0) - m.a1));
+  return span >= 0 ? at >= 0 && at <= span : at <= 0 && at >= span;
+}
+
 /** Ακέραιες μοίρες ως κλάσμα του π: 30 → «π/6», 135 → «3π/4». */
 export function radText(deg: number): string {
   if (deg === 0) return '0';

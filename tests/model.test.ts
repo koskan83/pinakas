@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AngleItem, Item, Pic, Pt, Shape, Stroke, angleDegrees, cloneItem, erasePartial, flipItem, hitItem, itemBounds, itemFlip, newDoc, pointInPolygon,
-  recognizeShape, rotateItem, scaleItem, translateItem, trianglePts, unrot, wrapText, readDoc, DOC_V } from '../src/model';
+  recognizeShape, rotateItem, smoothStroke, snapLine, strokeTaper, scaleItem, translateItem, trianglePts, unrot, wrapText, readDoc, DOC_V } from '../src/model';
 
 const rect = (o: Partial<Shape> = {}): Shape => ({ kind: 'shape', id: 'r', shape: 'rect', x0: 0, y0: 0, x1: 200, y1: 100, color: '#111111', width: 4, ...o });
 const line = (o: Partial<Shape> = {}): Shape => ({ kind: 'shape', id: 'l', shape: 'line', x0: 0, y0: 0, x1: 100, y1: 0, color: '#111111', width: 4, ...o });
@@ -270,5 +270,54 @@ describe('ανάγνωση αποθηκευμένου πίνακα', () => {
     expect(() => readDoc(null)).toThrow('Μη έγκυρο');
     expect(() => readDoc({ pages: [] })).toThrow('Μη έγκυρο');
     expect(() => readDoc({ v: DOC_V + 1, pages: [] })).toThrow('νεότερη');
+  });
+});
+
+describe('snapLine', () => {
+  it('κουμπώνει στα 30° κρατώντας το μήκος, και δίνει τη γωνία με το οριζόντιο', () => {
+    const a = (32 * Math.PI) / 180;
+    const r = snapLine(0, 0, 100 * Math.cos(a), -100 * Math.sin(a));
+    expect(r.snap).toBe(true);
+    expect(r.deg).toBe(30);
+    expect(r.x).toBeCloseTo(100 * Math.cos(Math.PI / 6));
+    expect(r.y).toBeCloseTo(-50);
+  });
+  it('μακριά από πολλαπλάσιο των 15° μένει όπως είναι', () => {
+    const a = (23 * Math.PI) / 180;
+    const r = snapLine(0, 0, 100 * Math.cos(a), 100 * Math.sin(a));
+    expect(r.snap).toBe(false);
+    expect(r.x).toBeCloseTo(100 * Math.cos(a));
+    expect(r.deg).toBeCloseTo(23);
+  });
+  it('προς τα αριστερά: η γωνία με το οριζόντιο είναι η οξεία (150° → 30°), η κατακόρυφη 90°', () => {
+    expect(snapLine(0, 0, -86.6, -50).deg).toBe(30);
+    expect(snapLine(0, 0, 2, 100).deg).toBe(90);
+    expect(snapLine(0, 0, -100, 3).deg).toBe(0);
+  });
+});
+
+describe('ομορφότερη γραφή', () => {
+  // οριζόντια γραμμή με τρέμουλο ±1.5 σε κάθε σημείο
+  const shaky: Pt[] = Array.from({ length: 60 }, (_, i) => [i * 2, (i % 2 ? 1.5 : -1.5)]);
+  it('το τρέμουλο μικραίνει πολύ, οι άκρες μένουν στη θέση τους', () => {
+    const sm = smoothStroke(shaky, 3);
+    const dev = (p: Pt[]): number => Math.max(...p.slice(5, -5).map((q) => Math.abs(q[1])));
+    expect(dev(sm)).toBeLessThan(dev(shaky) / 4);
+    expect(sm[0]).toEqual(shaky[0]);
+    expect(sm[sm.length - 1]).toEqual(shaky[shaky.length - 1]);
+    expect(sm.length).toBe(shaky.length);
+  });
+  it('η γωνία ενός «Λ» δεν χάνεται', () => {
+    const lam: Pt[] = [...Array.from({ length: 30 }, (_, i): Pt => [i, -i * 2]), ...Array.from({ length: 30 }, (_, i): Pt => [30 + i, -60 + i * 2])];
+    const top = Math.min(...smoothStroke(lam, 1.6).map((p) => p[1]));
+    expect(top).toBeLessThan(-56);
+  });
+  it('λεπταίνει στις άκρες και όπου τα σημεία είναι αραιά (γρήγορο χέρι)', () => {
+    const slow: Pt[] = Array.from({ length: 80 }, (_, i) => [i * 1.5, 0]);
+    const t = strokeTaper(slow, 4);
+    expect(t[0]).toBeCloseTo(0.5);
+    expect(t[40]).toBeCloseTo(1);
+    const fast: Pt[] = Array.from({ length: 30 }, (_, i) => [i * 30, 0]);
+    expect(strokeTaper(fast, 4)[15]).toBeLessThan(0.8);
   });
 });

@@ -121,6 +121,7 @@ export function mountUi(app: HTMLElement): void {
     <div class="gHead">Ρυθμίσεις</div>
     ${mi('data-act="ai"', I.spark, 'Αναγνώριση γραφής και λύσεις (κλειδί)…')}
     ${mi('data-act="labels"', I.tag, 'Ονόματα κάτω από τα εικονίδια')}
+    ${mi('data-act="prettyink"', PENCIL_ICON, 'Ομορφότερη γραφή: λιγότερο τρέμουλο, πάχος σαν στυλό')}
     ${mi('data-act="pdflogo"', I.doc, 'Λογότυπο στις σελίδες του PDF')}
     ${mi('data-act="startscr"', I.spark, '«Τι κάνουμε σήμερα;» στο πρώτο άνοιγμα της μέρας')}
     ${mi('data-act="snip" class="hidden"', I.screen, 'Ψαλίδι πάνω από άλλες εφαρμογές')}
@@ -166,6 +167,8 @@ export function mountUi(app: HTMLElement): void {
         <button id="flipH" title="Καθρέφτης: αριστερά–δεξιά" data-l="Καθρέφτης"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18" stroke-dasharray="2 2.5"/><path d="M9 6L3 18h6z"/><path d="M15 6l6 12h-6z" fill="currentColor" fill-opacity=".25"/></svg></span></button>
         <button id="flipV" title="Καθρέφτης: πάνω–κάτω" data-l="Πάνω–κάτω"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18" stroke-dasharray="2 2.5"/><path d="M6 9L18 3v6z"/><path d="M6 15l12 6v-6z" fill="currentColor" fill-opacity=".25"/></svg></span></button>
         <button id="sumBtn" title="Συνισταμένη: δύο βέλη ή ευθείες με κοινή κορυφή, ή μία γωνία" data-l="Συνισταμένη"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l5-12M4 20l11-3"/><path d="M4 20L20 5" stroke="#60a5fa"/><path d="M14 5h6v6" stroke="#60a5fa"/></svg></span></button>
+        <button id="tidyBtn" title="Τακτοποίηση της χειρόγραφης γραφής: ίσια σειρά, ίσα κενά ανάμεσα στις λέξεις (μένει χειρόγραφη)" data-l="Τακτοποίηση"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18" stroke-dasharray="2 2.5"/><path d="M4 16c1-6 3-6 4 0M10 16c0-3 1-5 3-5s3 2 3 5M18 9v7"/></svg></span></button>
+        <button id="angBtn" title="Γωνία ανάμεσα στις ευθείες: κρύψιμο ή εμφάνιση (σβήνεται και με τη γόμα πάνω στις μοίρες)" data-l="Γωνία"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 19H4L16 5"/><path d="M11 19a7 7 0 0 0-2.400-5.300"/></svg></span></button>
         <i class="sep recSep"></i>
         <button data-rec="text" class="rec" title="Αναγνώριση της επιλογής ως κείμενο" data-l="Σε κείμενο"><span class="txt">Aα</span></button>
         <button data-rec="math" class="rec" data-lv="sec" title="Αναγνώριση της επιλογής ως τύπο" data-l="Σε τύπο"><span class="txt">√x</span></button>

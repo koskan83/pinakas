@@ -704,3 +704,27 @@ describe('αριθμοκυβάκια', () => {
     expect(ncState([3, 1, 0]).mode).toBe(0);
   });
 });
+
+import { hitsLineAngle, lineAngleMark } from '../src/measure';
+
+describe('γωνία ανάμεσα σε δύο ευθείες', () => {
+  const ln = (id: string, x1: number, y1: number, angleWith?: string): Sh => ({ kind: 'shape', id, shape: 'line', x0: 0, y0: 0, x1, y1, color: '#000', width: 3, angleWith });
+  const a = ln('a', 200, 0), b = ln('b', 0, -200, 'a');
+  it('90° με τις μοίρες στη μέση του τόξου', () => {
+    const m = lineAngleMark([a, b], b)!;
+    expect(m.deg).toBe(90);
+    expect(m.lx).toBeCloseTo(72 * Math.SQRT1_2);
+    expect(m.ly).toBeCloseTo(-72 * Math.SQRT1_2);
+  });
+  it('η γόμα πιάνει τις μοίρες και το τόξο, όχι τις ευθείες μακριά από αυτά', () => {
+    expect(hitsLineAngle([a, b], b, 51, -51, 6)).toBe(true);
+    expect(hitsLineAngle([a, b], b, 46 * Math.cos(-0.3), 46 * Math.sin(-0.3), 6)).toBe(true);
+    expect(hitsLineAngle([a, b], b, 150, 0, 6)).toBe(false);
+    expect(hitsLineAngle([a, b], b, 46 * Math.cos(1), 46 * Math.sin(1), 6)).toBe(false);
+  });
+  it('κρυμμένη γωνία: δεν ζωγραφίζεται και η γόμα δεν τη βρίσκει', () => {
+    const h = { ...b, noAng: true };
+    expect(lineAngleMark([a, h], h)).toBeNull();
+    expect(hitsLineAngle([a, h], h, 51, -51, 6)).toBe(false);
+  });
+});

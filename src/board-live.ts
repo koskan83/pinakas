@@ -1,6 +1,6 @@
 /** Το πάνω, «ζωντανό» στρώμα: ό,τι σχεδιάζεται τώρα, η επιλογή με τις λαβές της, λέιζερ και λάσο (μέθοδοι της Board, σε δικό τους αρχείο). */
 
-import { Item, Pt, itemBounds } from './model';
+import { Item, Pt, Shape, itemBounds, snapLine } from './model';
 import { LASER_MS, type Board, type Box } from './board';
 
 export function renderLive(bd: Board): void {
@@ -31,6 +31,7 @@ export function renderLive(bd: Board): void {
     if (p.live) {
       bd.r.drawItem(c, p.live);
       if (p.live.kind === 'shape' && p.live.meas) bd.r.drawMeasures(c, p.live);
+      if (p.live.kind === 'shape' && (p.live.shape === 'line' || p.live.shape === 'arrow') && !p.live.angleWith) drawSlope(c, p.live, k);
     } else if (p.stroke) bd.r.drawStroke(c, p.stroke);
     if (p.lasso && p.lasso.length > 1) {
       c.save();
@@ -140,6 +141,51 @@ export function renderLive(bd: Board): void {
     c.stroke();
     c.restore();
   }
+}
+
+/** Όσο τραβιέται μια ευθεία: η γωνία της με το οριζόντιο, με διακεκομμένη οριζόντια και τόξο· πράσινη όταν κούμπωσε στα 15°. */
+function drawSlope(c: CanvasRenderingContext2D, l: Shape, k: number): void {
+  const len = Math.hypot(l.x1 - l.x0, l.y1 - l.y0);
+  if (len < 30 / k) return;
+  const { deg, snap } = snapLine(l.x0, l.y0, l.x1, l.y1);
+  const col = snap ? '#16a34a' : '#475569';
+  const h = l.x1 >= l.x0 - 1e-6 ? 0 : Math.PI, t = Math.atan2(l.y1 - l.y0, l.x1 - l.x0);
+  let d = t - h;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  const ra = Math.min(46 / k, len * 0.45), ref = Math.min(len, 110 / k);
+  c.save();
+  c.strokeStyle = col;
+  c.lineWidth = 2 / k;
+  c.setLineDash([6 / k, 5 / k]);
+  c.beginPath();
+  c.moveTo(l.x0, l.y0);
+  c.lineTo(l.x0 + Math.cos(h) * ref, l.y0);
+  c.stroke();
+  c.setLineDash([]);
+  if (Math.abs(d) > 1e-3) {
+    c.beginPath();
+    c.arc(l.x0, l.y0, ra, h, h + d, d < 0);
+    c.stroke();
+  }
+  // η ετικέτα στη μέση του τόξου, λίγο έξω από αυτό
+  const m = h + d / 2, rl = ra + 26 / k;
+  const tx = l.x0 + Math.cos(m) * rl, ty = l.y0 + Math.sin(m) * rl;
+  const txt = `${Math.round(deg)}°`;
+  c.font = `700 ${18 / k}px system-ui, sans-serif`;
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  const w = c.measureText(txt).width + 12 / k, hh = 26 / k;
+  c.fillStyle = 'rgba(255,255,255,.92)';
+  c.beginPath();
+  c.roundRect(tx - w / 2, ty - hh / 2, w, hh, 8 / k);
+  c.fill();
+  c.strokeStyle = col;
+  c.lineWidth = 1.5 / k;
+  c.stroke();
+  c.fillStyle = col;
+  c.fillText(txt, tx, ty + 1 / k);
+  c.restore();
 }
 
 function drawPivot(bd: Board, c: CanvasRenderingContext2D, p: Pt): void {

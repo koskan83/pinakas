@@ -4,7 +4,8 @@ import {
 import { Params } from './expr';
 import { STAMPS, SpringState, type KidAsk } from './stamps';
 import { CM, GadgetDrag, GadgetKind, Gadgets } from './gadgets';
-import { eraseMeasures, measureAngles, measureSides, trigPoint } from './measure';
+import { tidyStrokes } from './tidy';
+import { eraseMeasures, hitsLineAngle, measureAngles, measureSides, trigPoint } from './measure';
 import { Renderer } from './render';
 import * as P from './board-pointer';
 import * as R from './board-replay';
@@ -150,6 +151,8 @@ export class Board {
   kidAnim = new Map<string, { t0: number; prev: number[]; ms: number }>();
   /** Κίνηση στα εργαλεία του Δημοτικού (ανάβει μόνο στο Δημοτικό). */
   kidMotion = false;
+  /** Ομορφότερη γραφή: λιγότερο τρέμουλο στις νέες γραμμές και πάχος σαν στυλό (ρύθμιση στο ☰ → Ρυθμίσεις). */
+  prettyInk = true;
   /** Κάτι έγινε σε εργαλείο του Δημοτικού ('click', 'win', 'tok'…): για ήχο και πανηγυρισμό. */
   onKidFx: (ev: string, it: StampItem) => void = () => {};
   /** Πατήθηκε το «όλη η οθόνη» ενός εργαλείου του Δημοτικού (κυβάκια). */
@@ -697,6 +700,42 @@ export class Board {
   /** Σχεδιάζει το παραλληλόγραμμο και τη συνισταμένη· και τα τρία μένουν δεμένα με τις δύο πλευρές. */
   addResultant(): void { S.addResultant(this); }
 
+  /** Οι γραμμές του χεριού στην επιλογή (όχι το υπογραμμιστικό): σε αυτές δουλεύει η «Τακτοποίηση». */
+  selectedInk(): Stroke[] {
+    const ids = this.selectedIds();
+    return this.page.items.filter((x): x is Stroke => x.kind === 'stroke' && !x.hl && ids.has(x.id));
+  }
+
+  /** «Τακτοποίηση»: ίσια σειρά, χωρίς κύμα, ίσα κενά ανάμεσα στις λέξεις (βλ. tidy.ts). Μία αναίρεση τη γυρίζει πίσω. */
+  tidySelection(): void {
+    const ink = this.selectedInk();
+    if (ink.length < 2) return;
+    const done = new Map(tidyStrokes(ink).map((s) => [s.id, s]));
+    const before = this.page.items.slice();
+    this.page.items = before.map((x) => done.get(x.id) ?? x);
+    this.pivot = null;
+    this.redraw();
+    this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
+  }
+
+  /** Οι ευθείες/βέλη της επιλογής που δείχνουν (ή δείχνανε) γωνία με άλλη ευθεία: γι' αυτές φαίνεται το κουμπί «Γωνία». */
+  lineAngleItems(): Shape[] {
+    const ids = this.selectedIds();
+    const pick = (x: Item): x is Shape => x.kind === 'shape' && !!x.angleWith && (ids.has(x.id) || ids.has(x.angleWith));
+    return this.page.items.filter(pick);
+  }
+
+  /** Κρύβει τις γωνίες ανάμεσα στις επιλεγμένες ευθείες, ή τις ξαναδείχνει αν είναι όλες κρυμμένες. */
+  toggleLineAngles(): void {
+    const list = new Set(this.lineAngleItems().map((x) => x.id));
+    if (!list.size) return;
+    const before = this.page.items.slice();
+    const show = before.every((x) => !list.has(x.id) || (x.kind === 'shape' && x.noAng));
+    this.page.items = before.map((x) => (list.has(x.id) && x.kind === 'shape' ? { ...x, noAng: show ? undefined : true } : x));
+    this.redraw();
+    this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
+  }
+
   /**
    * Φέρνει τις συνισταμένες και τα παραλληλόγραμμά τους στη θέση που ορίζουν οι πλευρές τους.
    * Αν μια πλευρά έχει σβηστεί, η συνισταμένη μένει όπως είναι, ελεύθερη.
@@ -998,6 +1037,12 @@ export class Board {
       // (ο πίνακας ειδικά για να σβήνεις ό,τι έγραψες στα κελιά χωρίς να χαλάς τις γραμμές του)
       if (it.kind === 'image' || it.kind === 'axes' || it.kind === 'trig' || it.kind === 'stamp' || (it.kind === 'shape' && it.shape === 'table')) continue;
       // πρώτα οι μετρήσεις: η γόμα πάνω σε ένα μήκος ή μια γωνία σβήνει την ένδειξη, όχι το σχήμα
+      // η γωνία ανάμεσα σε δύο ευθείες: η γόμα πάνω στις μοίρες ή στο τόξο την κρύβει, οι ευθείες μένουν
+      if (it.kind === 'shape' && hitsLineAngle(items, it, x, y, r)) {
+        items[i] = { ...it, noAng: true };
+        changed = true;
+        continue;
+      }
       const bare = eraseMeasures(it, x, y, r);
       if (bare) {
         items[i] = bare;
