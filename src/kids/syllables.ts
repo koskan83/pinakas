@@ -9,7 +9,7 @@
  */
 import type { StampDef } from '../stamps';
 import { syllableStarts } from '../syllabify';
-import { BLUE, GOOD, kid, RED, rrect, text } from './common';
+import { BLUE, FONT, GOOD, kid, RED, rrect, text } from './common';
 
 /** Ένα πήδημα του βατράχου (ms)· το ίδιο και στους ήχους (fx.ts, «frog|…»). */
 export const SYL_HOP = 700;
@@ -258,6 +258,21 @@ function drawFrog(c: CanvasRenderingContext2D, x: number, y: number, s: number, 
   c.restore();
 }
 
+/** Γράμμα πάνω σε νούφαρο: σχεδόν μαύρο με χοντρό λευκό περίγραμμα, για να ξεχωρίζει σε κάθε απόχρωση του πράσινου. */
+function padLetter(c: CanvasRenderingContext2D, ch: string, x: number, y: number, size: number): void {
+  c.save();
+  c.font = `800 ${size}px ${FONT}`;
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.lineJoin = 'round';
+  c.lineWidth = Math.max(3, size * 0.22);
+  c.strokeStyle = '#ffffff';
+  c.strokeText(ch, x, y);
+  c.fillStyle = '#0f172a';
+  c.fillText(ch, x, y);
+  c.restore();
+}
+
 function letterTile(c: CanvasRenderingContext2D, ch: string, x: number, y: number, s: number, lifted = false): void {
   c.save();
   if (lifted) { c.shadowColor = 'rgba(0,0,0,0.35)'; c.shadowBlur = s * 0.3; c.shadowOffsetY = s * 0.08; }
@@ -408,7 +423,7 @@ export const SYLLABLE_KIDS: Record<string, StampDef> = {
         }
         for (const l of padLetters(s, g, p)) {
           if (s.drag === l.i + 1) continue;
-          text(c, s.letters[l.i], l.x, l.y + l.size * 0.04, l.size, '#052e16', 800);
+          padLetter(c, s.letters[l.i], l.x, l.y + l.size * 0.04, l.size);
         }
         c.restore();
         if (p === s.fail && sinking) ripples(c, px, py, g.r, sinking);
@@ -447,7 +462,18 @@ export const SYLLABLE_KIDS: Record<string, StampDef> = {
         : s.res === 2 && t >= jumpEnd ? `Πλουφ! Το ${s.fail + 1}ο νούφαρο δεν έχει σωστή συλλαβή.`
         : s.res === 3 && t >= jumpEnd ? 'Πλουφ! Λείπει νούφαρο: μία συλλαβή, ένα νούφαρο.'
         : s.res === 0 ? (P === 0 ? 'Σύρε ένα νούφαρο στο ποτάμι για κάθε συλλαβή.' : 'Σύρε κάθε γράμμα στο νούφαρο της συλλαβής του.') : '';
-      if (msg) text(c, msg, w / 2, g.bottom - h * 0.035, h * 0.04, s.res === 1 ? '#14532d' : s.res ? '#991b1b' : '#14532d', 700);
+      if (msg) {
+        // σε λευκή «ταμπέλα», για να διαβάζεται πάνω στο ποτάμι
+        const fs = h * 0.04, my = g.bottom - h * 0.04;
+        c.save();
+        c.font = `700 ${fs}px ${FONT}`;
+        const mw = c.measureText(msg).width + fs * 1.4;
+        rrect(c, w / 2 - mw / 2, my - fs * 0.85, mw, fs * 1.7, fs * 0.6);
+        c.fillStyle = 'rgba(255,255,255,0.92)';
+        c.fill();
+        c.restore();
+        text(c, msg, w / 2, my, fs, s.res === 1 ? '#14532d' : s.res ? '#991b1b' : '#1e3a8a', 700);
+      }
 
       // ό,τι σέρνεται, από πάνω απ' όλα
       if (s.drag >= 1 && s.drag <= n) letterTile(c, s.letters[s.drag - 1], s.dx, s.dy, g.tile * 1.1, true);
