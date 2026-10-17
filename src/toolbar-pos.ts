@@ -151,30 +151,17 @@ export function initToolbar(): void {
   window.addEventListener('resize', apply);
   new MutationObserver(apply).observe($('subbar'), { attributes: true, attributeFilter: ['class'] });
 
-  // όσο γράφεις, η γραμμή δεν πιάνει αγγίγματα· ξεθωριάζει μόνο ό,τι πλησιάζει η γραφίδα, ώστε να μην αναβοσβήνει σε κάθε γράμμα
+  // όσο γράφεις, οι μπάρες δεν πιάνουν αγγίγματα (μια γραμμή που περνά από πάνω τους δεν πατά κουμπί),
+  // αλλά μένουν όπως είναι: δεν ξεθωριάζουν ούτε όταν γράφεις δίπλα τους, για να μην αναβοσβήνουν
   const inking = new Set<number>();
   const live = $('live');
-  const NEAR = 48;
-  const chrome: [fade: HTMLElement, hit: HTMLElement][] = [[$('toolbarWrap'), $('toolbar')], [$('lessonName'), $('lessonName')], [$('zoomCtl'), $('zoomCtl')]];
-  let rects: DOMRect[] = [];
-  const near = (e: PointerEvent): void => {
-    if (!inking.has(e.pointerId)) return;
-    rects.forEach((r, i) => {
-      if (e.clientX > r.left - NEAR && e.clientX < r.right + NEAR && e.clientY > r.top - NEAR && e.clientY < r.bottom + NEAR) chrome[i][0].classList.add('under');
-    });
-  };
   live.addEventListener('pointerdown', (e) => {
-    if (inking.size === 0) rects = chrome.map(([, hit]) => hit.getBoundingClientRect());
     inking.add(e.pointerId);
     document.body.classList.add('inking');
-    near(e);
   });
-  live.addEventListener('pointermove', near);
   const lift = (e: PointerEvent): void => {
     inking.delete(e.pointerId);
-    if (inking.size > 0) return;
-    document.body.classList.remove('inking');
-    for (const [fade] of chrome) fade.classList.remove('under');
+    if (inking.size === 0) document.body.classList.remove('inking');
   };
   live.addEventListener('pointerup', lift);
   live.addEventListener('pointercancel', lift);

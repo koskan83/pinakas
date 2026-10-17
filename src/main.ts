@@ -1,10 +1,8 @@
-import { Board, EraserMode, SizedTool } from './board';
-import { AxesItem, AxesMode, Background, Item, ShapeKind, TableStyle, TextItem, Tool, isDark, readDoc } from './model';
-import { blobToPic, captureScreen, clipboardImage, openDocx, openPdf } from './importers';
-import { kvGet, kvSet } from './storage';
+import { EraserMode, SizedTool } from './board';
+import { AxesItem, AxesMode, Background, ShapeKind, Tool, isDark } from './model';
 import { Lessons } from './lessons';
 import { GadgetKind } from './gadgets';
-import { isNative, isOverlay, nativeScreenshot, openOverlay } from './native';
+import { isNative, isOverlay, nativeExit, openOverlay } from './native';
 import { initSnip, toggleSnip } from './snip';
 import { STAMPS, STAMP_CATS, type StampDef } from './stamps';
 import { PEN_ICON, PenKind } from './ui';
@@ -12,112 +10,26 @@ import { ask, notice } from './dialog';
 import { openBuildView } from './build-view';
 import { confetti, loadFx, playFx, saveFx, say } from './fx';
 import { NEWS, VERSION, newsPending } from './news';
-import { BUILTIN, type Template } from './pages';
-import { $, HL_PALETTE, MORE_COLORS, PALETTE, SIZES, SIZE_NAME, app, board, curtain, curtainTop, download, fileName, layoutBar, spot, stamp, timer, toast } from './app';
-import { esc, fitY, renderFns, resetFnDraft, resetFnMoved, scaleText, toggleAnalysis } from './axes-ui';
+import { $, HL_PALETTE, MORE_COLORS, PALETTE, SIZES, SIZE_NAME, app, board, curtain, curtainTop, download, layoutBar, spot, stamp, timer, toast } from './app';
+import { fitY, renderFns, resetFnDraft, resetFnMoved, scaleText, toggleAnalysis } from './axes-ui';
 import { clearMeasShape } from './measure-ui';
 import { ai, autoKind, openAi } from './recognize-ui';
-import { endLesson, lessonPdf, openSend, pdfLogo, pickPages, setPdfLogo } from './send-ui';
+import { endLesson, lessonPdf, openSend, pdfLogo, setPdfLogo } from './send-ui';
 import { initToolbar } from './toolbar-pos';
 import { cheer, mascot } from './mascot';
 import { markReady, trackUsage, usageReport, usageSummary } from './usage';
 import { askSpellWords } from './spell-lists';
+import { doPaste, doScreenshot, importFiles, initImport } from './import-ui';
+import { initTableMenu, openTableMenu } from './table-ui';
+import { initTemplates, renderTemplates } from './templates-ui';
+import { initDiag, initText } from './text-ui';
+import { loadKids, onKidsLoaded } from './kids/lazy';
+import { canPickFolder, chooseFolder, classFileName, driveCopy, folderLabel, saveClassFile, setDriveCopy } from './class-files';
+import { driveClientId } from './drive';
 
 // ---------- εισαγωγή ----------
 
-async function importFiles(files: File[]): Promise<void> {
-  for (const f of files) {
-    try {
-      const word = /\.docx$/i.test(f.name) || f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      if (/\.(doc|odt|rtf)$/i.test(f.name)) {
-        toast('Αυτή η μορφή δεν ανοίγει. Αποθήκευσέ το από το Word ως .docx ή ως PDF.', 7000);
-      } else if (word || f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
-        const kind = word ? 'Word' : 'PDF';
-        toast(`Ανοίγει το ${kind}…`, 0);
-        const pdf = await (word ? openDocx(f) : openPdf(f));
-        try {
-          toast('', 1);
-          // με πάνω από μία σελίδα ρωτάμε ποιες θα μπουν
-          const list = pdf.n > 1 ? await pickPages(`Εισαγωγή από «${f.name}»`, 'Εισαγωγή', pdf.n, (i, w) => pdf.thumb(i, w)) : [0];
-          if (!list) continue;
-          const pages = await pdf.pages(list, (d, n) => toast(`Εισαγωγή ${kind}… σελίδα ${Math.min(d + 1, n)} από ${n}`, 0));
-          board.appendPages(pages);
-          toast(pages.length === 1 ? `Προστέθηκε 1 σελίδα από το ${kind}` : `Προστέθηκαν ${pages.length} σελίδες από το ${kind}`);
-        } finally {
-          pdf.close();
-        }
-      } else if (f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp)$/i.test(f.name)) {
-        // σε κάποιες συσκευές (Android, πίνακες) ο επιλογέας αρχείων δεν δίνει τύπο: τότε μετρά η κατάληξη
-        const pic = await blobToPic(f);
-        board.addPicture(pic.src, pic.w, pic.h);
-      } else if (/\.json$/i.test(f.name)) {
-        const doc = readDoc(JSON.parse(await f.text()));
-        // το αρχείο ανοίγει ως ξεχωριστό μάθημα· το τρέχον δεν πειράζεται
-        if (lessons) await lessons.createFrom(doc, f.name.replace(/\.json$/i, ''));
-        else board.loadDoc(doc);
-        toast('Το αρχείο άνοιξε ως νέο μάθημα');
-      } else {
-        toast(`Μη υποστηριζόμενο αρχείο: ${f.name}`);
-      }
-    } catch (err) {
-      console.error(err);
-      toast(err instanceof Error && err.message.includes('νεότερη') ? err.message : `Αποτυχία εισαγωγής: ${f.name}`, 6000);
-    }
-  }
-}
-
-async function doScreenshot(): Promise<void> {
-  try {
-    const pic = isNative ? await blobToPic(await nativeScreenshot()) : await captureScreen();
-    board.addPicture(pic.src, pic.w, pic.h);
-  } catch (err) {
-    const name = (err as Error).name;
-    if (name === 'NotAllowedError') return; // ο χρήστης ακύρωσε
-    toast('Η λήψη οθόνης δεν υποστηρίζεται εδώ. Βγάλε στιγμιότυπο με τη συσκευή και πάτα «Επικόλληση» ή Εισαγωγή αρχείου.', 7000);
-  }
-}
-
-async function doPaste(): Promise<void> {
-  try {
-    const blob = await clipboardImage();
-    if (!blob) {
-      toast('Δεν βρέθηκε εικόνα στο πρόχειρο');
-      return;
-    }
-    const pic = await blobToPic(blob);
-    board.addPicture(pic.src, pic.w, pic.h);
-  } catch {
-    toast('Δεν επιτρέπεται η πρόσβαση στο πρόχειρο. Δοκίμασε Ctrl+V.', 5000);
-  }
-}
-
-document.addEventListener('paste', (e) => {
-  const files = [...(e.clipboardData?.files ?? [])];
-  if (files.length) {
-    e.preventDefault();
-    void importFiles(files);
-  }
-});
-
-let dragDepth = 0;
-window.addEventListener('dragenter', (e) => {
-  e.preventDefault();
-  dragDepth++;
-  $('drop').classList.remove('hidden');
-});
-window.addEventListener('dragleave', () => {
-  if (--dragDepth <= 0) {
-    dragDepth = 0;
-    $('drop').classList.add('hidden');
-  }
-});
-window.addEventListener('dragover', (e) => e.preventDefault());
-window.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dragDepth = 0;
-  $('drop').classList.add('hidden');
-  void importFiles([...(e.dataTransfer?.files ?? [])]);
-});
+initImport();
 
 // ---------- γραμμή εργαλείων ----------
 
@@ -693,43 +605,7 @@ function addStampTile(name: string, d: StampDef): void {
   $('stampGrid').append(b);
 }
 // ---------- πίνακας / ορίζουσα / μήτρα ----------
-const tableMenu = $('tableMenu');
-const TBL_MAX = 6;
-let tblStyle: TableStyle = 'grid';
-/** Οι γραμμές και οι στήλες που δείχνει τώρα το πλέγμα επιλογής (κάτω από το δάχτυλο ή η τελευταία επιλογή). */
-let tblPick = { r: 3, c: 3 };
-$('tblGrid').innerHTML = Array.from({ length: TBL_MAX * TBL_MAX }, (_, i) => `<button data-r="${Math.floor(i / TBL_MAX) + 1}" data-c="${(i % TBL_MAX) + 1}"></button>`).join('');
-function paintTableMenu(): void {
-  tableMenu.querySelectorAll<HTMLElement>('[data-tbl]').forEach((b) => b.classList.toggle('on', b.dataset.tbl === tblStyle));
-  tableMenu.querySelectorAll<HTMLElement>('#tblGrid button').forEach((b) => b.classList.toggle('on', +b.dataset.r! <= tblPick.r && +b.dataset.c! <= tblPick.c));
-  $('tblHint').textContent = `Πάτα το κελί που θες: τώρα ${tblPick.r} × ${tblPick.c} (γραμμές × στήλες)`;
-}
-function openTableMenu(): void {
-  paintTableMenu();
-  tableMenu.classList.remove('hidden');
-  placeNear(tableMenu, $('gadgetBtn'));
-}
-tableMenu.addEventListener('pointerover', (e) => {
-  const b = (e.target as HTMLElement).closest<HTMLElement>('#tblGrid button');
-  if (!b || e.pointerType !== 'mouse') return;
-  tblPick = { r: +b.dataset.r!, c: +b.dataset.c! };
-  paintTableMenu();
-});
-tableMenu.addEventListener('click', (e) => {
-  const t = e.target as HTMLElement;
-  const st = t.closest<HTMLElement>('[data-tbl]')?.dataset.tbl as TableStyle | undefined;
-  if (st) {
-    tblStyle = st;
-    paintTableMenu();
-    return;
-  }
-  const b = t.closest<HTMLElement>('#tblGrid button');
-  if (!b) return;
-  tblPick = { r: +b.dataset.r!, c: +b.dataset.c! };
-  closePopups();
-  board.addTable(tblPick.r, tblPick.c, tblStyle);
-  refreshUi();
-});
+initTableMenu();
 
 stampMenu.addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-stamp]');
@@ -740,46 +616,42 @@ stampMenu.addEventListener('click', (e) => {
 
 // ---------- πρότυπα σελίδων ----------
 
-let templates: Template[] = [];
-void kvGet<Template[]>('templates').then((t) => { templates = t ?? []; });
-function renderTemplates(): void {
-  $('tplList').innerHTML =
-    BUILTIN.map((t, i) => `<div class="tplItem"${t.lv ? ` data-lv="${t.lv}"` : ''}><button data-tpl="b${i}">📄 ${esc(t.name)}</button></div>`).join('') +
-    templates.map((t, i) => `<div class="tplItem"><button data-tpl="u${i}">📄 ${esc(t.name)}</button><button data-tpldel="${i}" title="Διαγραφή προτύπου">✕</button></div>`).join('');
-}
-tplMenu.addEventListener('click', async (e) => {
-  const t = e.target as HTMLElement;
-  const del = t.closest<HTMLElement>('[data-tpldel]');
-  if (del) {
-    templates.splice(Number(del.dataset.tpldel), 1);
-    void kvSet('templates', templates);
-    renderTemplates();
-    return;
-  }
-  if (t.closest('#tplSave')) {
-    if (board.page.items.length === 0) {
-      toast('Η σελίδα είναι κενή');
-      return;
-    }
-    const name = (await ask('Όνομα προτύπου', { value: `Πρότυπο ${templates.length + 1}` }))?.trim();
-    if (!name) return;
-    templates.push({ name, items: JSON.parse(JSON.stringify(board.page.items)) as Item[] });
-    void kvSet('templates', templates);
-    renderTemplates();
-    toast('Το πρότυπο αποθηκεύτηκε');
-    return;
-  }
-  const b = t.closest<HTMLElement>('[data-tpl]');
-  if (!b) return;
-  closePopups();
-  const id = b.dataset.tpl!;
-  const tpl = (id[0] === 'b' ? BUILTIN : templates)[Number(id.slice(1))];
-  if (tpl) board.addPageWith(tpl.items);
-});
+initTemplates();
 
 // ---------- κύριο μενού ----------
 
 if (isNative && !isOverlay) $('overlayAct').classList.remove('hidden');
+/** Η «Έξοδος» φαίνεται μόνο όπου η εφαρμογή μπορεί να κλείσει μόνη της: στα Windows και ως εγκατεστημένη εφαρμογή (Android, υπολογιστής). */
+const installed = isNative || matchMedia('(display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui), (display-mode: window-controls-overlay)').matches || document.referrer.startsWith('android-app://');
+if (installed && !isOverlay) $('exitAct').classList.remove('hidden');
+
+/** Αρχείο του ανοιχτού μαθήματος στον φάκελο του τμήματός του (και στο Drive), βλ. class-files.ts. */
+function saveLesson(blob: Blob, ext: string, suffix = ''): Promise<void> {
+  const cur = lessons?.current;
+  return saveClassFile(blob, classFileName(`${cur?.name ?? 'Μάθημα'}${suffix}`, cur?.group, ext), cur?.group, toast);
+}
+
+/** Οι δύο ρυθμίσεις των αρχείων: ποιος φάκελος (μόνο σε υπολογιστή με Chrome/Edge) και αν πάνε και στο Drive. */
+async function showFilePrefs(): Promise<void> {
+  const dir = document.querySelector<HTMLElement>('[data-act="filesdir"]')!, drv = document.querySelector<HTMLElement>('[data-act="filesdrive"]')!;
+  dir.classList.toggle('hidden', !canPickFolder());
+  const where = await folderLabel();
+  dir.lastChild!.textContent = `Φάκελος για τα αρχεία των μαθημάτων: ${where ?? 'Λήψεις'}…`;
+  drv.classList.toggle('hidden', !driveClientId());
+  drv.classList.toggle('on', driveCopy());
+  drv.lastChild!.textContent = `Αρχεία και στο Google Drive, στον φάκελο του τμήματος: ${driveCopy() ? 'ναι' : 'όχι'}`;
+}
+void showFilePrefs();
+
+/** Αποθηκεύει το μάθημα και κλείνει την εφαρμογή. */
+async function quitApp(): Promise<void> {
+  toast('Αποθήκευση…', 0);
+  await lessons?.flush(true).catch((err) => console.warn(err));
+  if (isNative) return void nativeExit().catch(() => toast('Δεν έκλεισε· κλείσε το παράθυρο από το ✕.', 5000));
+  window.close();
+  // αν ο browser δεν επέτρεψε το κλείσιμο, είμαστε ακόμα εδώ
+  setTimeout(() => toast('Το μάθημα αποθηκεύτηκε. Κλείσε το παράθυρο για έξοδο.', 6000), 400);
+}
 initSnip();
 const onMenu = async (e: Event): Promise<void> => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
@@ -813,15 +685,15 @@ const onMenu = async (e: Event): Promise<void> => {
   } else if (act === 'open') {
     ($('fileOpen') as HTMLInputElement).click();
   } else if (act === 'save') {
-    download(new Blob([JSON.stringify(board.doc)], { type: 'application/json' }), `${fileName(lessons?.current?.name ?? 'pinakas')}_${stamp()}.json`);
+    void saveLesson(new Blob([JSON.stringify(board.doc)], { type: 'application/json' }), 'json');
   } else if (act === 'png') {
-    download(await board.exportPng(), `selida_${board.cur + 1}_${stamp()}.png`);
+    void saveLesson(await board.exportPng(), 'png', ` σελίδα ${board.cur + 1}`);
   } else if (act === 'send') {
     openSend();
   } else if (act === 'pdf') {
     try {
       const pdf = await lessonPdf();
-      if (pdf) download(pdf, `${fileName(lessons?.current?.name ?? 'mathima')}_${stamp()}.pdf`);
+      if (pdf) await saveLesson(pdf, 'pdf');
     } catch (err) {
       console.error(err);
       toast('Η εξαγωγή σε PDF απέτυχε', 5000);
@@ -855,6 +727,13 @@ const onMenu = async (e: Event): Promise<void> => {
     void endLesson();
   } else if (act === 'news') {
     void showNews();
+  } else if (act === 'filesdir') {
+    void chooseFolder(toast).then(() => void showFilePrefs());
+  } else if (act === 'filesdrive') {
+    setDriveCopy(!driveCopy());
+    void showFilePrefs();
+  } else if (act === 'exit') {
+    void quitApp();
   } else if (act === 'more') {
     const m = $('setMenu');
     m.classList.remove('hidden');
@@ -867,87 +746,11 @@ $('setMenu').addEventListener('click', (e) => void onMenu(e));
 
 // ---------- διάγνωση ----------
 
-const diag = $('diag');
-diag.innerHTML = `
-  <b>Διάγνωση εισόδου</b>
-  <pre id="diagText">Άγγιξε ή γράψε στον πίνακα…</pre>
-  <label>Όριο παλάμης (px): <span id="palmV"></span>
-    <input id="palm" type="range" min="10" max="120" step="1" /></label>
-  <small>Αν η γραφίδα του BenQ εμφανίζεται ως «touch», το μέγεθος επαφής ξεχωρίζει στυλό από παλάμη.
-  Επαφές μεγαλύτερες από το όριο λειτουργούν ως γόμα.</small>`;
-const palm = diag.querySelector<HTMLInputElement>('#palm')!;
-palm.value = String(board.palmThreshold);
-const palmV = diag.querySelector<HTMLElement>('#palmV')!;
-palmV.textContent = palm.value;
-palm.oninput = () => {
-  board.palmThreshold = Number(palm.value);
-  palmV.textContent = palm.value;
-};
-const diagText = diag.querySelector<HTMLElement>('#diagText')!;
-let maxContact = 0;
-board.onPointerInfo = (e, n) => {
-  if (diag.classList.contains('hidden')) return;
-  const size = Math.max(e.width, e.height);
-  if (e.type === 'pointerdown') maxContact = size;
-  else maxContact = Math.max(maxContact, size);
-  diagText.textContent =
-    `τύπος:        ${e.pointerType}\n` +
-    `επαφή:        ${e.width.toFixed(1)} × ${e.height.toFixed(1)} px\n` +
-    `μέγιστη επαφή:${maxContact.toFixed(1)} px\n` +
-    `πίεση:        ${e.pressure.toFixed(2)}\n` +
-    `κουμπιά:      ${e.buttons}\n` +
-    `ταυτόχρονοι δείκτες: ${n}\n` +
-    `pointerId:    ${e.pointerId}`;
-};
+initDiag();
 
 // ---------- κείμενο ----------
 
-const TEXT_SIZES = [20, 28, 44, 72];
-const textEd = $('textEd');
-const textArea = textEd.querySelector('textarea')!;
-let textCtx: { x: number; y: number; existing?: TextItem } | null = null;
-
-function openText(x: number, y: number, existing?: TextItem): void {
-  if (textCtx) closeText(true);
-  textCtx = { x, y, existing };
-  const size = existing?.size ?? TEXT_SIZES[Math.max(0, SIZES.pen.indexOf(board.sizes.pen))];
-  const [sx, sy] = board.toScreen(x, y);
-  const fs = Math.max(14, size * board.zoom);
-  textEd.style.left = Math.max(8, Math.min(sx, window.innerWidth - 340)) + 'px';
-  textEd.style.top = Math.max(8, Math.min(sy, window.innerHeight - 220)) + 'px';
-  textArea.style.fontSize = fs + 'px';
-  textArea.style.color = board.ink(existing?.color ?? board.color);
-  textArea.style.background = isDark(board.doc.bg) ? '#14201b' : '#fff';
-  textArea.value = existing?.text ?? '';
-  textEd.classList.remove('hidden');
-  textArea.focus();
-}
-
-function closeText(save: boolean): void {
-  if (!textCtx) return;
-  const c = textCtx;
-  textCtx = null;
-  textEd.classList.add('hidden');
-  if (save) {
-    const size = c.existing?.size ?? TEXT_SIZES[Math.max(0, SIZES.pen.indexOf(board.sizes.pen))];
-    board.commitText(c.x, c.y, textArea.value, size, c.existing);
-  }
-}
-board.onTextRequest = openText;
-$('textOk').onclick = () => closeText(true);
-$('textCancel').onclick = () => closeText(false);
-textArea.addEventListener('keydown', (e) => {
-  e.stopPropagation();
-  if (e.key === 'Escape') closeText(false);
-  else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) closeText(true);
-});
-document.addEventListener(
-  'pointerdown',
-  (e) => {
-    if (textCtx && !(e.target as HTMLElement).closest('#textEd')) closeText(true);
-  },
-  true
-);
+initText();
 
 // ---------- πληκτρολόγιο ----------
 
@@ -1034,9 +837,13 @@ board.onKidFx = (ev, it) => {
   const [x, y] = board.toScreen(it.x + it.w / 2, it.y + it.h / 2);
   kidFx(ev, x, y);
 };
+// τα εργαλεία του Δημοτικού φτάνουν λίγο μετά το άνοιγμα (βλ. kids/lazy.ts): ό,τι υπάρχει ήδη στον πίνακα ξαναζωγραφίζεται
+onKidsLoaded(() => board.redraw());
 function setLevel(pri: boolean, save = true): void {
   primary = pri;
   board.kidMotion = pri;
+  // στο Δημοτικό τα εργαλεία του χρειάζονται αμέσως
+  if (pri) void loadKids();
   document.body.classList.toggle('primary', pri);
   // εργαλείο που δεν υπάρχει στο Δημοτικό δεν μένει ενεργό
   if (pri && board.tool === 'measure') board.setTool('select');
@@ -1189,6 +996,9 @@ void (async () => {
   refreshUi();
   initToolbar();
   if (!isOverlay) markReady();
+  // ο κώδικας των εργαλείων του Δημοτικού, όταν η εφαρμογή ησυχάσει από το άνοιγμα
+  if ('requestIdleCallback' in window) requestIdleCallback(() => void loadKids(), { timeout: 2000 });
+  else setTimeout(() => void loadKids(), 500);
   // την πρώτη φορά σε κάθε συσκευή, μια σύντομη γνωριμία
   let seen = true;
   try { seen = localStorage.getItem(WELCOME) === '1'; } catch { /* χωρίς αποθήκευση: δεν ενοχλούμε */ }

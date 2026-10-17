@@ -1,6 +1,7 @@
 /** Έτοιμα σχήματα φυσικής. Κάθε σχήμα ζωγραφίζεται μέσα σε κουτί w × h με το τρέχον χρώμα του c. */
 
-import { KIDS, type KidEnv } from './kids';
+import { KIDS } from './kids/lazy';
+import type { KidEnv } from './kids/common';
 import { hatch, label, path, zigzag } from './draw-util';
 import { PHYSICS } from './physics';
 

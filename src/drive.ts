@@ -93,8 +93,11 @@ async function api<T>(url: string, init: RequestInit, tk: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Το όνομα μέσα σε ερώτημα του Drive: τα ' και \ θέλουν διαφυγή. */
+const quoted = (s: string): string => s.replace(/['\\]/g, (c) => `\\${c}`);
+
 async function folderId(tk: string, name = FOLDER, parent?: string): Promise<string> {
-  const q = `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false${parent ? ` and '${parent}' in parents` : ''}`;
+  const q = `name='${quoted(name)}' and mimeType='application/vnd.google-apps.folder' and trashed=false${parent ? ` and '${parent}' in parents` : ''}`;
   const found = await api<{ files: { id: string }[] }>(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`, {}, tk);
   if (found.files[0]) return found.files[0].id;
   const made = await api<{ id: string }>('https://www.googleapis.com/drive/v3/files?fields=id', {
@@ -123,10 +126,19 @@ export interface Uploaded {
   shared: boolean;
 }
 
-/** Ανεβάζει το αρχείο στον φάκελο «PrismaBoard» του Drive και το κάνει ορατό σε όποιον έχει τον σύνδεσμο. */
-export async function uploadToDrive(blob: Blob, name: string): Promise<Uploaded> {
+/** Ο φάκελος «PrismaBoard» ή, για μάθημα τμήματος, ο υποφάκελός του (π.χ. «PrismaBoard/Β2»). */
+async function classFolder(tk: string, group?: string): Promise<string> {
+  const root = await folderId(tk);
+  return group ? folderId(tk, group, root) : root;
+}
+
+/**
+ * Ανεβάζει το αρχείο στον φάκελο «PrismaBoard» του Drive (ή στον φάκελο του τμήματος) και το κάνει ορατό σε όποιον
+ * έχει τον σύνδεσμο.
+ */
+export async function uploadToDrive(blob: Blob, name: string, group?: string): Promise<Uploaded> {
   const tk = await getToken();
-  const parent = await folderId(tk);
+  const parent = await classFolder(tk, group);
   const mp = multipart({ name, parents: [parent] }, blob);
   const file = await api<{ id: string }>('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
     method: 'POST',
@@ -144,6 +156,24 @@ export async function uploadToDrive(blob: Blob, name: string): Promise<Uploaded>
     shared = false;
   }
   return { url: `https://drive.google.com/file/d/${file.id}/view`, shared };
+}
+
+/**
+ * Ιδιωτικό αντίγραφο ενός αρχείου του μαθήματος (PDF, .json) στον φάκελο του τμήματος, π.χ. «PrismaBoard/Β2».
+ * Αν υπάρχει ήδη αρχείο με το ίδιο όνομα εκεί, γράφεται από πάνω (ίδιο μάθημα, ίδια μέρα), για να μη γεμίζει διπλά.
+ */
+export async function saveToDrive(blob: Blob, name: string, group?: string): Promise<void> {
+  const tk = await getToken();
+  const parent = await classFolder(tk, group);
+  const q = `name='${quoted(name)}' and '${parent}' in parents and trashed=false`;
+  const found = await api<{ files: { id: string }[] }>(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`, {}, tk);
+  const id = found.files[0]?.id;
+  const mp = multipart(id ? {} : { name, parents: [parent] }, blob);
+  await api(`https://www.googleapis.com/upload/drive/v3/files${id ? `/${id}` : ''}?uploadType=multipart&fields=id`, {
+    method: id ? 'PATCH' : 'POST',
+    headers: { 'content-type': mp.type },
+    body: mp.body,
+  }, tk);
 }
 
 // ---------- αντίγραφα ασφαλείας μαθημάτων ----------

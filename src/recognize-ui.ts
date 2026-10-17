@@ -6,7 +6,7 @@ import { fitScaleX, fitScaleY, pickAxesMode } from './analysis';
 import { AiTask, FigCmd, MODELS, Provider, RecKind, loadAi, recognize, saveAi, texToImage, parseFigureReply, parseGraphReply } from './ai';
 import { uid, wrapText } from './model';
 import { $, board, download, toast } from './app';
-import { spellGame, spellList } from './kids';
+import { spellGame, spellList } from './kids/spell-words';
 import { askSpellWords } from './spell-lists';
 // κυκλική αναφορά με το main: μόνο συναρτήσεις, που καλούνται αφού στηθεί όλη η εφαρμογή
 import { closePopups, inkPalette, refreshUi } from './main';

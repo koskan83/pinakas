@@ -205,3 +205,30 @@ export async function kvDel(key: string): Promise<void> {
   });
   db.close();
 }
+
+/** Τιμή που δεν γίνεται JSON (π.χ. ο φάκελος που διάλεξε ο χρήστης για τα αρχεία): φυλάγεται ως έχει. */
+export async function kvPutRaw(key: string, value: unknown): Promise<void> {
+  const db = await open();
+  await new Promise<void>((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(value, key);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+  db.close();
+}
+
+export async function kvGetRaw<T>(key: string): Promise<T | null> {
+  try {
+    const db = await open();
+    const v = await new Promise<T | undefined>((res, rej) => {
+      const r = db.transaction(STORE).objectStore(STORE).get(key);
+      r.onsuccess = () => res(r.result as T | undefined);
+      r.onerror = () => rej(r.error);
+    });
+    db.close();
+    return v ?? null;
+  } catch {
+    return null;
+  }
+}

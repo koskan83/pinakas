@@ -1,6 +1,6 @@
 /** Η σελίδα της εφαρμογής: εικονίδια και το HTML της γραμμής εργαλείων, των μενού και των παραθύρων. */
 
-import { PICS } from './kids';
+import { PICS } from './kids/stickers';
 
 export type PenKind = 'pen' | 'laser';
 export const LASER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="#ef4444" stroke="none"/></svg>';
@@ -35,6 +35,7 @@ const I = {
   screen: IC('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>'),
   spark: P('M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z'),
   full: P('M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5'),
+  exit: P('M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5M15 8l4 4-4 4M19 12H9'),
   fullExit: P('M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5'),
   target: IC('<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8.5"/>'),
   check: P('M4 6.5l1.500 1.500 3-3M4 12.5l1.5 1.5 3-3M4 18.5l1.5 1.5 3-3M12 7h8M12 13h8M12 19h8'),
@@ -108,6 +109,7 @@ export function mountUi(app: HTMLElement): void {
     ${mi('data-act="level"', I.target, 'Αλλαγή σε Δημοτικό')}
     ${mi('data-act="help"', I.doc, 'Οδηγίες χρήσης')}
     ${mi('data-act="more"', I.target, 'Ρυθμίσεις και αρχεία…')}
+    ${mi('data-act="exit" id="exitAct" class="hidden"', I.exit, 'Έξοδος')}
   </div>
   <div id="setMenu" class="popup hidden">
     <div class="gHead">Ρυθμίσεις</div>
@@ -120,6 +122,8 @@ export function mountUi(app: HTMLElement): void {
     ${mi('data-act="open"', I.folder, 'Άνοιγμα αρχείου ως νέο μάθημα…')}
     ${mi('data-act="save"', I.save, 'Αποθήκευση του μαθήματος σε αρχείο')}
     ${mi('data-act="png"', I.image, 'Εξαγωγή σελίδας σε PNG')}
+    ${mi('data-act="filesdir" class="hidden"', I.folder, 'Φάκελος για τα αρχεία των μαθημάτων…')}
+    ${mi('data-act="filesdrive" class="hidden"', I.save, 'Αρχεία και στο Google Drive, στον φάκελο του τμήματος')}
     <div class="gHead">Για προχωρημένους</div>
     ${mi('data-act="diag"', I.target, 'Διάγνωση αφής/γραφίδας')}
     ${mi('data-act="test"', I.check, 'Λίστα δοκιμής στην τάξη')}

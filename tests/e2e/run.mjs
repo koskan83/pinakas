@@ -53,6 +53,13 @@ for (let i = 0; ; i++) {
 
 const browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--no-sandbox'] });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 760 }, acceptDownloads: true, locale: 'el-GR' });
+// τα αρχεία κατεβαίνουν στις Λήψεις, χωρίς την ερώτηση για φάκελο και χωρίς αντίγραφο στο Drive (εκτός από το σενάριο που τα δοκιμάζει)
+await ctx.addInitScript(() => {
+  try {
+    if (!localStorage.getItem('grafida.files')) localStorage.setItem('grafida.files', 'downloads');
+    if (!localStorage.getItem('grafida.files.drive')) localStorage.setItem('grafida.files.drive', '0');
+  } catch { /* χωρίς αποθήκευση */ }
+});
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
@@ -154,18 +161,24 @@ test('Γραφή, αναίρεση, επανάληψη', async () => {
   assert((await items()).length === 2, 'η επανάληψη δεν την έφερε πίσω');
 });
 
-test('Γράφοντας, η μπάρα δεν ξεθωριάζει παρά μόνο όταν την πλησιάσει η γραφίδα', async () => {
+test('Γράφοντας, οι μπάρες δεν ξεθωριάζουν ούτε δίπλα στη γραφίδα, και δεν πιάνουν αγγίγματα', async () => {
   await pen();
-  const faded = () => page.evaluate(() => ['toolbarWrap', 'lessonName', 'zoomCtl'].filter((id) => document.getElementById(id).classList.contains('under')));
+  const faded = () => page.evaluate(() => ['toolbarWrap', 'lessonName', 'zoomCtl'].filter((id) => Number(getComputedStyle(document.getElementById(id)).opacity) < 0.8));
+  const z0 = await page.textContent('#zoomFit');
   await page.mouse.move(400, 300);
   await page.mouse.down();
   await page.mouse.move(520, 330, { steps: 6 });
   assert((await faded()).length === 0, 'κάτι ξεθώριασε ενώ η γραφίδα ήταν μακριά');
-  const z = await page.evaluate(() => { const r = document.getElementById('zoomCtl').getBoundingClientRect(); return { x: r.left - 20, y: r.bottom + 20 }; });
+  // η γραμμή περνά δίπλα και πάνω από το zoom
+  const z = await page.evaluate(() => { const r = document.getElementById('zoomIn').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await page.mouse.move(z.x - 30, z.y + 40, { steps: 6 });
   await page.mouse.move(z.x, z.y, { steps: 6 });
-  assert((await faded()).join() === 'zoomCtl', 'έπρεπε να ξεθωριάσει μόνο το zoom');
+  await sleep(200);
+  assert((await faded()).length === 0, `ξεθώριασε: ${await faded()}`);
+  assert(await page.evaluate(() => document.body.classList.contains('inking')), 'όσο γράφεις, οι μπάρες θα έπρεπε να μην πιάνουν αγγίγματα');
   await page.mouse.up();
-  assert((await faded()).length === 0, 'το zoom έμεινε ξεθωριασμένο μετά το σήκωμα');
+  assert((await page.textContent('#zoomFit')) === z0, 'η γραμμή πάτησε το κουμπί του zoom');
+  assert(!(await page.evaluate(() => document.body.classList.contains('inking'))), 'οι μπάρες έμειναν χωρίς αγγίγματα μετά το σήκωμα');
   await page.click('#undo');
 });
 
@@ -756,6 +769,22 @@ test('Τμήμα με ονόματα: η Κλήρωση βγάζει μαθητ�
   assert(reset[0] === 0 && !reset[2], 'το ⟳ δεν ξεκίνησε νέο γύρο');
 });
 
+test('Αρχεία ανά τμήμα: ρωτά μία φορά πού να μπαίνουν, και το όνομα έχει μπροστά το τμήμα', async () => {
+  await page.evaluate(() => localStorage.removeItem('grafida.files'));
+  await page.click('#menuBtn');
+  await page.click('#menu [data-act="more"]');
+  await page.click('#setMenu [data-act="save"]');
+  await page.waitForSelector('#ask .no');
+  assert((await page.textContent('#ask .no')) === 'Στις Λήψεις', 'δεν ρώτησε πού να μπαίνουν τα αρχεία');
+  const p = await download(() => page.click('#ask .no'));
+  const name = p.split(/[\\/]/).pop();
+  assert(/^Β2 – Δοκιμή Β2 νέο \d\d-\d\d-\d{4}\.json$/.test(name), `το αρχείο λέγεται «${name}»`);
+  assert(JSON.parse(readFileSync(p, 'utf8')).pages.length >= 1, 'το αρχείο δεν είναι μάθημα');
+  // δεύτερη φορά δεν ξαναρωτά
+  await doc();
+  assert(!(await visible('#ask')), 'ξαναρώτησε για τον φάκελο');
+});
+
 test('Άσκηση με το 🎯: το ρολόι ζητά ώρα και το σωστό μετράει όταν αφήσεις τους δείκτες εκεί· το κλάσμα ζητά κομμάτια', async () => {
   const level = async () => { await page.click('#menuBtn'); await page.click('#menu [data-act="level"]'); };
   const kid = async (name) => (await items()).find((i) => i.kind === 'stamp' && i.name === name);
@@ -873,11 +902,20 @@ test('Δύο δάχτυλα: το σύρσιμο δεν αλλάζει το zoom
   await sleep(100);
   const z2 = await zoom();
   await touch('touchEnd', []);
+  // σύρσιμο όπου τα δάχτυλα ανοίγουν σιγά σιγά (σύνολο 120, όπως γίνεται στις μεγάλες οθόνες): μένει μετακίνηση
+  await page.click('#zoomFit');
+  const z3 = await zoom();
+  await touch('touchStart', [[400, 300], [600, 300]]);
+  for (let i = 1; i <= 20; i++) await touch('touchMove', [[400 + i * 15 - i * 3, 300 + i * 4], [600 + i * 15 + i * 3, 300 + i * 4]]);
+  await sleep(100);
+  const z4 = await zoom();
+  await touch('touchEnd', []);
   await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: false });
   await cdp.detach();
   await page.click('#zoomFit');
   assert(z1 === z0, `το σύρσιμο με δύο δάχτυλα άλλαξε το zoom από ${z0} σε ${z1}`);
   assert(parseInt(z2) > parseInt(z1), `το άνοιγμα των δαχτύλων δεν μεγέθυνε (${z1} → ${z2})`);
+  assert(z4 === z3, `το σύρσιμο με δάχτυλα που ανοίγουν σιγά σιγά άλλαξε το zoom από ${z3} σε ${z4}`);
 });
 
 test('Όλο το χέρι (5 δάχτυλα) πάνω στον πίνακα: το στρίψιμο περιστρέφει το επιλεγμένο', async () => {

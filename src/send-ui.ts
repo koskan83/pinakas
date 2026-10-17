@@ -1,11 +1,11 @@
 /** Αποστολή στους μαθητές (PDF, Drive, QR) και εκτύπωση. */
 
 import { driveBuiltIn, driveClientId, driveConnect, setDriveClientId, uploadToDrive } from './drive';
-import qrcode from 'qrcode-generator';
 import { isNative } from './native';
 import { buildPdf } from './pdf';
-import { $, board, download, fileName, stamp, toast } from './app';
+import { $, board, download, toast } from './app';
 import { closePopups, lessons } from './main';
+import { classFileName, safeName } from './class-files';
 
 /** Αν οι σελίδες του PDF παίρνουν το λογότυπο σε μια γωνία (ρύθμιση ανά συσκευή). */
 export let pdfLogo = true;
@@ -141,8 +141,12 @@ function studentUrl(up: { url: string; shared: boolean }): string {
   return `${new URL('m.html', online ? location.href : SITE).href}#${id}`;
 }
 
+/** Ζωγραφίζει το QR μόλις φτάσει η βιβλιοθήκη του (φορτώνεται μόνο όταν χρειαστεί). */
 function drawQr(cv: HTMLCanvasElement, text: string): void {
-  const qr = qrcode(0, 'M');
+  void import('qrcode-generator').then(({ default: qrcode }) => paintQr(cv, qrcode(0, 'M'), text));
+}
+
+function paintQr(cv: HTMLCanvasElement, qr: { addData(t: string): void; make(): void; getModuleCount(): number; isDark(r: number, c: number): boolean }, text: string): void {
   qr.addData(text);
   qr.make();
   const n = qr.getModuleCount();
@@ -184,20 +188,20 @@ $('sendIdSave').onclick = () => {
   renderSend();
 };
 $('sendDrive').onclick = async () => {
-  const name = `${fileName(lessons?.current?.name ?? 'mathima')}_${stamp()}.pdf`;
+  const name = classFileName(lessons?.current?.name ?? 'Μάθημα', lessons?.current?.group, 'pdf');
   try {
     // η σύνδεση πρώτα, όσο «μετράει» ακόμα το πάτημα: αλλιώς ο browser μπλοκάρει το παράθυρο της Google
     await driveConnect();
     const pdf = await lessonPdf();
     if (!pdf) return;
     toast('Ανεβαίνει στο Google Drive…', 0);
-    const up = await uploadToDrive(pdf, name);
+    const up = await uploadToDrive(pdf, name, classGroup());
     sendUrl = studentUrl(up);
     drawQr($('sendQr') as HTMLCanvasElement, sendUrl);
     $('sendUrl').textContent = sendUrl;
     $('sendNote').textContent = up.shared
-      ? 'Το αρχείο είναι στον φάκελο «PrismaBoard» του Drive. Όποιος έχει τον σύνδεσμο ή το QR το βλέπει σε σελίδα του PrismaBoard, με κουμπί λήψης.'
-      : 'Το αρχείο ανέβηκε στον φάκελο «PrismaBoard», αλλά ο λογαριασμός δεν επιτρέπει κοινή χρήση με σύνδεσμο. Άνοιξέ το στο Drive και μοίρασέ το από εκεί.';
+      ? `Το αρχείο είναι στον φάκελο «PrismaBoard${classGroup() ? `/${classGroup()}` : ''}» του Drive. Όποιος έχει τον σύνδεσμο ή το QR το βλέπει σε σελίδα του PrismaBoard, με κουμπί λήψης.`
+      : `Το αρχείο ανέβηκε στον φάκελο «PrismaBoard${classGroup() ? `/${classGroup()}` : ''}», αλλά ο λογαριασμός δεν επιτρέπει κοινή χρήση με σύνδεσμο. Άνοιξέ το στο Drive και μοίρασέ το από εκεί.`;
     $('sendOut').classList.remove('hidden');
     showSend();
     toast('Ανέβηκε');
@@ -208,17 +212,20 @@ $('sendDrive').onclick = async () => {
     toast(`Δεν ανέβηκε: ${err instanceof Error ? err.message : err}`, 8000);
   }
 };
+/** Ο φάκελος του τμήματος στο Drive, με το ίδιο όνομα όπως στον υπολογιστή (βλ. class-files.ts). */
+const classGroup = (): string | undefined => (lessons?.current?.group ? safeName(lessons.current.group) : undefined);
+
 /** «Τέλος μαθήματος»: όλο το μάθημα σε PDF, στο Drive, και μεγάλο QR στην οθόνη, με ένα πάτημα. */
 export async function endLesson(): Promise<void> {
   if (!driveClientId()) return openSend();
-  const name = `${fileName(lessons?.current?.name ?? 'mathima')}_${stamp()}.pdf`;
+  const name = classFileName(lessons?.current?.name ?? 'Μάθημα', lessons?.current?.group, 'pdf');
   try {
     // η σύνδεση πρώτα, όσο «μετράει» ακόμα το πάτημα: αλλιώς ο browser μπλοκάρει το παράθυρο της Google
     await driveConnect();
     const pdf = await lessonPdf(true);
     if (!pdf) return;
     toast('Ανεβαίνει στο Google Drive…', 0);
-    const up = await uploadToDrive(pdf, name);
+    const up = await uploadToDrive(pdf, name, classGroup());
     sendUrl = studentUrl(up);
     if (up.shared) {
       showBigQr();
@@ -227,7 +234,7 @@ export async function endLesson(): Promise<void> {
       // χωρίς κοινή χρήση το QR δεν θα άνοιγε στους μαθητές: δείχνουμε το παράθυρο με την εξήγηση
       drawQr($('sendQr') as HTMLCanvasElement, up.url);
       $('sendUrl').textContent = up.url;
-      $('sendNote').textContent = 'Το αρχείο ανέβηκε στον φάκελο «PrismaBoard», αλλά ο λογαριασμός δεν επιτρέπει κοινή χρήση με σύνδεσμο. Άνοιξέ το στο Drive και μοίρασέ το από εκεί.';
+      $('sendNote').textContent = `Το αρχείο ανέβηκε στον φάκελο «PrismaBoard${classGroup() ? `/${classGroup()}` : ''}», αλλά ο λογαριασμός δεν επιτρέπει κοινή χρήση με σύνδεσμο. Άνοιξέ το στο Drive και μοίρασέ το από εκεί.`;
       renderSend();
       $('sendOut').classList.remove('hidden');
       showSend();
@@ -248,7 +255,7 @@ function showBigQr(): void {
 }
 $('sendShare').onclick = async () => {
   try {
-    const name = `${fileName(lessons?.current?.name ?? 'mathima')}_${stamp()}.pdf`;
+    const name = classFileName(lessons?.current?.name ?? 'Μάθημα', lessons?.current?.group, 'pdf');
     const pdf = await lessonPdf();
     if (!pdf) return;
     const file = new File([pdf], name, { type: 'application/pdf' });

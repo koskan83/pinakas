@@ -3,7 +3,7 @@
  * και βγαίνουν ή μπαίνουν και μόνες τους σε αρχείο (για συναδέλφους ή άλλον πίνακα).
  */
 import { askWords, type WordList } from './dialog';
-import { spellList } from './kids';
+import { spellList } from './kids/spell-words';
 import { kvGet, kvSet } from './storage';
 import { readSpellLists, saveSpellLists } from './drive';
 

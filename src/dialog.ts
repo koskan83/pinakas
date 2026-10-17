@@ -203,12 +203,12 @@ export function askLines(title: string, o: { value?: string; hint?: string; ok?:
 }
 
 /** Ζητά επιβεβαίωση. `danger`: το κουμπί της ενέργειας γίνεται κόκκινο (διαγραφές). */
-export function confirmBox(title: string, ok = 'Ναι', danger = false, hint?: string): Promise<boolean> {
+export function confirmBox(title: string, ok = 'Ναι', danger = false, hint?: string, noLabel = 'Άκυρο'): Promise<boolean> {
   return new Promise((res) => {
     const { back, box } = shell(title, hint);
     const acts = document.createElement('div');
     acts.className = 'askActs';
-    const no = button('Άκυρο', 'no'), yes = button(ok, danger ? 'go danger' : 'go');
+    const no = button(noLabel, 'no'), yes = button(ok, danger ? 'go danger' : 'go');
     acts.append(no, yes);
     box.append(acts);
     const done = (v: boolean): void => {

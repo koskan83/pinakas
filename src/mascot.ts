@@ -3,7 +3,7 @@
  * Χαιρετά στο «Τι κάνουμε σήμερα;» και στη γνωριμία, και στο Δημοτικό πετάγεται να πανηγυρίσει τις επιτυχίες.
  */
 
-import { monster } from './kids';
+import { monster } from './kids/monster';
 
 const still = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches;
 

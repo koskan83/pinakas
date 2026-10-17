@@ -31,3 +31,19 @@ export function openOverlay(): Promise<void> {
 export function closeOverlay(): Promise<void> {
   return core!.invoke<void>('close_overlay');
 }
+
+/** Κλείνει την εφαρμογή των Windows. */
+export function nativeExit(): Promise<void> {
+  return core!.invoke<void>('exit_app');
+}
+
+/** Σώζει κατευθείαν στο «Έγγραφα\PrismaBoard\<φάκελος>» χωρίς ερώτηση· επιστρέφει πού γράφτηκε. */
+export async function nativeSaveIn(folder: string, blob: Blob, name: string): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return core!.invoke<string>('save_in_folder', bytes, { headers: { 'x-file-name': encodeURIComponent(name), 'x-folder': encodeURIComponent(folder) } });
+}
+
+/** Ανοίγει τον φάκελο στην Εξερεύνηση αρχείων, με το αρχείο επιλεγμένο. */
+export function nativeShowFile(path: string): Promise<void> {
+  return core!.invoke<void>('show_file', { path });
+}

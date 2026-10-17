@@ -319,11 +319,13 @@ export function startGesture(bd: Board, a: PState, b: PState): void {
   a.mode = 'none';
   b.mode = 'none';
   const c0: Pt = [(a.x + b.x) / 2, (a.y + b.y) / 2];
+  const d0 = Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1);
   bd.gesture = {
-    a: a.id, b: b.id, c0,
-    d0: Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1),
+    a: a.id, b: b.id, c0, d0,
     v0: { ...bd.page.view },
     zoom: false,
+    dRef: d0,
+    prev: { c: c0, d: d0 },
   };
   bd.redraw();
 }
@@ -421,11 +423,16 @@ export function moveOne(bd: Board, ps: PState, e: PointerEvent): void {
     const cy = (a.y + b.y) / 2;
     const d = Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1);
     if (!g.zoom) {
-      // δύο δάχτυλα που σέρνονται μαζί δεν κρατούν ποτέ ακριβώς την ίδια απόσταση: μικρές αλλαγές δεν είναι zoom.
-      // Αν η σελίδα έχει ήδη μετακινηθεί αρκετά, είναι φανερά μετακίνηση και το zoom θέλει ακόμα πιο καθαρό άνοιγμα.
+      // Δύο δάχτυλα που σέρνονται μαζί δεν κρατούν ποτέ την ίδια απόσταση, και στις μεγάλες οθόνες «παίζει» εκατοστά.
+      // Γι' αυτό κάθε μικρή κίνηση κρίνεται χωριστά: όταν το κέντρο μετακινείται περισσότερο από όσο αλλάζει η απόσταση,
+      // είναι σύρσιμο και η αλλαγή της απόστασης δεν μετράει για zoom. Μετρά μόνο το καθαρό άνοιγμα ή κλείσιμο.
+      const dc = Math.hypot(cx - g.prev.c[0], cy - g.prev.c[1]), dd = d - g.prev.d;
+      if (dc > Math.abs(dd) * 1.5) g.dRef += dd;
+      g.prev = { c: [cx, cy], d };
+      // αν η σελίδα έχει ήδη μετακινηθεί αρκετά, είναι φανερά μετακίνηση και το zoom θέλει ακόμα πιο καθαρό άνοιγμα
       const moved = Math.hypot(cx - g.c0[0], cy - g.c0[1]);
-      const need = moved > 60 ? Math.max(90, g.d0 * 0.3) : Math.max(36, g.d0 * 0.14);
-      if (Math.abs(d - g.d0) > need) {
+      const need = moved > 60 ? Math.max(110, g.d0 * 0.4) : Math.max(70, g.d0 * 0.3);
+      if (Math.abs(d - g.dRef) > need) {
         g.zoom = true;
         // το zoom ξεκινά από εδώ, χωρίς πήδημα
         g.d0 = d;
@@ -433,7 +440,9 @@ export function moveOne(bd: Board, ps: PState, e: PointerEvent): void {
         g.v0 = { ...bd.page.view };
       }
     }
-    const k = g.zoom ? Math.min(8, Math.max(0.1, g.v0.k * (d / g.d0))) : g.v0.k;
+    let k = g.zoom ? Math.min(8, Math.max(0.1, g.v0.k * (d / g.d0))) : g.v0.k;
+    // κοντά στο 100% «κουμπώνει» εκεί, για να γυρίζεις εύκολα στο κανονικό μέγεθος
+    if (g.zoom && Math.abs(k - 1) < 0.06) k = 1;
     const wx = (g.c0[0] - g.v0.x) / g.v0.k;
     const wy = (g.c0[1] - g.v0.y) / g.v0.k;
     const v = bd.page.view;

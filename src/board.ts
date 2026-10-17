@@ -1,29 +1,30 @@
 import {
-  AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TableStyle, TextItem, Tool, View, angleEnds, cloneItem, distToSeg, erasePartial, flipItem, hitItem, inLasso, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, pointInPolygon, readDoc, reboxShape, recognizeShape, rotateItem, roundAngle, scaleItem, translateItem, trianglePts, uid, unrot,
+  AngleItem, AxesItem, AxesMode, Background, Doc, FnDef, Item, MeasOpts, Op, Page, Pic, Pt, Shape, ShapeKind, StampItem, Stroke, TableStyle, TextItem, Tool, View, angleEnds, cloneItem, erasePartial, hitItem, isDark, isPoly, itemBounds, itemRot, newDoc, newPage, readDoc, trianglePts, uid,
 } from './model';
 import { Params } from './expr';
-import { STAMPS, SpringState, stampTexts, type KidArea, type KidAsk } from './stamps';
+import { STAMPS, SpringState, type KidAsk } from './stamps';
 import { CM, GadgetDrag, GadgetKind, Gadgets } from './gadgets';
-import { ANGLE_KEY, angleSides, eraseMeasures, fmt, measureAngles, measureSides, trigPoint, sideLen, sideText, unitsFor } from './measure';
+import { eraseMeasures, measureAngles, measureSides, trigPoint } from './measure';
 import { Renderer } from './render';
 import * as P from './board-pointer';
 import * as R from './board-replay';
 import * as X from './board-export';
 import * as M from './board-measure';
+import * as K from './board-kids';
+import * as S from './board-select';
+import * as O from './board-springs';
+import * as L from './board-live';
 
 // οι δοκιμές και όποιος τα χρειάζεται τα βρίσκουν ακόμα εδώ
 export { eraseMeasures, hlFlat, measureAngles, measureSides, radText } from './measure';
 
 type Mode = 'draw' | 'shape' | 'gadget' | 'erase' | 'move' | 'resize' | 'pan' | 'lasso' | 'gmove' | 'gresize' | 'rotate' | 'grotate' | 'measure' | 'laser' | 'osc' | 'kid' | 'none';
 
-type Box = { x0: number; y0: number; x1: number; y1: number };
+export type Box = { x0: number; y0: number; x1: number; y1: number };
 /** Ίχνος του δείκτη λέιζερ· t = στιγμή που σηκώθηκε η γραφίδα (0 όσο γράφει). */
 interface Laser { pts: Pt[]; t: number }
-const LASER_MS = 1800;
+export const LASER_MS = 1800;
 
-/** Περίοδος της ταλάντωσης των ελατηρίων και χρόνος απόσβεσης. */
-const OSC_PERIOD_MS = 1600;
-const OSC_FADE_MS = 5000;
 
 export interface PState {
   id: number;
@@ -85,6 +86,13 @@ interface Gesture {
   v0: View;
   /** Το zoom «ξεκλειδώνει» μόνο όταν τα δάχτυλα ανοίξουν ή κλείσουν αισθητά· ως τότε η κίνηση είναι καθαρή μετακίνηση. */
   zoom: boolean;
+  /**
+   * Η απόσταση των δαχτύλων από την οποία μετριέται το «άνοιγμα» για να ξεκλειδώσει το zoom. Όσο το χέρι σέρνεται,
+   * ό,τι αλλάζει στην απόσταση των δαχτύλων απορροφάται εδώ: μετρά μόνο το άνοιγμα που γίνεται χωρίς να σέρνεται το χέρι.
+   */
+  dRef: number;
+  /** Η προηγούμενη θέση (κέντρο, απόσταση), για να ξεχωρίζει κάθε μικρή κίνηση σε σύρσιμο ή άνοιγμα. */
+  prev: { c: Pt; d: number };
   /** Όλο το χέρι πάνω στον πίνακα (4+ δάχτυλα) με κάτι επιλεγμένο: το στρίψιμο του χεριού περιστρέφει την επιλογή. */
   twist?: Twist;
 }
@@ -436,66 +444,19 @@ export class Board {
   }
 
   /** Η κατάσταση ενός εργαλείου άλλαξε (ή μια επιβράβευση μόλις μπήκε): ήχος, και κίνηση για όσο κρατά. */
-  kidChanged(it: StampItem, prev: number[], ev?: string): void {
-    const d = STAMPS[it.name];
-    const what = ev ?? (d?.fx ? d.fx(prev, it.v ?? []) : 'click');
-    if (what) this.onKidFx(what, it);
-    if (!this.kidMotion) return;
-    const idle = this.kidAnim.size === 0;
-    this.kidAnim.set(it.id, { t0: performance.now(), prev, ms: d?.animMs ?? 1500 });
-    if (!idle) return;
-    const tick = (): void => {
-      const now = performance.now();
-      for (const [id, a] of this.kidAnim) if (now - a.t0 > a.ms) this.kidAnim.delete(id);
-      this.redraw();
-      if (this.kidAnim.size) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }
+  kidChanged(it: StampItem, prev: number[], ev?: string): void { K.kidChanged(this, it, prev, ev); }
 
   /** Η κατάσταση ενός εργαλείου του Δημοτικού, ή null αν δεν υπάρχει στη σελίδα. */
-  kidState(id: string): number[] | null {
-    const it = this.page.items.find((x) => x.id === id);
-    return it && it.kind === 'stamp' ? it.v ?? STAMPS[it.name]?.init ?? [] : null;
-  }
+  kidState(id: string): number[] | null { return K.kidState(this, id); }
 
   /** Αλλάζει την κατάσταση ενός εργαλείου του Δημοτικού (με αναίρεση). */
-  setKidState(id: string, v: number[]): void {
-    const i = this.page.items.findIndex((x) => x.id === id);
-    const before = this.page.items[i];
-    if (!before || before.kind !== 'stamp') return;
-    const after: StampItem = { ...before, v };
-    this.page.items[i] = after;
-    this.push({ t: 'mod', p: this.cur, before, after });
-    this.redraw();
-  }
+  setKidState(id: string, v: number[]): void { K.setKidState(this, id, v); }
 
   /** Σύρσιμο πάνω σε εργαλείο του Δημοτικού που «ζωγραφίζεται» (κυβάκια, δείκτες ρολογιού). false αν το σημείο δεν το αφορά. */
-  kidPaint(ps: PState, it: StampItem, wx: number, wy: number, first: boolean): boolean {
-    const d = STAMPS[it.name];
-    if (!d?.paint) return false;
-    if (first) ps.kid = {};
-    const [lx, ly] = unrot(it, wx, wy);
-    if (first && d.fullAt?.(lx - it.x, ly - it.y, it.w, it.h)) {
-      this.onKidFull(it);
-      return true;
-    }
-    const v = d.paint(it.v ?? d.init ?? [], lx - it.x, ly - it.y, it.w, it.h, ps.kid!, first);
-    if (!v) return false;
-    const next = { ...it, v };
-    this.page.items[this.page.items.indexOf(it)] = next;
-    // εργαλείο με δική του κίνηση (αριθμοκυβάκια: αξεσουάρ που πέφτει): κινείται από το πάτημα
-    if (first && d.animMs) {
-      this.kidChanged(next, it.v ?? d.init ?? []);
-      return true;
-    }
-    const ev = d.fx ? d.fx(it.v ?? d.init ?? [], v) : null;
-    if (ev) this.onKidFx(ev, it);
-    return true;
-  }
+  kidPaint(ps: PState, it: StampItem, wx: number, wy: number, first: boolean): boolean { return K.kidPaint(this, ps, it, wx, wy, first); }
 
   /** Οι γραμμές γραφής της σελίδας που το κέντρο τους πέφτει μέσα στο ορθογώνιο. */
-  private strokesIn(b: Box): string[] {
+  strokesIn(b: Box): string[] {
     return this.page.items
       .filter((x) => {
         if (x.kind !== 'stroke' || x.hl) return false;
@@ -506,7 +467,7 @@ export class Board {
   }
 
   /** Σβήνει στοιχεία της σελίδας με ένα βήμα αναίρεσης, χωρίς να πειράξει την επιλογή. */
-  private deleteItems(ids: string[]): void {
+  deleteItems(ids: string[]): void {
     if (!ids.length) return;
     const set = new Set(ids), before = this.page.items.slice();
     this.page.items = before.filter((x) => !set.has(x.id));
@@ -517,97 +478,16 @@ export class Board {
   /**
    * Πάτημα στο σημείο `at` ενός εργαλείου του Δημοτικού. true αν έπεσε σε κουμπί του (και έγινε ό,τι κάνει το κουμπί).
    */
-  pressKid(it: StampItem, at: Pt): boolean {
-    const d = STAMPS[it.name];
-    if (!d?.kid) return false;
-    const [lx, ly] = unrot(it, at[0], at[1]);
-    const cur = it.v ?? d.init ?? [];
-    const apply = (v: number[]): void => {
-      const before = this.page.items.find((x) => x.id === it.id);
-      if (!before || before.kind !== 'stamp') return;
-      const next: StampItem = { ...before, v };
-      this.page.items[this.page.items.indexOf(before)] = next;
-      this.push({ t: 'mod', p: this.cur, before, after: next });
-      this.kidChanged(next, before.v ?? d.init ?? []);
-      this.redraw();
-    };
-    const q = d.ask?.(cur, lx - it.x, ly - it.y, it.w, it.h);
-    if (q) {
-      const page = this.cur;
-      const inArea = (a: KidArea): string[] => this.strokesIn({ x0: it.x + a.x, y0: it.y + a.y, x1: it.x + a.x + a.w, y1: it.y + a.y + a.h });
-      if (q.area && q.mode === 'clear') {
-        this.deleteItems(inArea(q.area));
-        const v = q.apply('');
-        if (v) apply(v);
-      } else {
-        void (q.area ? this.onRead(inArea(q.area)) : this.onAsk(q)).then((text) => {
-          const v = text == null || page !== this.cur ? null : q.apply(text);
-          if (!v) return;
-          if (q.then) this.deleteItems(inArea(q.then.area));
-          apply(v);
-        });
-      }
-    } else {
-      const v = d.tap?.(cur, lx - it.x, ly - it.y, it.w, it.h, { names: this.kidNames() });
-      if (!v) return false;
-      apply(v);
-    }
-    // πάτημα σε κουμπί του εργαλείου (γράμμα, +, κομμάτι κλάσματος) δεν το επιλέγει: αλλιώς η μπάρα «Διαγραφή / ×2» πέφτει πάνω στο παιχνίδι
-    this.selected = null;
-    this.onUi();
-    return true;
-  }
+  pressKid(it: StampItem, at: Pt): boolean { return K.pressKid(this, it, at); }
 
   /** true αν ήταν πάτημα πάνω σε εργαλείο του Δημοτικού (και όχι μετακίνησή του)· τότε εφαρμόζει ό,τι κάνει το πάτημα. */
-  tapKid(before: StampItem, after: Item, at: Pt): boolean {
-    const d = STAMPS[before.name];
-    if (!d?.kid || (!d.tap && !d.ask) || after.kind !== 'stamp') return false;
-    if (Math.hypot(after.x - before.x, after.y - before.y) > 8 / this.page.view.k) return false;
-    // ακόμα κι αν το πάτημα δεν έπεσε σε κουμπί, το εργαλείο δεν μετακινείται από ένα απλό άγγιγμα
-    this.pressKid(before, at);
-    return true;
-  }
+  tapKid(before: StampItem, after: Item, at: Pt): boolean { return K.tapKid(this, before, after, at); }
 
   /**
    * Δεύτερο πάτημα (χωρίς σύρσιμο) πάνω σε γράμμα ενός σχήματος Φυσικής (φ, m, θ…): ρωτά τι να γράφει στη θέση του,
    * π.χ. μοίρες αντί για φ· κενό το σβήνει. true αν το πάτημα έπεσε σε γράμμα.
    */
-  tapStampText(before: StampItem, after: Item, at: Pt): boolean {
-    const d = STAMPS[before.name];
-    if (!d || d.kid || after.kind !== 'stamp') return false;
-    const k = this.page.view.k;
-    if (Math.hypot(after.x - before.x, after.y - before.y) > 8 / k) return false;
-    const [lx, ly] = unrot(before, at[0], at[1]);
-    const x = lx - before.x, y = ly - before.y;
-    const lab = stampTexts(d, before.w, before.h).find((l) => Math.hypot(l.x - x, l.y - y) < Math.max(l.size * 0.8, 26 / k));
-    if (!lab) return false;
-    const angle = /^[φθωα-δ]$/.test(lab.t);
-    const page = this.cur, id = before.id;
-    const now = before.txt?.[lab.t] ?? lab.t;
-    void this.onAsk({
-      title: `Τι να γράφει στη θέση του «${lab.t}»;`,
-      hint: angle ? 'Γράψε τις μοίρες (το ° μπαίνει μόνο του)· άδειο, για να σβηστεί.' : 'Άδειο, για να σβηστεί.',
-      value: now,
-      picks: angle ? [lab.t, '30°', '37°', '45°', '53°', '60°'] : [lab.t],
-      max: 12,
-      apply: () => null,
-    }).then((text) => {
-      if (text == null || page !== this.cur) return;
-      const cur = this.page.items.find((x) => x.id === id);
-      if (!cur || cur.kind !== 'stamp') return;
-      let t = text.trim();
-      if (angle && /^\d+([.,]\d+)?$/.test(t)) t += '°';
-      const txt = { ...cur.txt };
-      if (t === lab.t) delete txt[lab.t];
-      else txt[lab.t] = t;
-      const next: StampItem = { ...cur, txt: Object.keys(txt).length ? txt : undefined };
-      this.page.items[this.page.items.indexOf(cur)] = next;
-      this.push({ t: 'mod', p: this.cur, before: cur, after: next });
-      this.redraw();
-      this.onUi();
-    });
-    return true;
-  }
+  tapStampText(before: StampItem, after: Item, at: Pt): boolean { return K.tapStampText(this, before, after, at); }
 
   /**
    * Άξονες με συναρτήσεις που αφήνονται πάνω σε άλλους άξονες ενώνονται μαζί τους: οι συναρτήσεις περνούν στους πρώτους
@@ -766,25 +646,7 @@ export class Board {
   }
 
   /** Εικόνα PNG όλων όσων φαίνονται μέσα στην κυκλωμένη περιοχή, για αποστολή στο AI. */
-  async regionImage(): Promise<{ blob: Blob; box: Box; color: string } | null> {
-    const b = this.region;
-    if (!b) return null;
-    const bw = b.x1 - b.x0, bh = b.y1 - b.y0;
-    const s = Math.min(3, 1600 / Math.max(bw, bh));
-    const cv = document.createElement('canvas');
-    cv.width = Math.max(1, Math.round(bw * s));
-    cv.height = Math.max(1, Math.round(bh * s));
-    const c = cv.getContext('2d')!;
-    c.fillStyle = isDark(this.doc.bg) ? '#14201b' : '#ffffff';
-    c.fillRect(0, 0, cv.width, cv.height);
-    c.setTransform(s, 0, 0, s, -b.x0 * s, -b.y0 * s);
-    for (const it of this.page.items) {
-      const ib = itemBounds(it);
-      if (ib.x0 < b.x1 && ib.x1 > b.x0 && ib.y0 < b.y1 && ib.y1 > b.y0) this.r.drawItem(c, it);
-    }
-    const blob = await new Promise<Blob | null>((res) => cv.toBlob(res, 'image/png'));
-    return blob ? { blob, box: b, color: this.color } : null;
-  }
+  regionImage(): Promise<{ blob: Blob; box: Box; color: string } | null> { return S.regionImage(this); }
 
   get hasSelection(): boolean {
     return !!this.selected || this.multi.length > 0;
@@ -803,235 +665,45 @@ export class Board {
   }
 
   /** Εικόνα PNG των στοιχείων με τα δοσμένα id, για αποστολή σε αναγνώριση. */
-  async inkImage(ids: string[]): Promise<{ blob: Blob; box: Box; color: string } | null> {
-    const set = new Set(ids);
-    const items = this.page.items.filter((it) => set.has(it.id));
-    if (items.length === 0) return null;
-    let box: Box | null = null;
-    for (const it of items) {
-      const b = itemBounds(it);
-      box = box ? { x0: Math.min(box.x0, b.x0), y0: Math.min(box.y0, b.y0), x1: Math.max(box.x1, b.x1), y1: Math.max(box.y1, b.y1) } : b;
-    }
-    const b = box!;
-    const pad = 18;
-    const bw = b.x1 - b.x0 + pad * 2, bh = b.y1 - b.y0 + pad * 2;
-    const s = Math.min(3, 1400 / Math.max(bw, bh));
-    const cv = document.createElement('canvas');
-    cv.width = Math.max(1, Math.round(bw * s));
-    cv.height = Math.max(1, Math.round(bh * s));
-    const c = cv.getContext('2d')!;
-    c.fillStyle = isDark(this.doc.bg) ? '#14201b' : '#ffffff';
-    c.fillRect(0, 0, cv.width, cv.height);
-    c.setTransform(s, 0, 0, s, (pad - b.x0) * s, (pad - b.y0) * s);
-    for (const it of items) this.r.drawItem(c, it);
-    const blob = await new Promise<Blob | null>((res) => cv.toBlob(res, 'image/png'));
-    const first = items[0];
-    return blob ? { blob, box: b, color: 'color' in first ? first.color : this.color } : null;
-  }
+  inkImage(ids: string[]): Promise<{ blob: Blob; box: Box; color: string } | null> { return S.inkImage(this, ids); }
 
   /** Αντικαθιστά τα στοιχεία με τα δοσμένα id από ένα νέο (αναιρείται με ένα ↶). */
-  replaceItems(ids: string[], item: Item): boolean {
-    const set = new Set(ids);
-    const before = this.page.items.slice();
-    const rest = before.filter((it) => !set.has(it.id));
-    if (rest.length === before.length) return false;
-    rest.push(item);
-    this.page.items = rest;
-    this.selected = null;
-    this.multi = [];
-    this.push({ t: 'set', p: this.cur, before, after: rest.slice() });
-    this.redraw();
-    return true;
-  }
+  replaceItems(ids: string[], item: Item): boolean { return S.replaceItems(this, ids, item); }
 
   selectedIds(): Set<string> {
     return new Set(this.multi.length ? this.multi : this.selected ? [this.selected] : []);
   }
 
-  groupBounds(): Box | null {
-    const ids = new Set(this.multi);
-    let b: Box | null = null;
-    for (const it of this.page.items) {
-      if (!ids.has(it.id)) continue;
-      const ib = itemBounds(it);
-      b = b ? { x0: Math.min(b.x0, ib.x0), y0: Math.min(b.y0, ib.y0), x1: Math.max(b.x1, ib.x1), y1: Math.max(b.y1, ib.y1) } : ib;
-    }
-    return b;
-  }
+  groupBounds(): Box | null { return S.groupBounds(this); }
 
   /** Αντίγραφο της επιλογής, λίγο πιο κάτω-δεξιά. */
-  duplicateSelected(): void {
-    const ids = this.selectedIds();
-    if (ids.size === 0) return;
-    const before = this.page.items.slice();
-    const copies = before.filter((it) => ids.has(it.id)).map((it) => translateItem(cloneItem(it), 30, 30));
-    this.page.items.push(...copies);
-    this.selected = copies.length === 1 ? copies[0].id : null;
-    this.multi = copies.length > 1 ? copies.map((c) => c.id) : [];
-    this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
-    this.redraw();
-  }
+  duplicateSelected(): void { S.duplicateSelected(this); }
 
-  /** Το πλαίσιο όλων των επιλεγμένων στοιχείων (ένα ή πολλά). */
-  private selBounds(ids: Set<string>): Box | null {
-    let b: Box | null = null;
-    for (const it of this.page.items) {
-      if (!ids.has(it.id)) continue;
-      const ib = itemBounds(it);
-      b = b ? { x0: Math.min(b.x0, ib.x0), y0: Math.min(b.y0, ib.y0), x1: Math.max(b.x1, ib.x1), y1: Math.max(b.y1, ib.y1) } : ib;
-    }
-    return b;
-  }
 
-  /** Εφαρμόζει μια αλλαγή σε όλα τα επιλεγμένα στοιχεία (αναιρείται με ένα ↶). */
-  private mapSelected(f: (it: Item, b: Box) => Item): void {
-    const ids = this.selectedIds();
-    const b = this.selBounds(ids);
-    if (!b) return;
-    const before = this.page.items.slice();
-    this.page.items = before.map((it) => (ids.has(it.id) ? f(it, b) : it));
-    this.pivot = null;
-    this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
-    this.redraw();
-    this.onUi();
-  }
 
   /** Μεγαλώνει (f > 1) ή μικραίνει την επιλογή γύρω από το κέντρο της· και τα γράμματα των κειμένων. */
-  scaleSelected(f: number): void {
-    const b = this.selBounds(this.selectedIds());
-    if (!b) return;
-    const size = Math.max(b.x1 - b.x0, b.y1 - b.y0);
-    // ούτε να χαθεί ούτε να γίνει τεράστια
-    if ((f < 1 && size * f < 16) || (f > 1 && size * f > 20000)) return;
-    this.mapSelected((it) => scaleItem(it, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, f));
-  }
+  scaleSelected(f: number): void { S.scaleSelected(this, f); }
 
   /** Κατοπτρική εικόνα της επιλογής, αριστερά–δεξιά ή (vertical) πάνω–κάτω, στη θέση της. */
-  flipSelected(vertical: boolean): void {
-    this.mapSelected((it, b) => flipItem(it, vertical, vertical ? (b.y0 + b.y1) / 2 : (b.x0 + b.x1) / 2));
-  }
+  flipSelected(vertical: boolean): void { S.flipSelected(this, vertical); }
 
-  /** Κοινή αρχή O και άκρα A, B των δύο πλευρών από τις οποίες βγαίνει μια συνισταμένη. */
-  private linkGeom(aId: string, bId: string): { o: Pt; a: Pt; b: Pt; color: string; width: number } | null {
-    const items = this.page.items;
-    const a = items.find((x) => x.id === aId), b = items.find((x) => x.id === bId);
-    if (a && a.kind === 'angle') {
-      const [p1, p2] = angleEnds(a);
-      return { o: [a.x, a.y], a: p1, b: p2, color: a.color, width: a.width };
-    }
-    const ok = (q: Item | undefined): q is Shape => !!q && q.kind === 'shape' && (q.shape === 'arrow' || q.shape === 'line');
-    if (!ok(a) || !ok(b)) return null;
-    // ένα βέλος ξεκινά πάντα από την αρχή του· μια ευθεία μπορεί να «γυρίσει», όποιο άκρο της είναι πιο κοντά στο άλλο
-    const ends = (q: Shape): [Pt, Pt][] => (q.shape === 'line' ? [[[q.x0, q.y0], [q.x1, q.y1]], [[q.x1, q.y1], [q.x0, q.y0]]] : [[[q.x0, q.y0], [q.x1, q.y1]]]);
-    let best: { d: number; p: [Pt, Pt]; q: [Pt, Pt] } | null = null;
-    for (const p of ends(a)) for (const q of ends(b)) {
-      const d = Math.hypot(p[0][0] - q[0][0], p[0][1] - q[0][1]);
-      if (!best || d < best.d) best = { d, p, q };
-    }
-    const { p, q } = best!;
-    // το δεύτερο μεταφέρεται παράλληλα ώστε να ξεκινά από την αρχή του πρώτου
-    return { o: p[0], a: p[1], b: [q[1][0] + p[0][0] - q[0][0], q[1][1] + p[0][1] - q[0][1]], color: a.color, width: a.width };
-  }
 
   /**
    * Από τι μπορεί να βγει συνισταμένη με την τωρινή επιλογή: μια γωνία, δύο βέλη/ευθείες με κοινή κορυφή,
    * ή ένα βέλος/ευθεία που «κούμπωσε» στην αρχή άλλου. Επιστρέφει τα id των δύο πλευρών.
    */
-  get resultantSource(): [string, string] | null {
-    const items = this.page.items;
-    const ok = (q: Item | undefined): q is Shape => !!q && q.kind === 'shape' && (q.shape === 'arrow' || q.shape === 'line') && !q.dash && !q.link;
-    if (this.multi.length === 2) {
-      const [a, b] = this.multi.map((id) => items.find((x) => x.id === id));
-      if (!ok(a) || !ok(b)) return null;
-      const pts = (q: Shape): Pt[] => (q.shape === 'line' ? [[q.x0, q.y0], [q.x1, q.y1]] : [[q.x0, q.y0]]);
-      const common = pts(a).some((p) => pts(b).some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 16));
-      return common ? [a.id, b.id] : null;
-    }
-    const sel = this.selected ? items.find((x) => x.id === this.selected) : undefined;
-    if (!sel) return null;
-    if (sel.kind === 'angle') return [sel.id, sel.id];
-    if (!ok(sel)) return null;
-    const mate = items.find((x) => x.id === sel.angleWith) ?? items.find((x) => ok(x) && x.angleWith === sel.id);
-    return ok(mate) ? [mate.id, sel.id] : null;
-  }
+  get resultantSource(): [string, string] | null { return S.resultantSource(this); }
 
   /** Σχεδιάζει το παραλληλόγραμμο και τη συνισταμένη· και τα τρία μένουν δεμένα με τις δύο πλευρές. */
-  addResultant(): void {
-    const src = this.resultantSource;
-    const g = src && this.linkGeom(src[0], src[1]);
-    if (!src || !g) return;
-    const [a, b] = src;
-    // υπάρχει ήδη συνισταμένη για αυτές τις πλευρές: απλώς την επιλέγουμε
-    const have = this.page.items.find((x) => x.kind === 'shape' && x.link?.role === 'sum' && [x.link.a, x.link.b].sort().join() === [a, b].sort().join());
-    if (have) {
-      this.selected = have.id;
-      this.multi = [];
-      this.redraw();
-      this.onUi();
-      return;
-    }
-    const before = this.page.items.slice();
-    const base = { kind: 'shape' as const, x0: 0, y0: 0, x1: 0, y1: 0 };
-    const side = (role: 'sideA' | 'sideB'): Shape => ({
-      ...base, id: uid(), shape: 'line', color: g.color, width: Math.max(1.5, g.width / 2), dash: true, link: { a, b, role },
-    });
-    const color = g.color === '#e11d48' || g.color === '#fb7185' ? '#2563eb' : isDark(this.doc.bg) ? '#fb7185' : '#e11d48';
-    const sum: Shape = {
-      ...base, id: uid(), shape: 'arrow', color, width: g.width, link: { a, b, role: 'sum' },
-      angleWith: this.page.items.find((x) => x.id === a)?.kind === 'shape' ? a : undefined,
-    };
-    this.page.items.push(side('sideA'), side('sideB'), sum);
-    this.selected = sum.id;
-    this.multi = [];
-    this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
-    this.redraw();
-  }
+  addResultant(): void { S.addResultant(this); }
 
   /**
    * Φέρνει τις συνισταμένες και τα παραλληλόγραμμά τους στη θέση που ορίζουν οι πλευρές τους.
    * Αν μια πλευρά έχει σβηστεί, η συνισταμένη μένει όπως είναι, ελεύθερη.
    */
-  private syncLinks(): boolean {
-    const items = this.page.items;
-    let changed = false;
-    items.forEach((it, i) => {
-      if (it.kind !== 'shape' || !it.link) return;
-      const g = this.linkGeom(it.link.a, it.link.b);
-      if (!g) {
-        const { link: _drop, ...free } = it;
-        items[i] = free;
-        changed = true;
-        return;
-      }
-      const r: Pt = [g.a[0] + g.b[0] - g.o[0], g.a[1] + g.b[1] - g.o[1]];
-      const from = it.link.role === 'sum' ? g.o : it.link.role === 'sideA' ? g.a : g.b;
-      if (Math.hypot(it.x0 - from[0], it.y0 - from[1]) + Math.hypot(it.x1 - r[0], it.y1 - r[1]) < 1e-6) return;
-      items[i] = { ...it, x0: from[0], y0: from[1], x1: r[0], y1: r[1] };
-      changed = true;
-    });
-    return changed;
-  }
+  private syncLinks(): boolean { return S.syncLinks(this); }
 
-  deleteSelected(): void {
-    if (this.multi.length) {
-      const ids = new Set(this.multi);
-      const before = this.page.items.slice();
-      this.page.items = before.filter((it) => !ids.has(it.id));
-      this.multi = [];
-      this.push({ t: 'set', p: this.cur, before, after: this.page.items.slice() });
-      this.redraw();
-      return;
-    }
-    if (!this.selected) return;
-    const items = this.page.items;
-    const i = items.findIndex((x) => x.id === this.selected);
-    if (i < 0) return;
-    const [item] = items.splice(i, 1);
-    this.selected = null;
-    this.multi = [];
-    this.push({ t: 'del', p: this.cur, items: [{ item, i }] });
-    this.redraw();
-  }
+  deleteSelected(): void { S.deleteSelected(this); }
 
   clearPage(): void {
     const items = this.page.items;
@@ -1127,95 +799,28 @@ export class Board {
   osc = new Map<string, { amp: number; t0: number }>();
   /** Σώμα που τραβιέται αυτή τη στιγμή. */
   oscDrag: { id: string; d: number; d0?: number } | null = null;
-  private oscRaf = 0;
+  oscRaf = 0;
 
-  springState(s: StampItem): SpringState {
-    const marks = !!s.marks;
-    if (this.oscDrag?.id === s.id) return { d: this.oscDrag.d, amp: Math.abs(this.oscDrag.d), marks };
-    const o = this.osc.get(s.id);
-    if (!o) return { d: 0, amp: 0, marks };
-    const t = performance.now() - o.t0;
-    // σχήματα με κίνηση (κύματα, κρούση): μόνο ο χρόνος
-    if (STAMPS[s.name]?.play) return { d: 0, amp: 0, marks, t };
-    const fade = s.damp ? Math.exp(-t / OSC_FADE_MS) : 1;
-    return { d: o.amp * fade * Math.cos((2 * Math.PI * t) / OSC_PERIOD_MS), amp: Math.abs(o.amp), marks };
-  }
+  springState(s: StampItem): SpringState { return O.springState(this, s); }
 
   /** Το ελατήριο του οποίου το σώμα βρίσκεται κάτω από το σημείο. */
-  springAt(wx: number, wy: number): StampItem | null {
-    const items = this.page.items;
-    for (let i = items.length - 1; i >= 0; i--) {
-      const it = items[i];
-      if (it.kind !== 'stamp') continue;
-      const g = STAMPS[it.name]?.spring?.(it.w, it.h);
-      if (!g) continue;
-      const st = this.springState(it);
-      const [bx, by] = g.bob ? g.bob(st.d, !st.amp && !st.d) : [g.cx + g.ux * st.d, g.cy + g.uy * st.d];
-      const [ux, uy] = unrot(it, wx, wy);
-      if (Math.hypot(ux - (it.x + bx), uy - (it.y + by)) < g.r) return it;
-    }
-    return null;
-  }
+  springAt(wx: number, wy: number): StampItem | null { return O.springAt(this, wx, wy); }
 
-  runOsc(): void {
-    if (this.oscRaf) return;
-    const loop = (): void => {
-      const now = performance.now();
-      for (const [id, o] of this.osc) {
-        const it = this.page.items.find((x) => x.id === id);
-        // σβήνει όταν το πλάτος γίνει αμελητέο ή το ελατήριο διαγραφεί
-        if (!it || it.kind !== 'stamp' || (it.damp && Math.abs(o.amp) * Math.exp(-(now - o.t0) / OSC_FADE_MS) < 0.7)) this.osc.delete(id);
-      }
-      if (this.osc.size) {
-        this.renderLive();
-        this.oscRaf = requestAnimationFrame(loop);
-      } else {
-        this.oscRaf = 0;
-        this.redraw();
-      }
-    };
-    this.oscRaf = requestAnimationFrame(loop);
-  }
+  runOsc(): void { O.runOsc(this); }
 
   /** Το επιλεγμένο ελατήριο, αν η επιλογή είναι ελατήριο. */
-  get selectedSpring(): StampItem | null {
-    const it = this.selected ? this.page.items.find((x) => x.id === this.selected) : undefined;
-    return it && it.kind === 'stamp' && (STAMPS[it.name]?.spring || STAMPS[it.name]?.play) ? it : null;
-  }
+  get selectedSpring(): StampItem | null { return O.selectedSpring(this); }
 
   /** ▶/⏸ για το επιλεγμένο σχήμα με κίνηση (κύματα, κρούση, κυκλική κίνηση). */
-  togglePlay(): void {
-    const it = this.selectedSpring;
-    if (!it || !STAMPS[it.name]?.play) return;
-    if (this.osc.has(it.id)) this.osc.delete(it.id);
-    else {
-      this.osc.set(it.id, { amp: 1, t0: performance.now() });
-      this.runOsc();
-    }
-    this.redraw();
-    this.onUi();
-  }
+  togglePlay(): void { O.togglePlay(this); }
 
-  get springMoving(): boolean {
-    return !!this.selected && this.osc.has(this.selected);
-  }
+  get springMoving(): boolean { return O.springMoving(this); }
 
   /** Αλλάζει ιδιότητα του επιλεγμένου ελατηρίου (σημάνσεις, απόσβεση). */
-  updateSpring(patch: Partial<StampItem>): void {
-    const before = this.selectedSpring;
-    if (!before) return;
-    const after = { ...before, ...patch } as StampItem;
-    this.page.items[this.page.items.indexOf(before)] = after;
-    this.push({ t: 'mod', p: this.cur, before, after });
-    this.redraw();
-  }
+  updateSpring(patch: Partial<StampItem>): void { O.updateSpring(this, patch); }
 
   /** Σταματά την ταλάντωση του επιλεγμένου ελατηρίου· το σώμα γυρίζει στη θέση ισορροπίας. */
-  stopSpring(): void {
-    if (this.selected) this.osc.delete(this.selected);
-    this.redraw();
-    this.onUi();
-  }
+  stopSpring(): void { O.stopSpring(this); }
 
   redraw(): void {
     const c = this.bctx;
@@ -1244,144 +849,7 @@ export class Board {
     this.onView();
   }
 
-  renderLive(): void {
-    const c = this.lctx;
-    c.setTransform(1, 0, 0, 1, 0, 0);
-    c.clearRect(0, 0, this.live.width, this.live.height);
-    this.setWorldTransform(c);
-    const k = this.page.view.k;
-    const selIds = this.selectedIds();
-    if (this.region && this.tool === 'select' && (selIds.size === 0 || this.page.items.some((it) => it.kind === 'image' && selIds.has(it.id)))) {
-      // η περιοχή που θα δει το AI: φαίνεται όταν το λάσο έπιασε κομμάτι εικόνας και όχι ξεχωριστά στοιχεία
-      const r = this.region;
-      c.save();
-      c.strokeStyle = '#7c68b0';
-      c.fillStyle = 'rgba(124,104,176,.07)';
-      c.lineWidth = 2 / k;
-      c.setLineDash([8 / k, 6 / k]);
-      c.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
-      c.strokeRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
-      c.restore();
-    }
-    for (const id of new Set([...this.osc.keys(), ...(this.oscDrag ? [this.oscDrag.id] : [])])) {
-      const it = this.page.items.find((x) => x.id === id);
-      if (it && !this.replay) this.r.drawItem(c, it);
-    }
-    let selItem: Item | undefined;
-    for (const p of this.ptrs.values()) {
-      if (p.live) {
-        this.r.drawItem(c, p.live);
-        if (p.live.kind === 'shape' && p.live.meas) this.r.drawMeasures(c, p.live);
-      } else if (p.stroke) this.r.drawStroke(c, p.stroke);
-      if (p.lasso && p.lasso.length > 1) {
-        c.save();
-        c.strokeStyle = '#2563eb';
-        c.fillStyle = 'rgba(37,99,235,0.07)';
-        c.lineWidth = 2 / k;
-        c.setLineDash([8 / k, 6 / k]);
-        c.beginPath();
-        p.lasso.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-        c.closePath();
-        c.fill();
-        c.stroke();
-        c.restore();
-      }
-      if (p.preview) {
-        this.r.drawItem(c, p.preview);
-        selItem = p.preview;
-      }
-    }
-    if (!selItem && this.selected) selItem = this.page.items.find((x) => x.id === this.selected);
-    if (selItem && this.tool === 'select') {
-      const b = itemBounds(selItem);
-      c.save();
-      c.strokeStyle = '#2563eb';
-      c.lineWidth = 2 / k;
-      c.setLineDash([8 / k, 6 / k]);
-      c.strokeRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
-      c.setLineDash([]);
-      c.fillStyle = '#2563eb';
-      if (this.cornerResizable(selItem)) {
-        c.beginPath();
-        c.arc(b.x1, b.y1, 12 / k, 0, Math.PI * 2);
-        c.fill();
-      }
-      // στους άξονες οι λαβές είναι πολλές και κοντά: μικρότερες, με λευκό περίγραμμα
-      const hr = (selItem.kind === 'axes' ? 8 : 12) / k;
-      for (const p of this.pointHandles(selItem)) {
-        c.beginPath();
-        c.arc(p[0], p[1], hr, 0, Math.PI * 2);
-        c.fill();
-        if (selItem.kind === 'axes') {
-          c.setLineDash([]);
-          c.strokeStyle = '#ffffff';
-          c.lineWidth = 2 / k;
-          c.stroke();
-        }
-      }
-      if (this.rotatable(selItem)) {
-        this.drawRotHandle(c, b);
-        if (this.pivot?.key === this.pivotKey()) this.drawPivot(c, this.pivotPoint(b, selItem));
-      }
-      c.restore();
-    }
-    if (this.multi.length && this.tool === 'select') {
-      const ids = new Set(this.multi);
-      c.save();
-      c.strokeStyle = '#2563eb';
-      c.fillStyle = '#2563eb';
-      c.lineWidth = 1 / k;
-      c.globalAlpha = 0.5;
-      for (const it of this.page.items) {
-        if (!ids.has(it.id)) continue;
-        const ib = itemBounds(it);
-        c.strokeRect(ib.x0, ib.y0, ib.x1 - ib.x0, ib.y1 - ib.y0);
-      }
-      c.globalAlpha = 1;
-      const b = this.groupBounds();
-      if (b) {
-        c.lineWidth = 2 / k;
-        c.setLineDash([8 / k, 6 / k]);
-        c.strokeRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
-        c.beginPath();
-        c.arc(b.x1, b.y1, 12 / k, 0, Math.PI * 2);
-        c.fill();
-        this.drawRotHandle(c, b);
-        if (this.pivot?.key === this.pivotKey()) this.drawPivot(c, this.pivotPoint(b));
-      }
-      c.restore();
-    }
-    if (this.lasers.length) {
-      const now = performance.now();
-      c.save();
-      c.strokeStyle = c.fillStyle = '#ff2d2d';
-      c.shadowColor = '#ff2d2d';
-      c.shadowBlur = 14;
-      c.lineCap = 'round';
-      c.lineJoin = 'round';
-      c.lineWidth = 6 / k;
-      for (const l of this.lasers) {
-        c.globalAlpha = l.t ? Math.max(0, 1 - (now - l.t) / LASER_MS) : 1;
-        c.beginPath();
-        l.pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-        if (l.pts.length === 1) c.lineTo(l.pts[0][0] + 0.01, l.pts[0][1]);
-        c.stroke();
-      }
-      c.restore();
-    }
-    this.gadgets.draw(c, k, this.ink(this.color));
-    if (this.eraserAt) {
-      c.save();
-      c.strokeStyle = '#ef4444';
-      c.fillStyle = 'rgba(239,68,68,0.12)';
-      c.lineWidth = 2 / k;
-      c.beginPath();
-      c.arc(this.eraserAt.x, this.eraserAt.y, this.eraserRadius(), 0, Math.PI * 2);
-      c.fill();
-      c.stroke();
-      c.restore();
-    }
-  }
+  renderLive(): void { L.renderLive(this); }
 
   cornerResizable(it: Item): boolean {
     return it.kind === 'image' || it.kind === 'shape' || it.kind === 'axes' || it.kind === 'stamp' || it.kind === 'trig' || it.kind === 'text';
@@ -1403,7 +871,7 @@ export class Board {
     return ([[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]] as Pt[]).map(([x, y]) => [mx + (x - mx) * cs - (y - my) * sn, my + (x - mx) * sn + (y - my) * cs]);
   }
 
-  private pivotKey(): string {
+  pivotKey(): string {
     return this.selected ?? this.multi.join(',');
   }
 
@@ -1423,56 +891,12 @@ export class Board {
     this.pivot = i < list.length ? { key, i, p: list[i] } : null;
   }
 
-  private drawPivot(c: CanvasRenderingContext2D, p: Pt): void {
-    const k = this.page.view.k;
-    c.save();
-    c.setLineDash([]);
-    c.lineWidth = 2.5 / k;
-    c.strokeStyle = '#2563eb';
-    c.fillStyle = '#ffffff';
-    c.beginPath();
-    c.arc(p[0], p[1], 11 / k, 0, Math.PI * 2);
-    c.fill();
-    c.stroke();
-    c.fillStyle = '#2563eb';
-    c.beginPath();
-    c.arc(p[0], p[1], 4 / k, 0, Math.PI * 2);
-    c.fill();
-    c.restore();
-  }
 
   /** Η λαβή περιστροφής: πάνω από τη μέση του πλαισίου επιλογής. */
   rotHandle(b: Box): Pt {
     return [(b.x0 + b.x1) / 2, b.y0 - 38 / this.page.view.k];
   }
 
-  private drawRotHandle(c: CanvasRenderingContext2D, b: Box): void {
-    const k = this.page.view.k;
-    const [hx, hy] = this.rotHandle(b);
-    c.save();
-    c.setLineDash([]);
-    c.strokeStyle = c.fillStyle = '#2563eb';
-    c.lineWidth = 2 / k;
-    c.beginPath();
-    c.moveTo(hx, b.y0);
-    c.lineTo(hx, hy);
-    c.stroke();
-    c.beginPath();
-    c.arc(hx, hy, 12 / k, 0, Math.PI * 2);
-    c.fill();
-    // κυκλικό βελάκι μέσα στη λαβή
-    c.strokeStyle = '#ffffff';
-    c.lineWidth = 1.8 / k;
-    c.beginPath();
-    c.arc(hx, hy, 6 / k, -0.3, Math.PI * 1.45);
-    c.stroke();
-    c.beginPath();
-    c.moveTo(hx + 2 / k, hy - 9 / k);
-    c.lineTo(hx + 6.5 / k, hy - 3 / k);
-    c.lineTo(hx + 9.5 / k, hy - 8.5 / k);
-    c.stroke();
-    c.restore();
-  }
 
   /** Αν η γραφίδα δεν έχει ακόμα συρθεί γύρω από το κέντρο (λιγότερο από 8 px στην οθόνη). */
   rotStill(ps: PState, wx: number, wy: number): boolean {
@@ -1531,7 +955,7 @@ export class Board {
 
   stopReplay(): void { R.stopReplay(this); }
 
-  private eraserRadius(): number {
+  eraserRadius(): number {
     return this.sizes.eraser / this.page.view.k;
   }
 
