@@ -152,15 +152,16 @@ export function stampTexts(d: StampDef, w: number, h: number): StampText[] {
 
 /**
  * Εκκρεμές: νήμα από το (w/2, 0)· η «απομάκρυνση» d είναι το μήκος του τόξου που διαγράφει η σφαίρα (θετικό προς τα δεξιά).
- * Ακίνητο, σχεδιάζεται γερμένο κατά θ, όπως πάντα.
+ * Ακίνητο, σχεδιάζεται γερμένο κατά θ, όπως πάντα. Γωνίες ως PEND_MAX (15°), όπου ισχύει η απλή αρμονική ταλάντωση.
  */
+const PEND_MAX = Math.PI / 12;
 function pendulum(w: number, h: number): SpringGeom {
-  const L = Math.hypot(w * 0.32, h * 0.76);
+  const L = h * 0.8;
   const at = (a: number): [number, number] => [w / 2 + L * Math.sin(a), L * Math.cos(a)];
-  const rest = L * Math.atan2(w * 0.32, h * 0.76);
+  const rest = L * PEND_MAX;
   const [cx, cy] = at(0);
   return {
-    cx, cy, ux: 1, uy: 0, max: L * 0.5, r: Math.max(w * 0.18, 28),
+    cx, cy, ux: 1, uy: 0, max: L * PEND_MAX, r: Math.max(w * 0.18, 28),
     bob: (d, idle) => at((idle ? rest : d) / L),
     rest,
   };
@@ -376,7 +377,8 @@ export const STAMPS: Record<string, StampDef> = {
       c.beginPath();
       c.arc(bx, by, r, 0, Math.PI * 2);
       c.fill();
-      if (idle) label(c, 'θ', w * 0.57, h * 0.3, h * 0.08);
+      // το θ ανάμεσα στην κατακόρυφη και στο νήμα
+      if (idle) label(c, 'θ', w / 2 + h * 0.067, h * 0.5, h * 0.07);
     },
     spring: (w, h) => pendulum(w, h),
   },

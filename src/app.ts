@@ -1,5 +1,12 @@
 /** Ο πυρήνας της εφαρμογής: ο πίνακας, τα βασικά στοιχεία της οθόνης και μικρά βοηθητικά που χρειάζονται όλοι. */
 
+// η στρογγυλή γραμματοσειρά του Δημοτικού (με γ που κλείνει σε κυκλάκι, όπως το γράφουν τα παιδιά), μέσα στην εφαρμογή για χρήση χωρίς ίντερνετ
+import '@fontsource/playpen-sans/greek-400.css';
+import '@fontsource/playpen-sans/greek-600.css';
+import '@fontsource/playpen-sans/greek-800.css';
+import '@fontsource/playpen-sans/latin-400.css';
+import '@fontsource/playpen-sans/latin-600.css';
+import '@fontsource/playpen-sans/latin-800.css';
 import './style.css';
 import { Board, SizedTool } from './board';
 import { Timer } from './timer';

@@ -5,25 +5,16 @@
  * Κάθε κλιπ τελειώνει με το αποτέλεσμα ακίνητο για λίγο, πριν ξαναρχίσει. Δίπλα του γράφεται και το τελευταίο καρέ
  * (.jpg), για την εκτύπωση και για όσο φορτώνει το βίντεο. Ένας μπλε κύκλος δείχνει πού ακουμπά το δάχτυλο.
  */
-import { spawn, execSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
+import { findChrome } from '../../scripts/find-chrome.mjs';
 
 const PORT = 4189;
 const URL_ = `http://localhost:${PORT}/`;
 const W = 1280, H = 720;
 const OUT = 'public/odigies';
 
-function findChrome() {
-  if (process.env.CHROME && existsSync(process.env.CHROME)) return process.env.CHROME;
-  for (const cmd of ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']) {
-    try {
-      const p = execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-      if (p) return p;
-    } catch { /* δεν υπάρχει */ }
-  }
-  return null;
-}
 const exe = findChrome();
 if (!exe) {
   console.error('Δεν βρέθηκε Chrome. Όρισε τη μεταβλητή CHROME με τη διαδρομή του.');
@@ -254,7 +245,7 @@ const CLIPS = {
       await h.tap(802, 505);
       await sleep(900);
       if (process.env.CLIP_PROBE) await page.screenshot({ path: 'probe2.png' });
-      // όλοι κάθονται στην τραμπάλα (1 < 14): το 4 πάει αριστερά (5 < 10) και μετά το 5, και γέρνει ανάποδα (10 > 5)
+      // όλοι κάθονται στη ζυγαριά (1 < 14): το 4 πάει αριστερά (5 < 10) και μετά το 5, και γέρνει ανάποδα (10 > 5)
       await h.drag(770, 340, 470, 330, 34);
       await sleep(1200);
       if (process.env.CLIP_PROBE) await page.screenshot({ path: 'probe3.png' });

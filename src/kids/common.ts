@@ -5,7 +5,7 @@ export type C = CanvasRenderingContext2D;
 
 /** Χρώματα που δεν εξαρτώνται από το χρώμα της γραφής. */
 export const BLUE = '#3b82f6', ORANGE = '#f97316', GREEN = '#22c55e', YELLOW = '#facc15', RED = '#ef4444', PURPLE = '#a855f7';
-export const FONT = 'system-ui, "Segoe UI", Roboto, sans-serif';
+export const FONT = '"Playpen Sans", system-ui, "Segoe UI", Roboto, sans-serif';
 
 export interface KidEnv {
   /** Το χρώμα της γραφής όπως φαίνεται στο φόντο. */

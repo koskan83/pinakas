@@ -3,34 +3,15 @@
  * Τρέχει με: npm run test:e2e
  * Το Google Drive και η σύνδεση της Google αντικαθίστανται με ψεύτικες απαντήσεις: δεν ανεβαίνει τίποτα πουθενά.
  */
-import { spawn, execSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
+import { findChrome } from '../../scripts/find-chrome.mjs';
 
 const PORT = 4188;
 const URL_ = `http://localhost:${PORT}/`;
-
-function findChrome() {
-  if (process.env.CHROME && existsSync(process.env.CHROME)) return process.env.CHROME;
-  for (const cmd of ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']) {
-    try {
-      const p = execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-      if (p) return p;
-    } catch { /* δεν υπάρχει */ }
-  }
-  const cache = join(homedir(), '.cache', 'ms-playwright');
-  if (existsSync(cache)) {
-    for (const d of readdirSync(cache).sort().reverse()) {
-      for (const rel of ['chrome-headless-shell-linux64/chrome-headless-shell', 'chrome-linux64/chrome', 'chrome-linux/chrome']) {
-        const p = join(cache, d, rel);
-        if (existsSync(p)) return p;
-      }
-    }
-  }
-  return null;
-}
 
 const exe = findChrome();
 if (!exe) {

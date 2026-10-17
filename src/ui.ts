@@ -344,7 +344,7 @@ export function mountUi(app: HTMLElement): void {
     <div class="gHead" data-lv="pri" data-tab="play">Παιχνίδια</div>
     <div class="tiles" data-lv="pri" data-tab="play">
       ${tile('data-kid="build"', '<b class="em">🧱</b>', 'Κυβάκια', 'Χτίσιμο με κυβάκια: διαλέγεις υλικό και σέρνεις για να χτίσεις')}
-      ${tile('data-kid="numcubes"', '<b class="em">🟥</b>', 'Αριθμοκυβάκια', 'Αριθμοκυβάκια 1–20: σέρνεις το ένα πάνω στο άλλο και ενώνονται, ✂️ τα χωρίζει, και αλλάζουν σχήμα, χρώμα και αξεσουάρ· ⚖️ τραμπάλα για αθροίσματα')}
+      ${tile('data-kid="numcubes"', '<b class="em">🟥</b>', 'Αριθμοκυβάκια', 'Αριθμοκυβάκια 1–20: σέρνεις το ένα πάνω στο άλλο και ενώνονται, ✂️ τα χωρίζει, και αλλάζουν σχήμα, χρώμα και αξεσουάρ· ⚖️ ζυγαριά για αθροίσματα')}
       ${tile('data-kid="spell"', '<b class="em">👾</b>', 'Ορθογραφία', 'Ορθογραφία: έτοιμες λέξεις ανά τάξη ή δικές σου· ο μαθητής γράφει, το τερατάκι τρώει τα λάθη και μεγαλώνει, και ο μαθητής γράφει το σωστό στα κενά')}
       ${tile('data-kid="hangman"', '<b class="em">🔡</b>', 'Κρεμάλα', 'Κρεμάλα: τυχαία λέξη ή δική σου, με πάτημα στα γράμματα')}
       ${tile('data-kid="dice"', '<b class="em">🎲</b>', 'Ζάρι')}
@@ -448,7 +448,7 @@ export function mountUi(app: HTMLElement): void {
         <div><i>${I.send}</i><b>Στο τέλος, ένα QR</b><span>☰ → «Τέλος μαθήματος»: οι μαθητές σκανάρουν και παίρνουν το μάθημα σε PDF.</span></div>
       </div>
       <div id="wLevel"><span>Για ποιες τάξεις;</span><button data-level="primary"><b>Δημοτικό</b><small>Απλή γραμμή εργαλείων, αριθμογραμμή, κλάσματα, ρολόι, ζυγαριά</small></button><button data-level="secondary"><b>Γυμνάσιο – Λύκειο</b><small>Συναρτήσεις, μετρήσεις, φυσική, λύση ασκήσεων</small></button></div>
-      <div id="wActs"><button id="wHelp">Πλήρεις οδηγίες (PDF)</button><button id="wGo" class="go">Ξεκίνα</button></div>
+      <div id="wActs"><button id="wHelp">Πλήρεις οδηγίες</button><button id="wGo" class="go">Ξεκίνα</button></div>
     </div>
   </div>
   <div id="qrBig" class="hidden"><img src="./logo.svg" alt="" /><canvas width="1200" height="1200"></canvas><div></div></div>

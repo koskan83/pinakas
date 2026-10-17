@@ -1,21 +1,28 @@
-/** Αριθμοκυβάκια: χαρακτήρες-αριθμοί που χτίζονται, κόβονται, ντύνονται και ζυγίζονται στην τραμπάλα. */
+/** Αριθμοκυβάκια: χαρακτήρες-αριθμοί που χτίζονται, κόβονται, ντύνονται και ζυγίζονται στη ζυγαριά. */
 import type { StampDef } from '../stamps';
 import { type C, FONT, fullIcon, kid, rrect, text } from './common';
 
 /**
  * Χαρακτήρες από κυβάκια, 1 έως 20, που ενώνονται (σύρεις το ένα πάνω στο άλλο), χωρίζονται (✂️), αλλάζουν σχήμα, χρώμα
  * και φοράνε αξεσουάρ. Η σκηνή μετριέται σε κυβάκια (NC_W × NC_H), για να μη χρειάζεται το μέγεθος του κουτιού στο «άφημα».
- * Κατάσταση: [λειτουργία, επιλογή στην παλέτα, σημαίες (1 = κρυφοί αριθμοί, 2 = τραμπάλα), και ανά χαρακτήρα NC_REC αριθμοί].
+ * Κατάσταση: [λειτουργία, επιλογή στην παλέτα, σημαίες σκηνής (S_*), και ανά χαρακτήρα NC_REC αριθμοί].
  */
 const NC_W = 28, NC_H = 13, NC_MAX = 20, NC_ITEMS = 30, NC_HEAD = 3, NC_REC = 7;
-/** Χαρακτήρας: κάτω-κέντρο (x, y) σε δέκατα του κυβακίου, πόσα κυβάκια, ύψος σχήματος (γεμίζει ανά στήλη), αξεσουάρ, χρώμα, σημαίες (1 κρατιέται, 2 πάνω από τον κάδο, 4 μόλις κόπηκε, 8 πάνω στην τραμπάλα). */
+/** Σημαίες σκηνής: κρυφοί αριθμοί, ζυγαριά (η τιμή 2 ήταν η τραμπάλα: τα παλιά μαθήματα ανοίγουν με ζυγαριά). */
+const S_HIDDEN = 1, S_SCALE = 2;
+/** Σημαίες χαρακτήρα: κρατιέται, πάνω από τον κάδο, μόλις κόπηκε, πάνω σε πιατέλα της ζυγαριάς. */
+const F_HELD = 1, F_TRASH = 2, F_FRESH = 4, F_PAN = 8;
+/** Χαρακτήρας: κάτω-κέντρο (x, y) σε δέκατα του κυβακίου, πόσα κυβάκια, ύψος σχήματος (γεμίζει ανά στήλη), αξεσουάρ, χρώμα, σημαίες (F_*). */
 export interface NCube { x: number; y: number; n: number; h: number; acc: number; col: number; f: number }
 export interface NCState { mode: number; sel: number; flags: number; cubes: NCube[] }
 export function ncState(v: number[]): NCState {
   const cubes: NCube[] = [];
   for (let i = NC_HEAD; i + NC_REC <= v.length; i += NC_REC) {
     const n = Math.max(1, Math.min(NC_MAX, v[i + 2] || 1));
-    cubes.push({ x: v[i], y: v[i + 1], n, h: Math.max(1, Math.min(n, v[i + 3] || Math.min(n, 10))), acc: v[i + 4] ?? 0, col: v[i + 5] ?? 0, f: v[i + 6] ?? 0 });
+    const e = { x: v[i], y: v[i + 1], n, h: Math.max(1, Math.min(n, v[i + 3] || Math.min(n, 10))), acc: v[i + 4] ?? 0, col: v[i + 5] ?? 0, f: v[i + 6] ?? 0 };
+    // όσοι κάθονταν στην παλιά τραμπάλα πάνε στην πιατέλα τους
+    if (e.f & F_PAN && !(e.f & F_HELD) && e.y !== NC_PY * 10) ncClamp(e);
+    cubes.push(e);
   }
   // το 3 ήταν το βάψιμο (δεν υπάρχει πια)
   return { mode: v[0] === 3 ? 0 : v[0] ?? 0, sel: v[1] ?? 0, flags: v[2] ?? 0, cubes };
@@ -31,74 +38,96 @@ export function ncShapes(n: number): number[] {
   return out.sort((a, b) => b - a);
 }
 /**
- * Τραμπάλα (σημαία 2): σανίδα με κέντρο (NC_PX, NC_PY) και μισό μήκος NC_PL, σε κυβάκια. Οι χαρακτήρες πάνω της (σημαία 8)
- * κρατούν y = NC_PY και φαίνονται ανεβασμένοι ή κατεβασμένοι όσο γέρνει· γέρνει ολόκληρη προς το μεγαλύτερο άθροισμα.
+ * Ζυγαριά (S_SCALE): δύο οριζόντιες πιατέλες με κέντρο NC_PX ∓ NC_PA και μισό πλάτος NC_PW, σε κυβάκια, πάνω σε στυλάκια
+ * μιας δοκού. Οι χαρακτήρες πάνω τους (F_PAN) κρατούν y = NC_PY· όλη η πιατέλα με το μεγαλύτερο άθροισμα κατεβαίνει
+ * κατά NC_DY και η άλλη ανεβαίνει. Μετράει μόνο το άθροισμα, όχι το πού στέκεται ο καθένας πάνω στην πιατέλα.
  */
-const NC_PX = 14, NC_PY = 11.4, NC_PL = 12, NC_TILT = 0.085;
-/** Τα αθροίσματα αριστερά και δεξιά του υπομοχλίου (όχι όποιος κρατιέται). */
+const NC_PX = 14, NC_PY = 10.2, NC_PA = 7, NC_PW = 5.5, NC_DY = 0.8;
+/** Η πιατέλα ενός χαρακτήρα: −1 αριστερά, 1 δεξιά. */
+const ncPan = (e: NCube): number => (e.x < NC_PX * 10 ? -1 : 1);
+/** Τα αθροίσματα στην αριστερή και στη δεξιά πιατέλα (όχι όποιος κρατιέται). */
 function ncSides(cubes: NCube[]): [number, number] {
   let l = 0, r = 0;
   for (const e of cubes) {
-    if (!(e.f & 8) || e.f & 1) continue;
-    if (e.x < NC_PX * 10) l += e.n;
-    else if (e.x > NC_PX * 10) r += e.n;
+    if (!(e.f & F_PAN) || e.f & F_HELD) continue;
+    if (ncPan(e) < 0) l += e.n;
+    else r += e.n;
   }
   return [l, r];
 }
+/** Προς τα πού γέρνει η ζυγαριά: −1 αριστερά, 0 ίσια, 1 δεξιά (ενδιάμεσες τιμές όσο κινείται). */
 const ncTilt = (cubes: NCube[]): number => {
   const [l, r] = ncSides(cubes);
-  return Math.sign(r - l) * NC_TILT;
+  return Math.sign(r - l);
 };
-/** Πόσο πιο κάτω (σε κυβάκια) φαίνεται ένας χαρακτήρας της τραμπάλας όταν γέρνει κατά th. */
-const ncLift = (e: NCube, th: number): number => (e.f & 8 && !(e.f & 1) ? (e.x / 10 - NC_PX) * Math.tan(th) : 0);
-function ncBox(e: NCube, th = 0): { x0: number; x1: number; y0: number; y1: number } {
-  const c = ncCols(e), y = e.y / 10 + ncLift(e, th);
+/** Πόσο πιο κάτω (σε κυβάκια) φαίνεται ένας χαρακτήρας της ζυγαριάς όταν γέρνει κατά k. */
+const ncLift = (e: NCube, k: number): number => (e.f & F_PAN && !(e.f & F_HELD) ? ncPan(e) * k * NC_DY : 0);
+function ncBox(e: NCube, k = 0): { x0: number; x1: number; y0: number; y1: number } {
+  const c = ncCols(e), y = e.y / 10 + ncLift(e, k);
   return { x0: e.x / 10 - c / 2, x1: e.x / 10 + c / 2, y0: y - e.h, y1: y };
 }
 function ncClamp(e: NCube): void {
   const c = ncCols(e) / 2;
-  if (e.f & 8) {
-    // πάνω στην τραμπάλα: ολόκληρος πάνω στη σανίδα
-    e.x = Math.round(Math.max((NC_PX - NC_PL + c) * 10, Math.min((NC_PX + NC_PL - c) * 10, e.x)));
+  if (e.f & F_PAN) {
+    // πάνω στη ζυγαριά: ολόκληρος μέσα στην πιατέλα του (ένας πολύ φαρδύς στη μέση της)
+    const m = NC_PX + ncPan(e) * NC_PA;
+    e.x = Math.round(c >= NC_PW ? m * 10 : Math.max((m - NC_PW + c) * 10, Math.min((m + NC_PW - c) * 10, e.x)));
     e.y = NC_PY * 10;
     return;
   }
   e.x = Math.round(Math.max(c * 10, Math.min((NC_W - c) * 10, e.x)));
   e.y = Math.round(Math.max((e.h + 0.9) * 10, Math.min(NC_H * 10, e.y)));
 }
-/** Με την τραμπάλα, ό,τι αφήνεται πάνω από τη σανίδα κάθεται πάνω της. true αν κάθισε. */
+/** Με τη ζυγαριά, ό,τι αφήνεται πάνω από μια πιατέλα κάθεται πάνω της. true αν κάθισε. */
 function ncSeat(s: NCState, e: NCube): boolean {
-  const x = e.x / 10;
-  if (!(s.flags & 2) || x < NC_PX - NC_PL || x > NC_PX + NC_PL) return false;
-  e.f |= 8;
+  if (!(s.flags & S_SCALE) || Math.abs(Math.abs(e.x / 10 - NC_PX) - NC_PA) > NC_PW) return false;
+  e.f |= F_PAN;
   ncClamp(e);
   return true;
 }
-/** Η τραμπάλα, γερμένη κατά th, και πάνω στη μέση η σύγκριση των δύο αθροισμάτων (π.χ. 6 < 9). */
-function ncSeesaw(c: C, g: { S: number; ox: number; oy: number }, th: number, sides: [number, number], hidden: boolean): void {
-  const S = g.S, X = g.ox + NC_PX * S, Y = g.oy + NC_PY * S, gy = g.oy + NC_H * S, t = S * 0.36;
+/** Η ζυγαριά, γερμένη κατά k, και πάνω στη μέση η σύγκριση των δύο αθροισμάτων (π.χ. 6 < 9). */
+function ncScale(c: C, g: { S: number; ox: number; oy: number }, k: number, sides: [number, number], hidden: boolean): void {
+  const S = g.S, X = g.ox + NC_PX * S, gy = g.oy + NC_H * S, t = S * 0.36, lw = Math.max(1.5, S * 0.07);
+  const pivot = gy - S * 1.5, dy = k * NC_DY * S, arm = NC_PA * S;
   c.save();
   c.lineJoin = 'round';
-  // υπομόχλιο
+  c.lineCap = 'round';
+  // βάση και κολόνα
+  rrect(c, X - S * 1.6, gy - S * 0.3, S * 3.2, S * 0.3, S * 0.12);
+  paintPath(c, '#64748b', '#334155', lw);
   c.beginPath();
-  c.moveTo(X, Y + t * 0.5);
-  c.lineTo(X + S * 1.15, gy);
-  c.lineTo(X - S * 1.15, gy);
+  c.moveTo(X - S * 0.45, gy - S * 0.3);
+  c.lineTo(X - S * 0.2, pivot);
+  c.lineTo(X + S * 0.2, pivot);
+  c.lineTo(X + S * 0.45, gy - S * 0.3);
   c.closePath();
-  paintPath(c, '#64748b', '#334155', Math.max(1.5, S * 0.07));
-  // σανίδα
-  c.translate(X, Y);
-  c.rotate(th);
-  rrect(c, -NC_PL * S, 0, NC_PL * 2 * S, t, t * 0.4);
-  paintPath(c, '#f59e0b', '#92400e', Math.max(1.5, S * 0.07));
-  c.strokeStyle = 'rgba(146,64,14,0.45)';
-  c.lineWidth = Math.max(1, S * 0.04);
+  paintPath(c, '#64748b', '#334155', lw);
+  // δοκός και στυλάκια ως τις πιατέλες, που μένουν πάντα οριζόντιες
+  for (const side of [-1, 1]) {
+    const px = X + side * arm, py = g.oy + NC_PY * S + side * dy;
+    c.strokeStyle = '#334155';
+    c.lineWidth = S * 0.22;
+    c.beginPath();
+    c.moveTo(px, pivot + side * dy);
+    c.lineTo(px, py + t);
+    c.stroke();
+    c.beginPath();
+    c.moveTo(px - NC_PW * S, py);
+    c.lineTo(px + NC_PW * S, py);
+    c.quadraticCurveTo(px + NC_PW * S * 0.9, py + t * 1.4, px + NC_PW * S * 0.75, py + t * 1.4);
+    c.lineTo(px - NC_PW * S * 0.75, py + t * 1.4);
+    c.quadraticCurveTo(px - NC_PW * S * 0.9, py + t * 1.4, px - NC_PW * S, py);
+    c.closePath();
+    paintPath(c, '#f59e0b', '#92400e', lw);
+  }
+  c.strokeStyle = '#475569';
+  c.lineWidth = S * 0.3;
   c.beginPath();
-  c.moveTo(-NC_PL * S * 0.9, t * 0.5);
-  c.lineTo(NC_PL * S * 0.9, t * 0.5);
+  c.moveTo(X - arm, pivot - dy);
+  c.lineTo(X + arm, pivot + dy);
   c.stroke();
   c.beginPath();
-  c.arc(0, t * 0.5, t * 0.28, 0, Math.PI * 2);
+  c.arc(X, pivot, S * 0.26, 0, Math.PI * 2);
   paintPath(c, '#334155');
   c.restore();
   // η σύγκριση, ψηλά στη μέση
@@ -154,15 +183,15 @@ function ncGeom(w: number, h: number): { bh: number; sh: number; S: number; ox: 
 const ncRowA = (mode: number): number => (mode === 4 ? NC_ACC.length : 10);
 /** Οι λειτουργίες της κάτω σειράς: ✋ μετακίνηση/ένωση, ✂️ χώρισμα, 🔄 σχήμα, 🎩 αξεσουάρ, 🧽 σβήσιμο ενός χαρακτήρα (το 3 ήταν το βάψιμο). */
 const NC_MODES = [0, 1, 2, 4, 5], NC_BTNS = ['✋', '✂️', '🔄', '🎩', '🧽'];
-/** Κουμπιά της κάτω σειράς: οι λειτουργίες, 🔢, ⚖️ τραμπάλα, 🗑️, όλη η οθόνη. */
-const NC_BAR = 9;
-/** ⚖️: η τραμπάλα μπαίνει (όσοι στέκονται πάνω από τη σανίδα ανεβαίνουν πάνω της) ή φεύγει (κατεβαίνουν στο γρασίδι). */
-function ncSeesawToggle(s: NCState): void {
-  s.flags ^= 2;
+/** Κουμπιά της κάτω σειράς μετά τις λειτουργίες (0–4): 🔢, ⚖️ ζυγαριά, 🗑️, όλη η οθόνη. */
+const B_NUM = 5, B_SCALE = 6, B_TRASH = 7, B_FULL = 8, NC_BAR = 9;
+/** ⚖️: η ζυγαριά μπαίνει (όσοι στέκονται πάνω από μια πιατέλα ανεβαίνουν πάνω της) ή φεύγει (κατεβαίνουν στο γρασίδι). */
+function ncScaleToggle(s: NCState): void {
+  s.flags ^= S_SCALE;
   for (const e of s.cubes) {
-    if (s.flags & 2) ncSeat(s, e);
-    else if (e.f & 8) {
-      e.f &= ~8;
+    if (s.flags & S_SCALE) ncSeat(s, e);
+    else if (e.f & F_PAN) {
+      e.f &= ~F_PAN;
       e.y = NC_H * 10;
       ncClamp(e);
     }
@@ -540,7 +569,7 @@ const NC_ANIM_MS = 2000;
 function ncAnims(prev: number[], cur: NCube[], t: number): (NcAnim | null)[] {
   const before = ncState(prev).cubes, p = Math.min(1, t / NC_ANIM_MS);
   return cur.map((e) => {
-    const o = before.find((q) => q.x === e.x && q.y === e.y && !(q.f & 1));
+    const o = before.find((q) => q.x === e.x && q.y === e.y && !(q.f & F_HELD));
     if (!o || p >= 1) return null;
     if (e.n > o.n) return { p, drop: -1, pop: true };
     if (e.acc === o.acc) return null;
@@ -570,7 +599,7 @@ function ncDraw(c: C, g: { S: number; ox: number; oy: number }, e: NCube, hidden
   if (trick === 3) sway = Math.sin(q * Math.PI * 6) * 0.14 * (1 - q);
   const cx0 = bx + (C2 * S) / 2;
   c.save();
-  if (e.f & 2) c.globalAlpha = 0.4;
+  if (e.f & F_TRASH) c.globalAlpha = 0.4;
   c.fillStyle = 'rgba(15,23,42,0.13)';
   c.beginPath();
   c.ellipse(cx0 + dx, ground, C2 * S * 0.62 * Math.max(0.4, 1 - lift / (S * 4)), S * 0.14, 0, 0, Math.PI * 2);
@@ -850,10 +879,10 @@ function ncChip(c: C, cx: number, cy: number, s: number, fills: string[], line: 
 
 /** Ο χαρακτήρας που μόλις αφέθηκε: στον κάδο σβήνεται, πάνω σε άλλον ενώνονται (ως το 20), αλλιώς μένει εκεί. */
 export function ncDrop(v: number[]): { v: number[]; ev: string } | null {
-  const s = ncState(v), j = s.cubes.findIndex((e) => e.f & 1);
+  const s = ncState(v), j = s.cubes.findIndex((e) => e.f & F_HELD);
   if (j < 0) return null;
-  const e = s.cubes[j], fresh = e.f & 4;
-  if (e.f & 2) {
+  const e = s.cubes[j], fresh = e.f & F_FRESH;
+  if (e.f & F_TRASH) {
     s.cubes.splice(j, 1);
     return { v: ncPack(s), ev: 'wipe' };
   }
@@ -889,7 +918,7 @@ export function ncDrop(v: number[]): { v: number[]; ev: string } | null {
     ncClamp(o);
     return { v: ncPack(s), ev: `num|pop|${n}` };
   }
-  // πάνω στην τραμπάλα: «τοκ» και γέρνει
+  // πάνω στη ζυγαριά: «τοκ» και γέρνει
   if (ncSeat(s, e)) return { v: ncPack(s), ev: 'tok' };
   ncClamp(e);
   return { v: ncPack(s), ev: '' };
@@ -935,28 +964,28 @@ export const NUMCUBE_KIDS: Record<string, StampDef> = {
       const sb = w / NC_BAR, pb = Math.min(sb, rh) * 0.62;
       for (let k = 0; k < NC_BAR; k++) {
         const cx = sb * (k + 0.5);
-        if (k < 5) text(c, NC_BTNS[k], cx, yb + 1, pb * 0.8);
-        else if (k === 5) text(c, s.flags & 1 ? '❓' : '🔢', cx, yb + 1, pb * 0.8);
-        else if (k === 6) {
+        if (k < B_NUM) text(c, NC_BTNS[k], cx, yb + 1, pb * 0.8);
+        else if (k === B_NUM) text(c, s.flags & S_HIDDEN ? '❓' : '🔢', cx, yb + 1, pb * 0.8);
+        else if (k === B_SCALE) {
           text(c, '⚖️', cx, yb + 1, pb * 0.8);
-          if (s.flags & 2) frame(cx, yb, pb);
-        } else if (k === 7) text(c, '🗑️', cx, yb + 1, pb * 0.8);
+          if (s.flags & S_SCALE) frame(cx, yb, pb);
+        } else if (k === B_TRASH) text(c, '🗑️', cx, yb + 1, pb * 0.8);
         else fullIcon(c, cx, yb, pb, { ...env, ink: '#1f2937' });
-        if (k < 5 && NC_MODES[k] === s.mode) frame(cx, yb, pb);
+        if (k < B_NUM && NC_MODES[k] === s.mode) frame(cx, yb, pb);
       }
       // οι χαρακτήρες τελευταίοι: όποιος σέρνεται πάνω από τη μπάρα (προς τον 🗑️) φαίνεται
       const an = env.anim ? ncAnims(env.anim.prev, s.cubes, env.anim.t) : [];
       let th = 0;
-      if (s.flags & 2) {
-        // η τραμπάλα γέρνει με ένα μικρό αναπήδημα από εκεί που ήταν πριν
+      if (s.flags & S_SCALE) {
+        // η ζυγαριά γέρνει με ένα μικρό αναπήδημα από εκεί που ήταν πριν
         th = ncTilt(s.cubes);
         if (env.anim) {
           const t0 = ncTilt(ncState(env.anim.prev).cubes);
           th = t0 + (th - t0) * easeBounce(Math.min(1, env.anim.t / 900));
         }
-        ncSeesaw(c, g, th, ncSides(s.cubes), !!(s.flags & 1));
+        ncScale(c, g, th, ncSides(s.cubes), !!(s.flags & S_HIDDEN));
       }
-      s.cubes.forEach((e, i) => ncDraw(c, g, e.f & 8 ? { ...e, y: e.y + ncLift(e, th) * 10 } : e, !!(s.flags & 1), an[i]));
+      s.cubes.forEach((e, i) => ncDraw(c, g, e.f & F_PAN ? { ...e, y: e.y + ncLift(e, th) * 10 } : e, !!(s.flags & S_HIDDEN), an[i]));
     },
     cursor(v, x, y, w, h) {
       const g = ncGeom(w, h), s = ncState(v);
@@ -968,7 +997,7 @@ export const NUMCUBE_KIDS: Record<string, StampDef> = {
     },
     fullAt(x, y, w, h) {
       const g = ncGeom(w, h);
-      return y >= g.sh + g.bh / 2 && y <= h && Math.floor(x / (w / NC_BAR)) === 8;
+      return y >= g.sh + g.bh / 2 && y <= h && Math.floor(x / (w / NC_BAR)) === B_FULL;
     },
     paint(v, x, y, w, h, st, first) {
       const g = ncGeom(w, h), s = ncState(v);
@@ -976,16 +1005,16 @@ export const NUMCUBE_KIDS: Record<string, StampDef> = {
       if (!first) {
         // σύρσιμο του χαρακτήρα που κρατιέται· πάνω από τον 🗑️ θα σβηστεί όταν αφεθεί
         const e = st.j ? s.cubes[st.j - 1] : null;
-        if (!e || !(e.f & 1)) return null;
+        if (!e || !(e.f & F_HELD)) return null;
         e.x = Math.round((cx + st.ax) * 10);
         e.y = Math.round((cy + st.ay) * 10);
-        if (Math.hypot(cx - st.sx, cy - st.sy) > 0.3) e.f &= ~4;
-        e.f = y > g.sh + g.bh / 2 && Math.floor(x / (w / NC_BAR)) === 7 ? e.f | 2 : e.f & ~2;
+        if (Math.hypot(cx - st.sx, cy - st.sy) > 0.3) e.f &= ~F_FRESH;
+        e.f = y > g.sh + g.bh / 2 && Math.floor(x / (w / NC_BAR)) === B_TRASH ? e.f | F_TRASH : e.f & ~F_TRASH;
         return ncPack(s);
       }
       st.j = 0;
       const pick = (e: NCube): number[] => {
-        e.f |= 1;
+        e.f |= F_HELD;
         s.cubes.push(e);
         Object.assign(st, { j: s.cubes.length, ax: e.x / 10 - cx, ay: e.y / 10 - cy, sx: cx, sy: cy });
         return ncPack(s);
@@ -1003,10 +1032,10 @@ export const NUMCUBE_KIDS: Record<string, StampDef> = {
           return pick({ x: Math.round(cx * 10), y: Math.round((cy + (k + 1) / 2) * 10), n: k + 1, h: k + 1, acc: 0, col: 0, f: 0 });
         }
         const k = Math.floor(x / (w / NC_BAR));
-        if (k <= 4) { s.mode = NC_MODES[k]; s.sel = s.mode === 4 ? 1 : 0; }
-        else if (k === 5) s.flags ^= 1;
-        else if (k === 6) ncSeesawToggle(s);
-        else if (k === 7) s.cubes = [];
+        if (k < B_NUM) { s.mode = NC_MODES[k]; s.sel = s.mode === 4 ? 1 : 0; }
+        else if (k === B_NUM) s.flags ^= S_HIDDEN;
+        else if (k === B_SCALE) ncScaleToggle(s);
+        else if (k === B_TRASH) s.cubes = [];
         else return null;
         return ncPack(s);
       }
@@ -1028,14 +1057,14 @@ export const NUMCUBE_KIDS: Record<string, StampDef> = {
           const n2 = e.n - i;
           e.n = i;
           e.h = Math.min(e.h, i);
-          return pick({ x: e.x, y: Math.round(b.y1 * 10) - e.h * 10, n: n2, h: Math.min(n2, 10), acc: 0, col: e.col, f: 4 });
+          return pick({ x: e.x, y: Math.round(b.y1 * 10) - e.h * 10, n: n2, h: Math.min(n2, 10), acc: 0, col: e.col, f: F_FRESH });
         }
       }
       if (s.mode <= 1) {
-        // από την τραμπάλα: σηκώνεται από εκεί που φαίνεται
-        if (e.f & 8) {
+        // από τη ζυγαριά: σηκώνεται από εκεί που φαίνεται
+        if (e.f & F_PAN) {
           e.y = Math.round(ncBox(e, th).y1 * 10);
-          e.f &= ~8;
+          e.f &= ~F_PAN;
         }
         s.cubes.splice(j, 1);
         return pick(e);
@@ -1060,11 +1089,11 @@ export const NUMCUBE_KIDS: Record<string, StampDef> = {
       const a = ncState(prev), b = ncState(next);
       if (a.mode !== b.mode || a.sel !== b.sel || a.flags !== b.flags) return 'click';
       const last = b.cubes[b.cubes.length - 1];
-      if (b.cubes.length > a.cubes.length) return `num|${last.f & 4 ? 'split' : 'pop'}|${last.n}`;
+      if (b.cubes.length > a.cubes.length) return `num|${last.f & F_FRESH ? 'split' : 'pop'}|${last.n}`;
       if (b.cubes.length < a.cubes.length) return 'wipe';
-      if (a.cubes.some((e) => e.f & 1)) return null;
+      if (a.cubes.some((e) => e.f & F_HELD)) return null;
       // μόλις πιάστηκε: λέει τον αριθμό του
-      if (last && last.f & 1) return `num|tok|${last.n}`;
+      if (last && last.f & F_HELD) return `num|tok|${last.n}`;
       for (let i = 0; i < b.cubes.length; i++) {
         const p = a.cubes[i], q = b.cubes[i];
         if (p.acc !== q.acc) return 'new';

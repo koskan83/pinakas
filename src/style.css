@@ -11,6 +11,12 @@
   --ring: rgba(255, 255, 255, .3);
   --accent: #7c68b0;
   --btn: 60px;
+  /* χρώματα κατάστασης, ίδια σε όλα τα θέματα */
+  --warn: #f59e0b;
+  --danger: #f87171;
+  --danger-bg: #dc2626;
+  --success: #16a34a;
+  --focus: #3b82f6;
 }
 /* φωτεινή γραμμή εργαλείων, για σκούρο φόντο */
 body.dark {
@@ -136,7 +142,7 @@ body.inking #toolbar { pointer-events: none; }
 .popup button { text-align: left; padding: 14px 16px; border-radius: 10px; font-size: 17px; }
 .popup button:hover { background: var(--bar-2); }
 .popup hr { width: 100%; border: 0; border-top: 1px solid var(--bar-2); margin: 4px 0; }
-.popup .hint { font-size: 13px; opacity: .7; padding: 6px 12px 4px; max-width: 300px; }
+.popup .hint { font-size: 14px; opacity: .7; padding: 6px 12px 4px; max-width: 300px; }
 
 .hidden { display: none !important; }
 
@@ -184,7 +190,7 @@ body.inking #toolbar { pointer-events: none; }
 #timer .row { display: flex; gap: 6px; padding: 0 10px 10px; }
 #timer .row button { flex: 1; height: 50px; border-radius: 10px; background: var(--bar-2); font-size: 16px; }
 #timer .row button.go { background: var(--ok); }
-#timer.done .tdisplay { color: #f87171; animation: blink .6s steps(2) infinite; }
+#timer.done .tdisplay { color: var(--danger); animation: blink .6s steps(2) infinite; }
 @keyframes blink { 50% { opacity: .25; } }
 
 .bgRow { display: flex; align-items: center; gap: 8px; padding: 6px 12px; }
@@ -213,7 +219,7 @@ body.inking #toolbar { pointer-events: none; }
 .popup button.sq { width: 44px; height: 40px; padding: 0; text-align: center; font-size: 22px; background: var(--bar-2); }
 
 #stampMenu { min-width: 0; max-height: calc(100vh - 120px); overflow-y: auto; }
-#stampGrid .stHead { grid-column: 1 / -1; font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .6; padding: 8px 4px 2px; }
+#stampGrid .stHead { grid-column: 1 / -1; font-size: 14px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .6; padding: 8px 4px 2px; }
 #stampGrid .stHead:first-child { padding-top: 0; }
 #stampGrid { display: grid; grid-template-columns: repeat(5, 96px); gap: 4px; }
 #stampGrid button { padding: 6px 2px; text-align: center; font-size: 11.5px; line-height: 1.2; }
@@ -321,10 +327,10 @@ body.inking #lessonName { pointer-events: none; }
 #libGrid .th { aspect-ratio: 16 / 10; border-radius: 10px; background: #fff; overflow: hidden; display: flex; align-items: center; justify-content: center; }
 #libGrid .th img { max-width: 100%; max-height: 100%; }
 #libGrid .nm { font-size: 18px; font-weight: 600; padding: 2px 4px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#libGrid .info { font-size: 13px; opacity: .7; padding: 0 4px; }
+#libGrid .info { font-size: 14px; opacity: .7; padding: 0 4px; }
 #libGrid .acts { display: flex; gap: 4px; flex-wrap: wrap; }
 #libGrid .acts button { flex: 1; padding: 9px 6px; border-radius: 9px; background: var(--bar-3); font-size: 14px; }
-#libGrid .acts button.danger { color: #f87171; }
+#libGrid .acts button.danger { color: var(--danger); }
 
 /* ---------- μενού με εικονίδια ---------- */
 .popup button i, #colorPick i { display: inline-block; width: 24px; height: 24px; margin-right: 12px; vertical-align: -6px; }
@@ -333,7 +339,7 @@ body.inking #lessonName { pointer-events: none; }
 #colorPick input { margin-left: auto; }
 #gadgetMenu { min-width: 0; padding: 10px; max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain; }
 #gadgetMenu > * { flex-shrink: 0; }
-.gHead { font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .6; padding: 8px 4px 4px; }
+.gHead { font-size: 14px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .6; padding: 8px 4px 4px; }
 .gHead:first-child { padding-top: 0; }
 .tiles { display: grid; grid-template-columns: repeat(6, 90px); gap: 4px; }
 .popup button.tile { padding: 8px 2px 6px; text-align: center; border-radius: 12px; background: var(--bar-2); display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -343,7 +349,7 @@ body.inking #lessonName { pointer-events: none; }
 .tile span svg { width: 28px; height: 28px; }
 .tile span b { font-size: 24px; font-weight: 600; font-style: italic; }
 .tile span b.sm { font-size: 17px; font-style: normal; }
-.tile small { font-size: 12px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.tile small { font-size: 14px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
 /* ---------- zoom ---------- */
 #zoomCtl { position: fixed; right: 14px; top: 14px; z-index: 10; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 14px;
@@ -409,16 +415,16 @@ body.dark #libHead .lg.onLight { display: block; }
 #libSafe { display: flex; align-items: center; gap: 10px; padding: 10px 20px; border-bottom: 1px solid var(--bar-2); flex-wrap: wrap; font-size: 16px; }
 #libSafe.hidden { display: none; }
 #libSafe span { flex: 1; min-width: 240px; opacity: .8; }
-#libSafe.warn span { opacity: 1; color: #f59e0b; font-weight: 600; }
+#libSafe.warn span { opacity: 1; color: var(--warn); font-weight: 600; }
 #libSafe button { padding: 11px 16px; border-radius: 12px; background: var(--bar-2); font-size: 16px; }
 #libSafe button.go { background: var(--ok); color: #fff; font-weight: 600; }
-#lessonName.warn::after { content: ''; display: inline-block; width: 10px; height: 10px; margin-left: 8px; border-radius: 50%; background: #f59e0b; }
+#lessonName.warn::after { content: ''; display: inline-block; width: 10px; height: 10px; margin-left: 8px; border-radius: 50%; background: var(--warn); }
 
 /* ενέργειες για ό,τι είναι επιλεγμένο: δίπλα στην επιλογή, με λέξη κάτω από κάθε εικονίδιο */
 /* οι ενέργειες της επιλογής: πρώτη ομάδα της δεύτερης σειράς, πάντα στο ίδιο σημείο */
 #selOpts button.hidden, #selOpts .recSep.hidden { display: none; }
 #selOpts button span.txt { font-size: 18px; font-weight: 700; }
-#selOpts #del { color: #f87171; }
+#selOpts #del { color: var(--danger); }
 #selOpts .solve span { color: var(--accent); }
 #selOpts .recSep { background: var(--bar-3); }
 
@@ -465,7 +471,7 @@ body.dark #wHead .onLight { display: block; }
 #stGroups .grp { flex: none; min-width: 64px; text-align: center; }
 #stGroups button { height: 58px; padding: 0 18px; border-radius: 14px; background: var(--bar-2); font-size: 18px; white-space: nowrap; }
 #stGroups button.last { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; overflow: hidden; text-overflow: ellipsis; }
-#stGroups button.last small { font-size: 13px; opacity: .7; }
+#stGroups button.last small { font-size: 14px; opacity: .7; }
 #stActs { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
 #stActs button { font-size: 18px; padding: 14px 22px; border-radius: 14px; background: var(--bar-2); }
 #stActs button.go { background: var(--ok); color: #fff; font-weight: 600; }
@@ -473,7 +479,7 @@ body.dark #wHead .onLight { display: block; }
 @media print { #start { display: none !important; } }
 #libGroups button.roster { margin-left: auto; border-radius: 12px; background: var(--bar-3); }
 .askText { min-height: 0; height: min(46vh, 420px); padding: 12px 16px; border-radius: 14px; border: 2px solid var(--bar-3); background: var(--bar-2); color: var(--fg); font: inherit; font-size: 22px; line-height: 1.35; resize: none; }
-.askText:focus { outline: none; border-color: #3b82f6; }
+.askText:focus { outline: none; border-color: var(--focus); }
 
 #menu button.end { background: var(--ok); color: #fff; font-weight: 600; }
 #setMenu .gHead { padding: 8px 12px 2px; }
@@ -483,8 +489,8 @@ body.dark #wHead .onLight { display: block; }
 #libGroups span { opacity: .7; margin-right: 4px; }
 #libGroups button { padding: 10px 16px; border-radius: 999px; background: var(--bar-2); font-size: 16px; }
 #libGroups button.on { background: var(--accent); color: #fff; font-weight: 600; }
-#libGroups button small { opacity: .7; font-size: 13px; }
-#libGrid .nm .grp { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 13px; vertical-align: 2px; }
+#libGroups button small { opacity: .7; font-size: 14px; }
+#libGrid .nm .grp { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 14px; vertical-align: 2px; }
 
 /* ---------- εκτύπωση: μόνο οι σελίδες του μαθήματος, σε λευκό ---------- */
 #printView { display: none; }
@@ -523,7 +529,7 @@ body.primary #toolbar button:disabled span[data-em]::before { opacity: .35; filt
 .popup #gTabs button.on { background: var(--accent); color: #fff; }
 body.primary #gadgetMenu .tabOff { display: none; }
 body.primary #gadgetMenu .tiles:not(.small) { grid-template-columns: repeat(5, 108px); }
-body.primary #gadgetMenu .tile small { font-size: 13px; }
+body.primary #gadgetMenu .tile small { font-size: 14px; }
 body.primary #gadgetMenu .tiles[data-tab] { animation: tabIn .14s ease-out; }
 @keyframes tabIn { from { opacity: 0; transform: translateY(4px); } }
 @media (prefers-reduced-motion: reduce) { body.primary #gadgetMenu .tiles[data-tab] { animation: none; } }
@@ -537,17 +543,17 @@ body.primary #gadgetMenu .tiles[data-tab] { animation: tabIn .14s ease-out; }
 .askBox > small { font-size: 17px; opacity: .75; margin-top: -6px; white-space: pre-line; }
 .askIn { display: flex; gap: 8px; }
 .askIn input { flex: 1; min-width: 0; height: 60px; padding: 0 16px; border-radius: 14px; border: 2px solid var(--bar-3); background: var(--bar-2); color: var(--fg); font: inherit; font-size: 26px; }
-.askIn input:focus { outline: none; border-color: #3b82f6; }
+.askIn input:focus { outline: none; border-color: var(--focus); }
 .askIn input.secret { -webkit-text-security: disc; }
 .askIn .eye { width: 60px; height: 60px; border-radius: 14px; background: var(--bar-2); font-size: 26px; }
-.askIn .mic.on { background: #dc2626; animation: micOn 1s ease-in-out infinite alternate; }
+.askIn .mic.on { background: var(--danger-bg); animation: micOn 1s ease-in-out infinite alternate; }
 @keyframes micOn { to { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0.25); } }
 .askPicks { display: flex; flex-wrap: wrap; gap: 8px; }
 .askPicks button { padding: 10px 16px; border-radius: 999px; background: var(--bar-2); color: var(--fg); font-size: 18px; }
 .askActs { display: flex; gap: 10px; }
 .askActs button { flex: 1; height: 58px; border-radius: 14px; background: var(--bar-2); color: var(--fg); font-size: 20px; }
 .askActs button.go { background: #2563eb; color: #fff; font-weight: 600; }
-.askActs button.go.danger { background: #dc2626; }
+.askActs button.go.danger { background: var(--danger-bg); }
 .askActs button:disabled { opacity: .45; }
 /* οι λέξεις της ορθογραφίας: φυλαγμένες λίστες, όνομα, μεγάλο κουτί με 👁 και 🎤 στο πλάι */
 .wordsBox { width: min(720px, 100%); overflow-y: auto; }
@@ -560,7 +566,7 @@ body.primary #gadgetMenu .tiles[data-tab] { animation: tabIn .14s ease-out; }
 .wordDel { padding: 0 4px; border-radius: 8px; opacity: .7; font-size: 16px; }
 .wordDel:hover { opacity: 1; background: rgba(220,38,38,.25); }
 .wordName { height: 52px; padding: 0 16px; border-radius: 14px; border: 2px solid var(--bar-3); background: var(--bar-2); color: var(--fg); font: inherit; font-size: 20px; }
-.wordName:focus { outline: none; border-color: #3b82f6; }
+.wordName:focus { outline: none; border-color: var(--focus); }
 .wordsIn .askText { flex: 1; min-width: 0; height: auto; min-height: 110px; max-height: min(30vh, 260px); }
 .wordsIn .askText.secret { -webkit-text-security: disc; }
 .wordsSide { display: flex; flex-direction: column; gap: 8px; }
@@ -568,13 +574,13 @@ body.primary #gadgetMenu .tiles[data-tab] { animation: tabIn .14s ease-out; }
 
 /* ετικέτες και στη μπάρα των αξόνων / ελατηρίου: οι επεξηγήσεις τους δεν φαίνονται ποτέ στην αφή */
 #toolbar.labels #subbar button[data-l] { width: 54px; height: 54px; flex-direction: column; gap: 2px; }
-#toolbar.labels #subbar button[data-l]::after { content: attr(data-l); font-size: 12px; line-height: 1; opacity: .9; white-space: nowrap; }
+#toolbar.labels #subbar button[data-l]::after { content: attr(data-l); font-size: 14px; line-height: 1; opacity: .9; white-space: nowrap; }
 /* οι ενέργειες της επιλογής έχουν μεγαλύτερα ονόματα: παίρνουν όσο πλάτος χρειάζονται */
 #toolbar.labels #selOpts button[data-l] { width: auto; min-width: 54px; padding: 0 6px; }
 #subbar .sep { width: 1px; align-self: stretch; margin: 4px 3px; background: var(--bar-2); }
 #toolbar.vertical #subbar .sep { width: auto; height: 1px; margin: 3px 4px; }
 #menu .gHead { padding: 8px 12px 2px; }
-#verLine { padding: 8px 12px 2px; font-size: 13px; opacity: .55; }
+#verLine { padding: 8px 12px 2px; font-size: 14px; opacity: .55; }
 .askBox { max-height: calc(100vh - 14vh - 24px); }
 .askBox ul { min-height: 0; overflow-y: auto; margin: 0; padding-left: 22px; font-size: 18px; line-height: 1.4; display: flex; flex-direction: column; gap: 6px; }
 
@@ -594,17 +600,17 @@ body.primary #gadgetMenu .tiles[data-tab] { animation: tabIn .14s ease-out; }
 #gadgetMenu.favEdit #favBar button.pill { background: var(--accent); color: #fff; }
 #gadgetMenu.favEdit #recentHead, #gadgetMenu.favEdit #recentTiles { display: none; }
 #gadgetMenu .tile { position: relative; }
-#gadgetMenu .tile.fav::after { content: '★'; position: absolute; top: 3px; right: 6px; font-size: 13px; color: #f59e0b; }
+#gadgetMenu .tile.fav::after { content: '★'; position: absolute; top: 3px; right: 6px; font-size: 13px; color: var(--warn); }
 #gadgetMenu.favEdit .tile:not(.fav) { opacity: .7; }
 #gadgetMenu.favEdit .tile:not(.fav)::after { content: '☆'; position: absolute; top: 3px; right: 6px; font-size: 13px; opacity: .7; }
-#gadgetMenu.favEdit .tile.fav { box-shadow: inset 0 0 0 2px #f59e0b; }
+#gadgetMenu.favEdit .tile.fav { box-shadow: inset 0 0 0 2px var(--warn); }
 #toolbar #favs button span b { font-size: 21px; font-weight: 600; font-style: italic; }
 #toolbar #favs button span b.em { font-size: 22px; font-weight: 400; font-style: normal; font-family: "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif; }
 #toolbar #favs button span b.sm { font-size: 15px; font-style: normal; }
 
 /* ονόματα κάτω από τα εικονίδια: να διαβάζονται από τα θρανία */
-#toolbar.labels > .group > button[data-l] { width: 56px; }
-#toolbar.labels > .group > button[data-l]::after { font-size: 12px; opacity: .9; max-width: 54px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#toolbar.labels > .group > button[data-l] { width: 64px; }
+#toolbar.labels > .group > button[data-l]::after { font-size: 14px; opacity: .9; max-width: 62px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- δύο θέματα: λιτό για Γυμνάσιο – Λύκειο (τα χρώματα στην αρχή), χαρούμενο και στρογγυλό για το Δημοτικό ---------- */
 body.primary {
@@ -617,7 +623,7 @@ body.primary {
   --go: #fde047;
   --ring: rgba(255, 255, 255, .35);
   --accent: #db2777;
-  font-family: ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-family: "Playpen Sans", system-ui, 'Segoe UI', Roboto, sans-serif;
 }
 /* σε σκούρο φόντο πίνακα: ζεστή, φωτεινή μπάρα */
 body.primary.dark {
@@ -655,10 +661,10 @@ canvas.mascot { position: static; display: block; touch-action: auto; }
 .chooseList .chTx b { font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chooseList .chTx small { font-size: 15px; opacity: .7; }
 .chooseList .chBadge { font-style: normal; font-size: 14px; padding: 3px 10px; border-radius: 999px; background: var(--bar-3); white-space: nowrap; }
-.chooseList .chBadge.go { background: #16a34a; color: #fff; font-weight: 600; }
+.chooseList .chBadge.go { background: var(--success); color: #fff; font-weight: 600; }
 .chooseList .chEmpty { font-size: 17px; opacity: .75; }
 /* η κατάσταση του μαθήματος στο Drive, δίπλα στο όνομά του */
 #lessonName .cl { font-style: normal; font-size: 15px; margin-left: 8px; opacity: .8; white-space: nowrap; }
-#lessonName .cl.chg { color: #f59e0b; opacity: 1; }
+#lessonName .cl.chg { color: var(--warn); opacity: 1; }
 #libGrid .card .info .cl { white-space: nowrap; }
-#libGrid .card .info .cl.chg { color: #f59e0b; }
+#libGrid .card .info .cl.chg { color: var(--warn); }

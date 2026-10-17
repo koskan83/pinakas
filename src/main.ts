@@ -847,6 +847,8 @@ board.onKidFx = (ev, it) => {
 };
 // τα εργαλεία του Δημοτικού φτάνουν λίγο μετά το άνοιγμα (βλ. kids/lazy.ts): ό,τι υπάρχει ήδη στον πίνακα ξαναζωγραφίζεται
 onKidsLoaded(() => board.redraw());
+// ...και όταν φτάσει η γραμματοσειρά τους (ο καμβάς δεν ξαναζωγραφίζεται μόνος του όπως το HTML)
+void Promise.all(['400', '600', '800'].map((w) => document.fonts.load(`${w} 20px "Playpen Sans"`, 'αγΑ1'))).then(() => board.redraw(), () => {});
 function setLevel(pri: boolean, save = true): void {
   primary = pri;
   board.kidMotion = pri;
