@@ -116,6 +116,18 @@ export function playFx(ev: string, prefs: FxPrefs): void {
     if (now - lastTok < 45) return;
     lastTok = now;
   }
+  const frog = /^frog\|(\d+)\|([wsg])$/.exec(ev);
+  if (frog) {
+    // συγχρονισμένα με τα πηδήματα του βατράχου (SYL_HOP = 0,7 s): «μπουνγκ» σε κάθε νούφαρο, και στο τέλος
+    // φανφάρα (απέναντι), γουργουρητό (βουλιάζει) ή πλατς (στο νερό)
+    const hops = Number(frog[1]);
+    for (let i = 1; i <= hops; i++) tone(260, 0.14, { to: 520, gain: 0.3, at: i * 0.7 - 0.08 });
+    const end = (frog[2] === 's' ? hops : hops + 1) * 0.7;
+    if (frog[2] === 'w') [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i === 4 ? 0.6 : 0.16, { type: 'triangle', gain: 0.4, at: end - 0.1 + i * 0.11 }));
+    else if (frog[2] === 's') for (let i = 0; i < 6; i++) tone(420 - i * 40, 0.12, { to: 200 - i * 15, gain: 0.25, at: end + 0.05 + i * 0.13 });
+    else { noise(0.5, { gain: 0.6, freq: 1400, to: 300, at: end - 0.08 }); tone(300, 0.3, { to: 90, gain: 0.25, at: end - 0.05 }); }
+    return;
+  }
   const munch = /^(munch|sniff)(\d+)(x?)$/.exec(ev);
   if (munch) {
     // συγχρονισμένα με την κίνηση στο εργαλείο της ορθογραφίας: πρώτο δάγκωμα στα 0,8 s, μετά ένα κάθε 0,8 s·

@@ -868,6 +868,9 @@ function kidFx(ev: string, x?: number, y?: number, near?: Spot): void {
     return;
   }
   playFx(ev, fxPrefs);
+  // συλλαβές: όταν ο βάτραχος φτάσει απέναντι (ένα πήδημα = SYL_HOP), κομφετί και η μασκότ
+  const frog = /^frog\|(\d+)\|w$/.exec(ev);
+  if (frog) setTimeout(() => { confetti(x, y, 180); cheer(near); }, (Number(frog[1]) + 1) * 700);
   if (ev === 'win') {
     confetti(x, y, 180);
     // η μασκότ πανηγυρίζει μαζί με την τάξη, δίπλα στο παιχνίδι

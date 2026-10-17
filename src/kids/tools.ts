@@ -7,7 +7,8 @@ import { HANGMAN_KIDS } from './hangman';
 import { NUMBER_KIDS } from './numbers';
 import { NUMCUBE_KIDS } from './numcubes';
 import { SPELL_KIDS } from './spell';
+import { SYLLABLE_KIDS } from './syllables';
 
 export const TOOL_KIDS: Record<string, StampDef> = {
-  ...NUMBER_KIDS, ...FRACTION_KIDS, ...GAME_KIDS, ...BUILD_KIDS, ...NUMCUBE_KIDS, ...SPELL_KIDS, ...HANGMAN_KIDS,
+  ...NUMBER_KIDS, ...FRACTION_KIDS, ...GAME_KIDS, ...BUILD_KIDS, ...NUMCUBE_KIDS, ...SPELL_KIDS, ...HANGMAN_KIDS, ...SYLLABLE_KIDS,
 };

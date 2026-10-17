@@ -25,4 +25,5 @@ export const KID_CATALOG: Record<string, KidMeta> = {
   numcubes: { label: 'Αριθμοκυβάκια', w: 960, h: 640, init: [0, 0, 0, 55, 130, 1, 1, 0, 0, 0, 100, 130, 2, 2, 0, 0, 0, 145, 130, 3, 3, 0, 0, 0, 190, 130, 4, 4, 0, 0, 0, 235, 130, 5, 5, 0, 0, 0], animMs: 2000, has: 'paint drop fx cursor fullAt' },
   spell: { label: 'Ορθογραφία', w: 900, h: 660, init: [0, 0], big: true, animMs: 16000, has: 'tap ask fx' },
   hangman: { label: 'Κρεμάλα', w: 800, h: 480, init: [0], has: 'tap ask fx' },
+  syllables: { label: 'Συλλαβές', w: 960, h: 640, init: [0], big: true, animMs: 9000, has: 'tap ask paint drop fx' },
 };
